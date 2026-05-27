@@ -832,7 +832,15 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
             best_LOO      = np.inf
             best_fitted   = None
             best_ii       = 0
-            theta_current = theta0.copy()   # warm start : réinitialisé par output précédent
+            # Initialisation GA+BFGS sur trend constant (Zuhal 2021 Section III.B.1)
+            # DE sur Ψ₀=1 (kriging ordinaire) pour theta0 global avant la boucle LARS
+            F_constant = lambda U: np.ones((U.shape[0], 1))
+            fitted_constant = fit_kriging_pck(
+                U_train, Y[:, oo], F_constant,
+                CorrOptions, theta_bounds, theta0.copy(),
+                estim_method=estim_method,
+                optim_method='de')
+            theta_current = fitted_constant['theta']
 
             for ii in range(1, len(idx_ranked) + 1):
                 F_handle = make_trend_handle(
