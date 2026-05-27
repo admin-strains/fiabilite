@@ -832,6 +832,7 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
             best_LOO      = np.inf
             best_fitted   = None
             best_ii       = 0
+            theta_current = theta0.copy()   # warm start : réinitialisé par output précédent
 
             for ii in range(1, len(idx_ranked) + 1):
                 F_handle = make_trend_handle(
@@ -840,9 +841,11 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
 
                 fitted = fit_kriging_pck(
                     U_train, Y[:, oo], F_handle,
-                    CorrOptions, theta_bounds, theta0.copy(),
+                    CorrOptions, theta_bounds, theta_current,
                     estim_method=estim_method,
                     optim_method=optim_method)
+
+                theta_current = fitted['theta']   # warm start pour l'itération suivante
 
                 crit = fitted['LOO'] if comb_crit == 'rel_loo' else fitted['LOO']
 
