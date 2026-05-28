@@ -1221,8 +1221,8 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
     # Résultat
     # -----------------------------------------------------------------------
     return {
-        'Kriging'       : fitted_kriging,
-        'Error'         : {'LOO': fitted_kriging['LOO']},
+        'Kriging'       : [fitted_kriging],
+        'Error'         : [{'LOO': fitted_kriging['LOO']}],
         'AuxSpace'      : {'Marginals': aux_marginals, 'Copula': aux_copula},
         'ExpDesign'     : {
             'X'    : X,

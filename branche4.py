@@ -233,6 +233,89 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
 
 
 # ===========================================================================
+# 3.  uq_GEPCK_eval
+#     Clone de uq_PCK_eval pour GEPCK (Nout=1 fixé).
+# ===========================================================================
+def uq_GEPCK_eval(fitted_model, X_test, return_var=False, return_cov=False):
+    """
+    Évalue un métamodèle GEPCK entraîné sur X_test.
+
+    Clone de uq_PCK_eval. Différences :
+      - fitted_model['ExpDesign']['Y_aug'] au lieu de ['Y']
+      - kriging_oo['F_tilde'] au lieu de kriging_oo['F']
+      - appelle uq_GEPCK_eval_one_output au lieu de uq_Kriging_eval_one_output
+
+    Parameters
+    ----------
+    fitted_model : dict de uq_GEPCK_calculate_coefficients (B3)
+    X_test       : (N_test, M) ndarray
+    return_var   : bool
+    return_cov   : bool
+
+    Returns
+    -------
+    YMu     : (N_test, 1)
+    YSigma2 : (N_test, 1)          [si return_var ou return_cov]
+    YCov    : (N_test, N_test, 1)  [si return_cov]
+    """
+    X_test  = np.atleast_2d(X_test).astype(float)
+    N_test  = X_test.shape[0]
+
+    Nout     = fitted_model['Nout']
+    Mred     = fitted_model['Mred']
+    nonConst = fitted_model['nonConst']
+
+    Xred_test = X_test[:, nonConst]
+
+    red_marg = fitted_model['RedMarginals']
+    aux_marg = fitted_model['AuxSpace']['Marginals']
+    aux_cop  = fitted_model['AuxSpace']['Copula']
+    red_cop  = {'Type': 'Independent', 'Parameters': np.eye(Mred)}
+
+    U_test = uq_GeneralIsopTransform(
+        Xred_test, red_marg, red_cop, aux_marg, aux_cop)
+
+    U_train     = fitted_model['ExpDesign']['U']
+    Y_aug       = fitted_model['ExpDesign']['Y_aug']
+    CorrOptions = fitted_model['CorrOptions']
+
+    YMu = np.zeros((N_test, Nout))
+    if return_var or return_cov:
+        YSigma2 = np.zeros((N_test, Nout))
+    if return_cov:
+        YCov = np.zeros((N_test, N_test, Nout))
+
+    for oo in range(Nout):
+        gepck_oo      = fitted_model['Kriging'][oo]
+        F_tilde_train = gepck_oo['F_tilde']
+
+        if return_cov:
+            YMu_oo, YSig_oo, YCov_oo = uq_GEPCK_eval_one_output(
+                gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
+                CorrOptions, return_var=True, return_cov=True)
+            YMu[:, oo]     = YMu_oo
+            YSigma2[:, oo] = YSig_oo
+            YCov[:, :, oo] = YCov_oo
+        elif return_var:
+            YMu_oo, YSig_oo = uq_GEPCK_eval_one_output(
+                gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
+                CorrOptions, return_var=True, return_cov=False)
+            YMu[:, oo]     = YMu_oo
+            YSigma2[:, oo] = YSig_oo
+        else:
+            YMu[:, oo] = uq_GEPCK_eval_one_output(
+                gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
+                CorrOptions, return_var=False, return_cov=False)
+
+    if return_cov:
+        return YMu, YSigma2, YCov
+    elif return_var:
+        return YMu, YSigma2
+    else:
+        return YMu
+
+
+# ===========================================================================
 # 2.  uq_PCK_eval
 #     Source: PCK/uq_PCK_eval.m  (main entry point)
 # ===========================================================================

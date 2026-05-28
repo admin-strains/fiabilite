@@ -2052,6 +2052,25 @@ Clone de `uq_Kriging_eval_one_output`. Différences :
 
 Tout le reste partagé : calcul Rinv, YMu, u0, D1, D2, variance.
 
+### `uq_GEPCK_eval` — branche4.py (après `uq_GEPCK_eval_one_output`)
+
+Clone de `uq_PCK_eval`. Différences :
+
+| | `uq_PCK_eval` | `uq_GEPCK_eval` |
+|---|---|---|
+| `Y_full` | `fitted_model['ExpDesign']['Y']` — `(N, Nout)` | `Y_aug = fitted_model['ExpDesign']['Y_aug']` — `(N*(M+1),)` |
+| `kriging_oo` | `fitted_model['Kriging'][oo]` — liste PCK | Identique — GEPCK retourne aussi `'Kriging': [fitted_kriging]` (liste à 1 élément, cohérence forcée dans `uq_GEPCK_calculate_coefficients`) |
+| `F_train` | `kriging_oo['F']` | `gepck_oo['F_tilde']` |
+| Appel prédiction | `uq_Kriging_eval_one_output(kriging_oo, ..., Y_train, F_train, ...)` | `uq_GEPCK_eval_one_output(gepck_oo, ..., Y_aug, F_tilde_train, ...)` |
+
+Tout le reste identique : isop_transform, allocations YMu/YSigma2/YCov, boucle oo, return.
+
+**Correction associée dans `uq_GEPCK_calculate_coefficients` (branche3.py)** :  
+`'Kriging': fitted_kriging` → `'Kriging': [fitted_kriging]`  
+`'Error': {'LOO': ...}` → `'Error': [{'LOO': ...}]`
+
+---
+
 ### Convention de dérivation dans `uq_assemble_global_Kernel` et `uq_eval_global_Kernel`
 
 **Convention actuelle (Zuhal 2021)** — `der` dérive le 1er argument, `dp` le 2e :
