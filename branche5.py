@@ -234,6 +234,52 @@ def uq_eval_legendre(ORDER, X, nonrecursive=False):
 
 
 # =============================================================================
+# 3b. uq_eval_legendre_deriv
+# =============================================================================
+
+def uq_eval_legendre_deriv(ORDER, X):
+    """
+    VALUE = uq_eval_legendre_deriv(ORDER, X)
+
+    Dérivée des polynômes de Legendre orthonormaux L_k.
+    Retourne un tableau N×(ORDER+1) : colonne k = L'_k(x).
+
+    Formule :
+        L_n = c_n * P_n   avec c_n = sqrt((2n+1)/2)  (P_n = Legendre standard)
+        P'_0 = 0,  P'_1 = 1,  P'_n = (2n-1)*P_{n-1} + P'_{n-2}  pour n >= 2
+        L'_n = c_n * P'_n
+    """
+    if not np.isscalar(ORDER) or ORDER < 0:
+        raise ValueError('uq_eval_legendre_deriv only operates on positive order polynomials')
+
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 1 and not (X.ndim == 2 and X.shape[1] == 1):
+        raise ValueError('uq_eval_legendre_deriv is designed to work with X in column vector format')
+    X = X.reshape(-1)
+    N = X.shape[0]
+
+    out = np.zeros((N, ORDER + 1))
+    if ORDER == 0:
+        return out   # L'_0 = 0
+
+    # Legendre orthonormaux L_n, puis standard P_n = L_n / c_n
+    L  = uq_eval_legendre(ORDER, X)                       # (N, ORDER+1)
+    ns = np.arange(ORDER + 1, dtype=float)
+    c  = np.sqrt(2 * ns + 1)                              # c_n : L_n = c_n * P_n
+    P  = L / c[np.newaxis, :]                             # (N, ORDER+1)
+
+    # Récurrence sur les dérivées standard
+    dP = np.zeros((N, ORDER + 1))
+    dP[:, 1] = 1.0                                        # P'_1 = 1
+    for n in range(2, ORDER + 1):
+        dP[:, n] = (2 * n - 1) * P[:, n - 1] + dP[:, n - 2]
+
+    # Retour vers orthonormaux
+    out = c[np.newaxis, :] * dP                           # L'_n = c_n * P'_n
+    return out
+
+
+# =============================================================================
 # 4. uq_eval_hermite
 # =============================================================================
 
@@ -256,6 +302,35 @@ def uq_eval_hermite(ORDER, X, nonrecursive=False):
     AB = uq_poly_rec_coeffs(ORDER, 'hermite')
     VALUE = uq_eval_rec_rule(X, AB[0], nonrecursive)
     return VALUE
+
+
+# =============================================================================
+# 4b. uq_eval_hermite_deriv
+# =============================================================================
+
+def uq_eval_hermite_deriv(ORDER, X):
+    """
+    VALUE = uq_eval_hermite_deriv(ORDER, X)
+
+    Dérivée des polynômes de Hermite orthonormaux H_k.
+    Retourne un tableau N×(ORDER+1) : colonne k = H'_k(x).
+
+    Formule : H'_0 = 0,  H'_k = sqrt(k) * H_{k-1}  pour k >= 1
+    """
+    if not np.isscalar(ORDER) or ORDER < 0:
+        raise ValueError('uq_eval_hermite_deriv only operates on positive order polynomials')
+
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 1 and not (X.ndim == 2 and X.shape[1] == 1):
+        raise ValueError('uq_eval_hermite_deriv is designed to work with X in column vector format')
+    X = X.reshape(-1)
+
+    out = np.zeros((X.shape[0], ORDER + 1))
+    if ORDER >= 1:
+        H = uq_eval_hermite(ORDER, X)                     # (N, ORDER+1)
+        for k in range(1, ORDER + 1):
+            out[:, k] = np.sqrt(k) * H[:, k - 1]
+    return out
 
 
 # =============================================================================
@@ -953,3 +1028,157 @@ def uq_eval_Kernel(X1, X2, theta, options):
             K = K + np.diag(nugget.ravel())
 
     return K
+
+
+# ===========================================================================
+# GEK — fonctions de dérivées du noyau (kernel_deriv_factory + helpers)
+# Utilisées pour assembler la matrice de corrélation augmentée R̃ de GEK/GEPCK
+# (Zuhal 2021, Eq. 7).  Noyaux supportés : 'gaussian' et 'matern-5_2'.
+# ===========================================================================
+
+def _prod_excl(K_uni):
+    """
+    K_uni : (n1, n2, M)
+    Retourne K_excl : (n1, n2, M) avec K_excl[:,:,l] = prod_{m!=l} K_uni[:,:,m].
+    Algorithme prefix/suffix O(M) sans division.
+    """
+    n1, n2, M = K_uni.shape
+    pre = np.ones((n1, n2, M + 1))
+    suf = np.ones((n1, n2, M + 1))
+    for l in range(M):
+        pre[:, :, l+1] = pre[:, :, l] * K_uni[:, :, l]
+        suf[:, :, M-1-l] = suf[:, :, M-l] * K_uni[:, :, M-1-l]
+    return pre[:, :, :M] * suf[:, :, 1:]
+
+
+def kernel_deriv_factory(family, der, der_prime):
+    """
+    Retourne f(X1, X2, theta) -> (n1, n2) pour un bloc de R_tilde.
+
+    Parameters
+    ----------
+    family     : 'gaussian' ou 'matern-5_2'
+    der        : int ou None  -- composante du premier argument x (0-indexe)
+    der_prime  : int ou None  -- composante du second argument x' (0-indexe)
+    """
+    if family.lower() == 'gaussian':
+        def f(X1, X2, theta):
+            X1    = np.asarray(X1, dtype=float)
+            X2    = np.asarray(X2, dtype=float)
+            theta = np.asarray(theta, dtype=float).ravel()
+
+            delta = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]       # (n1, n2, M)
+
+            opts = {'Handle': uq_eval_Kernel, 'Family': 'gaussian',
+                    'Type': 'separable', 'Isotropic': False, 'Nugget': 0.0}
+            k = uq_eval_Kernel(X1, X2, theta, opts)                    # (n1, n2)
+
+            if der is None and der_prime is None:
+                return k
+            elif der is not None and der_prime is None:
+                return -delta[:, :, der] / theta[der]**2 * k
+            elif der is None and der_prime is not None:
+                return +delta[:, :, der_prime] / theta[der_prime]**2 * k
+            elif der == der_prime:
+                i = der
+                return (1 - delta[:, :, i]**2 / theta[i]**2) / theta[i]**2 * k
+            else:
+                return (-delta[:, :, der] * delta[:, :, der_prime]
+                        / (theta[der]**2 * theta[der_prime]**2) * k)
+
+        return f
+
+    elif family.lower() == 'matern-5_2':
+        def f(X1, X2, theta):
+            X1    = np.asarray(X1, dtype=float)
+            X2    = np.asarray(X2, dtype=float)
+            theta = np.asarray(theta, dtype=float).ravel()
+
+            delta  = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]      # (n1, n2, M)
+            a      = np.sqrt(5) * np.abs(delta) / theta                # (n1, n2, M)
+
+            K_uni  = (1 + a + a**2 / 3) * np.exp(-a)                  # (n1, n2, M)
+            K_excl = _prod_excl(K_uni)                                 # (n1, n2, M)
+
+            if der is None and der_prime is None:
+                return K_uni.prod(axis=2)
+            elif der is not None and der_prime is None:
+                i = der
+                return (-(5 / (3 * theta[i]**2)) * delta[:, :, i]
+                        * (1 + a[:, :, i]) * np.exp(-a[:, :, i]) * K_excl[:, :, i])
+            elif der is None and der_prime is not None:
+                j = der_prime
+                return (+(5 / (3 * theta[j]**2)) * delta[:, :, j]
+                        * (1 + a[:, :, j]) * np.exp(-a[:, :, j]) * K_excl[:, :, j])
+            elif der == der_prime:
+                i = der
+                return ((5 / (3 * theta[i]**2))
+                        * (1 + a[:, :, i] - a[:, :, i]**2)
+                        * np.exp(-a[:, :, i]) * K_excl[:, :, i])
+            else:
+                i, j = der, der_prime
+                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
+                return (-(25 / (9 * theta[i]**2 * theta[j]**2))
+                        * delta[:, :, i] * delta[:, :, j]
+                        * (1 + a[:, :, i]) * (1 + a[:, :, j])
+                        * np.exp(-(a[:, :, i] + a[:, :, j])) * K_excl_ij)
+
+        return f
+
+    else:
+        raise ValueError(
+            f'GEK : noyau "{family}" non supporte. Utiliser "gaussian" ou "matern-5_2".')
+
+
+def uq_assemble_global_Kernel(X, theta, family):
+    """
+    Assemble la matrice de correlation augmentee GEK R_tilde de taille n(m+1) x n(m+1).
+
+    Ordre dimension-major (Zuhal 2021 Eq. 6) :
+        lignes/cols  0 .. n-1      : valeurs y(x^1),...,y(x^n)
+        lignes/cols  n .. 2n-1     : gradient dy/dx_0 en tous les points
+        lignes/cols kn .. (k+1)n-1 : gradient dy/dx_{k-1}  pour k=1..m
+
+    Le bloc (rb, cb) de taille nxn est calcule par
+        kernel_deriv_factory(family, der, dp)(X, X, theta)
+    avec
+        der = rb - 1  si rb > 0  sinon None
+        dp  = cb - 1  si cb > 0  sinon None
+
+    Parameters
+    ----------
+    X      : (n, m) ndarray   points d'entrainement (espace auxiliaire isoprob)
+    theta  : (m,)  ndarray    longueurs de correlation
+    family : str              'gaussian' ou 'matern-5_2'
+
+    Symetrie de R_tilde :
+        Contrairement a la formulation Bouhlel 2019 (4 blocs, ordre point-major
+        ou Bloc3 = -Bloc2^T → R̃ non symetrique), la formulation dimension-major
+        de Zuhal 2021 produit une matrice SYMETRIQUE.
+        Preuve : Block(k,0)[i,j] = dk(xi,xj)/dxi_{k-1} = -dk(xi,xj)/dxj_{k-1}
+                 Block(0,k)[j,i] = dk(xj,xi)/dxi_{k-1} = -dk(xj,xi)/dxj_{k-1}
+                                 = -dk(xi,xj)/dxi_{k-1}   [noyau stationnaire]
+                                 = Block(k,0)[i,j]
+        Donc Block(0,k)^T = Block(k,0), et de meme pour tous les blocs croises.
+        Verifie numeriquement : max|R_tilde - R_tilde^T| = 0 a precision machine.
+
+    Returns
+    -------
+    R_tilde : (n*(m+1), n*(m+1)) ndarray  -- symetrique et semi-definie positive
+    """
+    X     = np.asarray(X, dtype=float)
+    n, m  = X.shape
+    theta = np.asarray(theta, dtype=float).ravel()
+
+    N_tot   = n * (m + 1)
+    R_tilde = np.empty((N_tot, N_tot))
+
+    for rb in range(m + 1):
+        der = rb - 1 if rb > 0 else None
+        for cb in range(m + 1):
+            dp  = cb - 1 if cb > 0 else None
+            f   = kernel_deriv_factory(family, der, dp)
+            R_tilde[rb*n : (rb+1)*n,
+                    cb*n : (cb+1)*n] = f(X, X, theta)
+
+    return R_tilde

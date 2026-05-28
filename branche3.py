@@ -36,6 +36,7 @@ from branche5 import (
     uq_PCE_create_Psi, uq_PCK_eval_unipoly,
     uq_GeneralIsopTransform, uq_eval_Kernel,
     uq_poly_rec_coeffs,           # used to identify poly type from marginal
+    uq_eval_hermite_deriv, uq_eval_legendre_deriv,
 )
 from branche_lars import uq_lar
 
@@ -799,6 +800,34 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
             return F
 
         return F_handle
+
+    def make_trend_handle_deriv(selected_idx, Indices, poly_types, der):
+        """
+        Returns F_der_handle(U) → (N, len(selected_idx)) : la dérivée partielle
+        de la matrice de base PCE par rapport à la der-ième dimension de U.
+
+        Implémente ∂Ψ_k/∂U_der = φ'_{α_k,der}(U_der) · ∏_{i≠der} φ_{α_ki}(U_i)
+        en remplaçant uv[:, der, :] par les valeurs dérivées puis en annulant
+        les colonnes où Idx_sel[:, der]==0 (dérivée d'une constante = 0).
+        """
+        Idx_sel = Indices[np.array(selected_idx), :]
+        p_types = poly_types
+
+        def F_der_handle(U):
+            uv  = uq_PCK_eval_unipoly(U, Idx_sel, p_types)   # (N, M, P+1)
+            P   = uv.shape[2] - 1
+            pt  = p_types[der].lower()
+            if pt == 'hermite':
+                uv[:, der, :] = uq_eval_hermite_deriv(P, U[:, der])
+            elif pt == 'legendre':
+                uv[:, der, :] = uq_eval_legendre_deriv(P, U[:, der])
+            Psi = uq_PCE_create_Psi(Idx_sel, uv)
+            # uq_PCE_create_Psi saute les degrés 0 (aa = Indices[:,mm] > 0).
+            # φ'_0 = 0 (dérivée d'une constante) : annuler explicitement.
+            Psi[:, Idx_sel[:, der] == 0] = 0.0
+            return Psi
+
+        return F_der_handle
 
     # -----------------------------------------------------------------------
     # Compose Kriging + trend  (mode = 'sequential' or 'optimal')
