@@ -2071,6 +2071,22 @@ Tout le reste identique : isop_transform, allocations YMu/YSigma2/YCov, boucle o
 
 ---
 
+### `fit_gepck` + `predict_gepck` — branche1.py
+
+**`fit_gepck(X, Y_aug, options, marginals, copula)`** — clone de `fit_pck` :
+
+| | `fit_pck` | `fit_gepck` |
+|---|---|---|
+| Signature | `Y` (N, Nout) | `Y_aug` (N*(M+1),) |
+| `CorrOptions['Handle']` | `uq_eval_Kernel` | `uq_eval_global_Kernel` (si user fournit `'Corr'`) |
+| Appel B3 | `uq_PCK_calculate_coefficients(X, Y, ...)` | `uq_GEPCK_calculate_coefficients(X, Y_aug, ...)` |
+
+Tout le reste identique : `uq_PCK_initialize` partagée, extraction `pck_config`, `krig_opts`, `theta_bounds`.
+
+**`predict_gepck(fitted_model, X_test, ...)`** — clone trivial : seul changement `uq_GEPCK_eval` au lieu de `uq_PCK_eval`.
+
+---
+
 ### Convention de dérivation dans `uq_assemble_global_Kernel` et `uq_eval_global_Kernel`
 
 **Convention actuelle (Zuhal 2021)** — `der` dérive le 1er argument, `dp` le 2e :
