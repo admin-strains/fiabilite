@@ -1130,55 +1130,115 @@ def kernel_deriv_factory(family, der, der_prime):
             f'GEK : noyau "{family}" non supporte. Utiliser "gaussian" ou "matern-5_2".')
 
 
-def uq_assemble_global_Kernel(X, theta, family):
+def uq_assemble_global_Kernel(X1, X2, theta, family):
     """
-    Assemble la matrice de correlation augmentee GEK R_tilde de taille n(m+1) x n(m+1).
+    Assemble la matrice de correlation augmentee GEK de taille n1(m+1) x n2(m+1).
 
     Ordre dimension-major (Zuhal 2021 Eq. 6) :
-        lignes/cols  0 .. n-1      : valeurs y(x^1),...,y(x^n)
-        lignes/cols  n .. 2n-1     : gradient dy/dx_0 en tous les points
-        lignes/cols kn .. (k+1)n-1 : gradient dy/dx_{k-1}  pour k=1..m
+        lignes  0 .. n1-1       : bloc valeurs (X1)
+        lignes  k*n1 .. (k+1)*n1 : bloc derivee dy/dx_{k-1}  pour k=1..m
+        colonnes : meme ordre sur X2
 
-    Le bloc (rb, cb) de taille nxn est calcule par
-        kernel_deriv_factory(family, der, dp)(X, X, theta)
+    Le bloc (rb, cb) de taille n1 x n2 est calcule par
+        kernel_deriv_factory(family, der, dp)(X1, X2, theta)
     avec
-        der = rb - 1  si rb > 0  sinon None
-        dp  = cb - 1  si cb > 0  sinon None
+        der = cb - 1  si cb > 0  sinon None   (derivee 1er arg, = point colonne)
+        dp  = rb - 1  si rb > 0  sinon None   (derivee 2e  arg, = point ligne)
+
+    Convention article (Zuhal 2021, Eq. 7) :
+        bloc(0, k) = dR/dx^i_k  (1er arg, point-ligne x^i)  -> der=k-1, dp=None
+        bloc(k, 0) = dR/dx^j_k  (2e  arg, point-col   x^j)  -> der=None, dp=k-1
 
     Parameters
     ----------
-    X      : (n, m) ndarray   points d'entrainement (espace auxiliaire isoprob)
+    X1     : (n1, m) ndarray
+    X2     : (n2, m) ndarray
     theta  : (m,)  ndarray    longueurs de correlation
     family : str              'gaussian' ou 'matern-5_2'
 
-    Symetrie de R_tilde :
-        Contrairement a la formulation Bouhlel 2019 (4 blocs, ordre point-major
-        ou Bloc3 = -Bloc2^T → R̃ non symetrique), la formulation dimension-major
-        de Zuhal 2021 produit une matrice SYMETRIQUE.
-        Preuve : Block(k,0)[i,j] = dk(xi,xj)/dxi_{k-1} = -dk(xi,xj)/dxj_{k-1}
-                 Block(0,k)[j,i] = dk(xj,xi)/dxi_{k-1} = -dk(xj,xi)/dxj_{k-1}
-                                 = -dk(xi,xj)/dxi_{k-1}   [noyau stationnaire]
-                                 = Block(k,0)[i,j]
-        Donc Block(0,k)^T = Block(k,0), et de meme pour tous les blocs croises.
-        Verifie numeriquement : max|R_tilde - R_tilde^T| = 0 a precision machine.
+    Returns
+    -------
+    R_tilde : (n1*(m+1), n2*(m+1)) ndarray
+    """
+    X1    = np.asarray(X1, dtype=float)
+    X2    = np.asarray(X2, dtype=float)
+    n1, m = X1.shape
+    n2    = X2.shape[0]
+    theta = np.asarray(theta, dtype=float).ravel()
+
+    N_rows  = n1 * (m + 1)
+    N_cols  = n2 * (m + 1)
+    R_tilde = np.empty((N_rows, N_cols))
+
+    for rb in range(m + 1):
+        dp  = rb - 1 if rb > 0 else None
+        for cb in range(m + 1):
+            der = cb - 1 if cb > 0 else None
+            f   = kernel_deriv_factory(family, der, dp)
+            R_tilde[rb*n1 : (rb+1)*n1,
+                    cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
+
+    return R_tilde
+
+
+def uq_eval_global_Kernel(X1, X2, theta, options):
+    """
+    Calcule R_tilde (Gram) ou r0_tilde (non-Gram) pour GEPCK.
+
+    Equivalent de uq_eval_Kernel pour GEPCK : meme signature (X1, X2, theta,
+    options), gere nugget et detection Gram.
+    Utilise comme CorrOptions['Handle'] dans fit_gepck_kriging et la prediction.
+
+    Cas Gram   (X1 == X2) : retourne R_tilde  (n1*(m+1), n1*(m+1))
+        Tous les (m+1)^2 blocs, nugget ajoute sur la diagonale si non nul.
+
+    Cas non-Gram (X_test, X_train) : retourne r0_tilde  (n1, n2*(m+1))
+        Seulement le bloc-ligne rb=0 de la matrice complete :
+            r0_tilde[i, cb*n2:(cb+1)*n2] = Cov(y(x_i), y_aug_bloc_cb(X_train))
+        avec  cb=0 -> k(X_test, X_train)            (der=None, dp=None)
+              cb=l -> dk(X_test,X_train)/dX_test_{l-1}  (der=l-1,  dp=None)
+        Forme compatible avec la prediction : r0_tilde @ (R_tilde_inv @ y_aug)
+
+    Parameters
+    ----------
+    X1      : (n1, m) ndarray
+    X2      : (n2, m) ndarray
+    theta   : (m,)  ndarray
+    options : dict avec les champs :
+        'Family' : 'gaussian' ou 'matern-5_2'
+        'Nugget' : float (defaut 0.0)
 
     Returns
     -------
-    R_tilde : (n*(m+1), n*(m+1)) ndarray  -- symetrique et semi-definie positive
+    Gram     : R_tilde  de forme (n1*(m+1), n1*(m+1))
+    non-Gram : r0_tilde de forme (n1, n2*(m+1))
     """
-    X     = np.asarray(X, dtype=float)
-    n, m  = X.shape
-    theta = np.asarray(theta, dtype=float).ravel()
+    family = options['Family']
+    nugget = float(options.get('Nugget', 0.0))
 
-    N_tot   = n * (m + 1)
-    R_tilde = np.empty((N_tot, N_tot))
+    X1 = np.asarray(X1, dtype=float)
+    X2 = np.asarray(X2, dtype=float)
+    n1, m = X1.shape
+    n2    = X2.shape[0]
 
-    for rb in range(m + 1):
-        der = rb - 1 if rb > 0 else None
+    isGram = (n1 == n2) and np.array_equal(X1, X2)
+
+    if isGram:
+        # R_tilde complet : (m+1)^2 blocs, forme (n1*(m+1), n1*(m+1))
+        R_tilde = uq_assemble_global_Kernel(X1, X2, theta, family)
+        if nugget != 0.0:
+            R_tilde += nugget * np.eye(n1 * (m + 1))
+        return R_tilde
+    else:
+        # r0_tilde : m+1 blocs (rb=0) — forme (n1, n2*(m+1))
+        # Convention article (Zuhal 2021, p.4) :
+        #   cb=0 : k(X_test, X_train)                    — der=None, dp=None
+        #   cb=l : dk(X_test, X_train)/dX_test_{l-1}     — der=l-1,  dp=None
+        # = premier bloc-ligne de uq_assemble_global_Kernel(X1, X2, ...)
+        # Propriete : r0_tilde(X_train) = R_tilde[:N_train, :] -> interpolation exacte.
+        r0_tilde = np.empty((n1, n2 * (m + 1)))
         for cb in range(m + 1):
-            dp  = cb - 1 if cb > 0 else None
-            f   = kernel_deriv_factory(family, der, dp)
-            R_tilde[rb*n : (rb+1)*n,
-                    cb*n : (cb+1)*n] = f(X, X, theta)
-
-    return R_tilde
+            der = cb - 1 if cb > 0 else None
+            f   = kernel_deriv_factory(family, der, None)
+            r0_tilde[:, cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
+        return r0_tilde

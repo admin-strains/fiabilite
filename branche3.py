@@ -783,8 +783,7 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
     # -----------------------------------------------------------------------
     # Build trend handle factory
     # -----------------------------------------------------------------------
-    def make_trend_handle(selected_idx, Indices, poly_types,
-                          orig_marg, orig_cop, aux_marg):
+    def make_trend_handle(selected_idx, Indices, poly_types):
         """
         Returns F_handle(U) → (N, len(selected_idx)) trend matrix.
         Replaces uq_evalModel(myPIP, X) for Custom PCE.
@@ -829,6 +828,21 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
 
         return F_der_handle
 
+    def make_trend_global_handle(selected_idx, Indices, poly_types):
+        """
+        Returns F_global(U) → (N*(M+1), P_sel) : matrice F̃ augmentée GEPCK.
+        Empile F(U) puis ∂F/∂U_k(U) pour k=0..M-1 (Zuhal 2021, Eq. 9).
+        """
+        Idx_sel = Indices[np.array(selected_idx), :]
+        M_loc   = Idx_sel.shape[1]
+        F0 = make_trend_handle(selected_idx, Indices, poly_types)
+        Fk = [make_trend_handle_deriv(selected_idx, Indices, poly_types, k)
+              for k in range(M_loc)]
+        def F_global(U):
+            blocks = [F0(U)] + [fk(U) for fk in Fk]
+            return np.vstack(blocks)
+        return F_global
+
     # -----------------------------------------------------------------------
     # Compose Kriging + trend  (mode = 'sequential' or 'optimal')
     # (lines 126-222 in uq_PCK_calculate_coefficients.m)
@@ -845,8 +859,7 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
         if mode == 'sequential':
             # Take ALL polynomials at once as the trend
             F_handle = make_trend_handle(
-                idx_ranked, Indices_oo, PolyTypes_all[:Mred],
-                red_marginals, input_copula, aux_marginals)
+                idx_ranked, Indices_oo, PolyTypes_all[:Mred])
 
             fitted = fit_kriging_pck(
                 U_train, Y[:, oo], F_handle,
@@ -873,8 +886,7 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
 
             for ii in range(1, len(idx_ranked) + 1):
                 F_handle = make_trend_handle(
-                    idx_ranked[:ii], Indices_oo, PolyTypes_all[:Mred],
-                    red_marginals, input_copula, aux_marginals)
+                    idx_ranked[:ii], Indices_oo, PolyTypes_all[:Mred])
 
                 fitted = fit_kriging_pck(
                     U_train, Y[:, oo], F_handle,
