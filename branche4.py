@@ -151,6 +151,88 @@ def uq_Kriging_eval_one_output(kriging_oo, U_test, U_train, Y_train, F_train,
 
 
 # ===========================================================================
+# 2.  uq_GEPCK_eval_one_output
+# ===========================================================================
+def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
+                               CorrOptions,
+                               return_var=False, return_cov=False):
+    """
+    Prédiction GEPCK pour une sortie.
+
+    Clone de uq_Kriging_eval_one_output avec R_tilde, r̃₀, Y_aug, F_tilde_train.
+
+    Parameters
+    ----------
+    gepck_oo      : dict de fit_kriging_gepck — clés : theta, beta, sigmaSQ,
+                    F_tilde, R_tilde, auxMatrices, F_global_handle
+    U_test        : (N_test, Mred)
+    U_train       : (N, Mred)
+    Y_aug         : (N*(M+1),)
+    F_tilde_train : (N*(M+1), P)
+    CorrOptions   : dict avec 'Handle'=uq_eval_global_Kernel
+    return_var    : bool
+    return_cov    : bool
+    """
+    theta           = gepck_oo['theta']
+    beta            = gepck_oo['beta']
+    sigmaSQ         = gepck_oo['sigmaSQ']
+    am              = gepck_oo['auxMatrices']
+    R_tilde         = gepck_oo['R_tilde']
+    F_global_handle = gepck_oo['F_global_handle']
+
+    N_test = U_test.shape[0]
+    N      = U_train.shape[0]
+    N_aug  = R_tilde.shape[0]          # N*(M+1)
+
+    # --- f0 : trend standard au point test — NON augmenté (Zuhal : f(x*) non augmenté)
+    f0 = F_global_handle(U_test)[:N_test, :]   # (N_test, P)
+
+    # --- r̃₀ : cross-corrélation augmentée, nugget forcé à 0
+    CrossCorOpts           = dict(CorrOptions)
+    CrossCorOpts['Nugget'] = 0.0
+    evalR = CorrOptions['Handle']
+    r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N*(M+1))
+
+    # --- Rinv
+    cholR = am['cholR']
+    if cholR is not None:
+        Rinv = np.linalg.solve(cholR,
+               np.linalg.solve(cholR.T, np.eye(N_aug)))
+    else:
+        Rinv = am['Rinv']
+
+    # --- YMu = f0 @ beta + r̃₀ @ Rinv @ (Y_aug - F̃ @ beta)
+    residual = Y_aug - F_tilde_train @ beta
+    YMu      = f0 @ beta + r0 @ (Rinv @ residual)
+
+    if not return_var and not return_cov:
+        return YMu
+
+    # --- u0 = FTRinv @ r̃₀ᵀ − f0ᵀ
+    FTRinv  = am['FTRinv']     # (P, N*(M+1))
+    FTRinvF = am['FTRinvF']    # (P, P)
+    u0      = FTRinv @ r0.T - f0.T   # (P, N_test)
+
+    if return_cov:
+        D1_mat      = r0 @ Rinv @ r0.T
+        FTRinvF_inv = am.get('FTRinvF_inv')
+        if FTRinvF_inv is None:
+            D2_mat = u0.T @ np.linalg.solve(FTRinvF, u0)
+        else:
+            D2_mat = u0.T @ FTRinvF_inv @ u0
+        CorrU0  = evalR(U_test, U_test, theta, CorrOptions)
+        YCov    = sigmaSQ * (CorrU0 - D1_mat + D2_mat)
+        YSigma2 = _verify_YSigma2(np.diag(YCov))
+        return YMu, YSigma2, YCov
+
+    D1      = uq_Kriging_calc_DiagOfCongruent(r0, R_tilde)
+    D2      = uq_Kriging_calc_DiagOfCongruent(u0.T, FTRinvF)
+    YSigma2 = sigmaSQ * (np.ones(N_test) - D1 + D2)
+    YSigma2 = _verify_YSigma2(YSigma2)
+    return YMu, YSigma2
+
+
+# ===========================================================================
 # 2.  uq_PCK_eval
 #     Source: PCK/uq_PCK_eval.m  (main entry point)
 # ===========================================================================

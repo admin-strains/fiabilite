@@ -2036,6 +2036,22 @@ Clone de `uq_PCK_calculate_coefficients`. Différences :
 
 Tout le reste identique : détection non-constantes, PolyTypes, LARS, warm start `theta_current`, `comb_crit`.
 
+### `uq_GEPCK_eval_one_output` — ligne 156 branche4.py
+
+Clone de `uq_Kriging_eval_one_output`. Différences :
+
+| | `uq_Kriging_eval_one_output` | `uq_GEPCK_eval_one_output` |
+|---|---|---|
+| `R` | `kriging_oo['R']` (N, N) | `gepck_oo['R_tilde']` (N*(M+1), N*(M+1)) |
+| `F_handle` | `kriging_oo['F_handle']` | `gepck_oo['F_global_handle']` |
+| `f0` | `F_handle(U_test)` → (N_test, P) | `F_global_handle(U_test)[:N_test, :]` — bloc F₀ seul, **non augmenté** |
+| `r0` | `evalR(U_test, U_train, ...)` → (N_test, N) | `uq_eval_global_Kernel(...)` → (N_test, N*(M+1)) |
+| `eye(N)` pour Rinv | `eye(N)` | `eye(N_aug)` où `N_aug = R_tilde.shape[0]` |
+| residual | `Y_train - F_train @ beta` | `Y_aug - F_tilde_train @ beta` |
+| `DiagOfCongruent` | `(r0, R)` | `(r0, R_tilde)` — shapes cohérentes automatiquement |
+
+Tout le reste partagé : calcul Rinv, YMu, u0, D1, D2, variance.
+
 ### Convention de dérivation dans `uq_assemble_global_Kernel` et `uq_eval_global_Kernel`
 
 **Convention actuelle (Zuhal 2021)** — `der` dérive le 1er argument, `dp` le 2e :
@@ -2055,4 +2071,26 @@ bloc(rb, cb) = kernel_deriv_factory(family, der=rb-1, dp=cb-1)(X1, X2, theta)
 ```
 
 Les deux conventions donnent R̃ symétrique, SDP et BLUP exact — à condition que r̃₀ soit calculée avec la même convention. Le switch vers Zuhal est fait pour coller à l'article. Tests : 39/39 PASS (`test_gek_kernel.py`) + 5/5 PASS (`test_eval_global_kernel.py`).
+
+---
+
+## Instructions de travail — protocole d'implémentation des fonctions GEPCK
+
+Pour chaque nouvelle fonction GEPCK (clone d'une fonction PCK) :
+
+1. **Lire** la fonction PCK source en détail
+2. **Analyser** ligne par ligne : identifier chaque endroit où la fonction utilise un élément PCK-spécifique (`Y`, `F_handle`, `uq_eval_Kernel`, `N`, clés du dict retourné, etc.)
+3. **Présenter l'analyse** sous forme de tableau précis (ligne | PCK | GEPCK) avant tout code
+4. **Attendre confirmation** de l'utilisatrice
+5. **Implémenter** le clone GEPCK
+6. **Mettre à jour ce MD** avec le tableau des différences + numéro de ligne
+7. **Committer** avec titre `'ajout de <nom_fonction>'`
+
+Contraintes :
+- Y_aug est **toujours fourni par l'utilisateur** (pas assemblé dans le code)
+- LARS tourne **toujours sur Y_aug[:N]** (valeurs seules, pas les gradients)
+- Nout = 1 fixe pour GEPCK
+- `uq_eval_global_Kernel` remplace `uq_eval_Kernel` partout
+- `make_trend_global_handle` remplace `make_trend_handle` partout
+- `fit_kriging_gepck` remplace `fit_kriging_pck` partout
 
