@@ -558,6 +558,109 @@ def fit_kriging_pck(U, Y, F_handle, CorrOptions,
     }
 
 
+def fit_kriging_gepck(U, Y_aug, F_global_handle, CorrOptions,
+                      theta_bounds, theta0,
+                      estim_method='ml',
+                      optim_method='gradbased'):
+    """
+    Fit a GEPCK model (gradient-enhanced Kriging with PCE trend).
+
+    Clone de fit_kriging_pck avec R̃, F̃, ẏ augmentés (Zuhal 2021).
+
+    Parameters
+    ----------
+    U                : (N, M) ndarray    — points d'entraînement (espace auxiliaire)
+    Y_aug            : (N*(M+1),) ndarray — réponse augmentée [y ; dy/du_0 ; ... ; dy/du_{M-1}]
+    F_global_handle  : callable U → (N*(M+1), P_sel)   — trend augmentée F̃
+    CorrOptions      : dict avec 'Handle'=uq_eval_global_Kernel, 'Family', etc.
+    theta_bounds     : (2, M) ndarray    — bornes [lb ; ub] pour chaque dimension
+    theta0           : (M,)  ndarray     — theta initial
+    estim_method     : 'ml' ou 'cv'
+    optim_method     : 'gradbased' | 'de' | 'none'
+
+    Returns
+    -------
+    fitted : dict avec theta, beta, sigmaSQ, LOO, F_tilde, R_tilde, auxMatrices,
+             F_global_handle, F_handle_standard
+    """
+    Y_aug = np.asarray(Y_aug).ravel()
+    N     = U.shape[0]             # nombre de points (pas d'observations)
+    N_aug = len(Y_aug)             # N*(M+1) — nombre total d'observations
+    F     = F_global_handle(U)     # (N*(M+1), P_sel) — trend augmentée F̃
+
+    # KrgModelParameters — N_aug remplace N partout où il entre dans la vraisemblance
+    KrgModelParameters = {
+        'X'           : U,
+        'Y'           : Y_aug,
+        'N'           : N_aug,
+        'F'           : F,
+        'CorrOptions' : CorrOptions,
+        'trend_type'  : 'ordinary',
+        'IsRegression': False,
+        'EstimNoise'  : False,
+    }
+
+    # Optimisation de theta
+    theta_opt, J_opt, exitflag = kriging_optimize_theta(
+        KrgModelParameters, theta0, theta_bounds, method=optim_method)
+
+    # R̃ au theta optimal
+    evalR   = CorrOptions['Handle']
+    R_tilde = evalR(U, U, theta_opt, CorrOptions)
+
+    # Matrices auxiliaires
+    if estim_method.lower() == 'ml':
+        runCase = 'ml_estimation'
+    else:
+        runCase = 'default'
+
+    am = uq_Kriging_calc_auxMatrices(R_tilde, F, Y_aug, runCase)
+
+    # Beta (GLS)
+    betaMethod = 'qr' if estim_method.lower() == 'ml' else 'standard'
+    beta       = uq_Kriging_calc_beta(F, 'ordinary', Y_aug, betaMethod, am)
+
+    # Sigma²
+    if estim_method.lower() == 'ml':
+        kp = {'N': N_aug, 'beta': beta, 'F': F, 'Y': Y_aug}
+        if am['cholR'] is not None:
+            kp['Ytilde'] = am['Ytilde']
+            kp['Ftilde'] = am['Ftilde']
+            sigmaMethod  = 'ml_chol'
+        else:
+            kp['Rinv']  = am['Rinv']
+            sigmaMethod = 'ml_nochol'
+        sigmaSQ = uq_Kriging_calc_sigmaSq(kp, sigmaMethod)
+    else:
+        randIdx_cv = uq_Kriging_helper_create_randIdx(1, N_aug)
+        CVE, CVS   = uq_Kriging_calc_KFold(randIdx_cv, Y_aug, F, am)
+        kp         = {'CVErrors': CVE, 'CVSigma2': CVS}
+        sigmaSQ    = uq_Kriging_calc_sigmaSq(kp, 'cv')
+
+    # LOO (Dubrule) — dénominateur = N_aug (N*(M+1) observations)
+    if am.get('FTRinv') is None:
+        am_def = uq_Kriging_calc_auxMatrices(R_tilde, F, Y_aug, 'default')
+    else:
+        am_def = am
+    randIdx_loo     = uq_Kriging_helper_create_randIdx(1, N_aug)
+    CVErrors, _     = uq_Kriging_calc_KFold(randIdx_loo, Y_aug, F, am_def)
+    varY            = float(np.var(Y_aug[:N], ddof=0))   # variance sur les N valeurs seules
+    LOO             = float(np.mean(np.array(CVErrors))) / varY if varY > 0 else 0.0
+
+    return {
+        'theta'              : theta_opt,
+        'beta'               : beta,
+        'sigmaSQ'            : sigmaSQ,
+        'LOO'                : LOO,
+        'J_opt'              : J_opt,
+        'exitflag'           : exitflag,
+        'F_tilde'            : F,
+        'R_tilde'            : R_tilde,
+        'auxMatrices'        : am_def,
+        'F_global_handle'    : F_global_handle,   # F̃ augmentée — pour B4 prédiction
+    }
+
+
 # ===========================================================================
 # 9.  PCE basis utilities (support for uq_PCK_calculate_coefficients)
 # ===========================================================================
