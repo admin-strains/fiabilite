@@ -2020,6 +2020,22 @@ Clone direct de `fit_kriging_pck`. Différences :
 
 Tout le reste est partagé : `kriging_optimize_theta`, `uq_Kriging_calc_auxMatrices`, `uq_Kriging_calc_beta`, `uq_Kriging_calc_sigmaSq`, `uq_Kriging_calc_KFold`.
 
+### `uq_GEPCK_calculate_coefficients` — ligne 1052 branche3.py
+
+Clone de `uq_PCK_calculate_coefficients`. Différences :
+
+| | `uq_PCK_calculate_coefficients` | `uq_GEPCK_calculate_coefficients` |
+|---|---|---|
+| Réponse | `Y` (N, Nout) | `Y_aug` (N*(M+1),) — user-provided, Nout=1 |
+| LARS | `Y[:, oo]` (N valeurs) | `Y_aug[:N]` — valeurs seules |
+| CorrOptions défaut | `Handle = uq_eval_Kernel` | `Handle = uq_eval_global_Kernel` |
+| Trend handle | `make_trend_handle` | `make_trend_global_handle` |
+| Fit | `fit_kriging_pck` | `fit_kriging_gepck` |
+| Init GA | `fit_kriging_pck(F_constant)` | `fit_kriging_gepck(make_trend_global_handle([0], ...))` |
+| ExpDesign stocké | `'Y': Y` | `'Y_aug': Y_aug` |
+
+Tout le reste identique : détection non-constantes, PolyTypes, LARS, warm start `theta_current`, `comb_crit`.
+
 ### Convention de dérivation dans `uq_assemble_global_Kernel` et `uq_eval_global_Kernel`
 
 **Convention actuelle (Zuhal 2021)** — `der` dérive le 1er argument, `dp` le 2e :

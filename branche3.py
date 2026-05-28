@@ -1047,3 +1047,200 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
     }
 
     return fitted_model
+
+
+def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
+                                     input_marginals, input_copula,
+                                     CorrOptions=None,
+                                     theta_bounds=None,
+                                     theta0=None,
+                                     optim_method='gradbased',
+                                     estim_method='ml'):
+    """
+    Fit a GEPCK metamodel (sortie unique).
+
+    Clone de uq_PCK_calculate_coefficients avec Y_aug, make_trend_global_handle,
+    fit_kriging_gepck et uq_eval_global_Kernel.
+
+    Parameters
+    ----------
+    X               : (N, M) ndarray
+    Y_aug           : (N*(M+1),) ndarray — [y ; dy/du_0 ; ... ; dy/du_{M-1}]
+                      fourni par l'utilisateur (pas assemblé ici)
+    pck_config      : dict de uq_PCK_initialize (B2)
+    input_marginals : list de M dicts
+    input_copula    : dict copule
+    CorrOptions     : dict; si None utilise Matern52 + uq_eval_global_Kernel
+    theta_bounds    : (2, M) ndarray; si None [[0.01]*M, [100]*M]
+    theta0          : (M,) ndarray; si None moyenne géométrique des bornes
+    optim_method    : 'gradbased' | 'de' | 'none'
+    estim_method    : 'ml' | 'cv'
+    """
+    from branche5 import uq_eval_global_Kernel
+
+    X     = np.atleast_2d(X).astype(float)
+    Y_aug = np.asarray(Y_aug).ravel().astype(float)
+    N, M  = X.shape
+    Nout  = 1   # GEPCK : sortie unique
+
+    # -----------------------------------------------------------------------
+    # Dimensions non-constantes
+    # -----------------------------------------------------------------------
+    diff_X   = np.diff(X, axis=0)
+    nonConst = np.where(np.any(diff_X, axis=0))[0]
+    if len(nonConst) == 0:
+        raise ValueError('Only constants in the input model.')
+    Xred = X[:, nonConst]
+    Mred = len(nonConst)
+
+    red_marginals = [input_marginals[i] for i in nonConst]
+
+    # -----------------------------------------------------------------------
+    # PolyTypes et espace auxiliaire
+    # -----------------------------------------------------------------------
+    PolyTypes_all = [poly_type_from_marginal(m['Type']) for m in red_marginals]
+    aux_marginals = [aux_marginal_from_poly_type(pt) for pt in PolyTypes_all]
+    aux_copula    = {'Type': 'Independent', 'Parameters': np.eye(Mred)}
+
+    # -----------------------------------------------------------------------
+    # CorrOptions défaut : Matern-5/2 + uq_eval_global_Kernel
+    # -----------------------------------------------------------------------
+    if CorrOptions is None:
+        CorrOptions = {
+            'Handle'    : uq_eval_global_Kernel,
+            'Family'    : 'matern-5_2',
+            'Type'      : 'separable',
+            'Isotropic' : False,
+            'Nugget'    : 0.0,
+        }
+
+    # -----------------------------------------------------------------------
+    # theta_bounds et theta0
+    # -----------------------------------------------------------------------
+    if theta_bounds is None:
+        theta_bounds = np.array([[0.01] * Mred, [100.0] * Mred])
+    if theta0 is None:
+        theta0 = np.sqrt(theta_bounds[0] * theta_bounds[1])
+
+    # -----------------------------------------------------------------------
+    # LARS sur Y_aug[:N] (valeurs seules — les gradients n'entrent pas dans LARS)
+    # -----------------------------------------------------------------------
+    mode         = pck_config.get('Mode', 'sequential').lower()
+    trend_method = pck_config.get('TrendMethod', 'pce').lower()
+    Y_vals       = Y_aug[:N]
+
+    idxranking = [None]
+    AllIndices = [None]
+
+    if trend_method == 'pce':
+        pce_opts   = pck_config.get('PCE', {})
+        max_degree = max(pce_opts.get('Degree', [1, 2, 3]))
+
+        FullIndices = pce_multi_indices(Mred, max_degree)
+        PolyTypes   = PolyTypes_all
+
+        Psi_full, U_train = pce_eval_design_matrix(
+            Xred, FullIndices, PolyTypes,
+            red_marginals, input_copula, aux_marginals)
+
+        lar_opts = {
+            'normalize'   : True,
+            'hybrid_lars' : True,
+            'loo_modified': True,
+            'loo_hybrid'  : True,
+            'early_stop'  : True,
+        }
+        lar_res       = uq_lar(Psi_full, Y_vals, lar_opts)
+        idxranking[0] = lar_res['lars_idx']
+        AllIndices[0] = FullIndices
+
+    else:  # 'user'
+        PolyIndices   = pck_config['PolyIndices']
+        PolyTypes     = pck_config['PolyTypes']
+        idxranking[0] = list(range(PolyIndices.shape[0]))
+        AllIndices[0] = PolyIndices
+        _, U_train = pce_eval_design_matrix(
+            Xred, AllIndices[0], PolyTypes,
+            red_marginals, input_copula, aux_marginals)
+
+    # -----------------------------------------------------------------------
+    # Fit GEPCK (mode sequential ou optimal)
+    # -----------------------------------------------------------------------
+    comb_crit  = pck_config.get('CombCrit', 'rel_loo').lower()
+    idx_ranked = idxranking[0]
+    Indices_oo = AllIndices[0]
+
+    if mode == 'sequential':
+        F_global_handle = make_trend_global_handle(
+            idx_ranked, Indices_oo, PolyTypes_all[:Mred])
+
+        fitted_kriging = fit_kriging_gepck(
+            U_train, Y_aug, F_global_handle,
+            CorrOptions, theta_bounds, theta0.copy(),
+            estim_method=estim_method,
+            optim_method=optim_method)
+
+        NumberOfPoly = len(idx_ranked)
+
+    else:  # 'optimal'
+        best_LOO    = np.inf
+        best_fitted = None
+        best_ii     = 0
+
+        # Init GA sur trend constant augmenté (Zuhal 2021 Section III.B.1)
+        F_global_constant = make_trend_global_handle(
+            [0], Indices_oo, PolyTypes_all[:Mred])
+        fitted_constant = fit_kriging_gepck(
+            U_train, Y_aug, F_global_constant,
+            CorrOptions, theta_bounds, theta0.copy(),
+            estim_method=estim_method,
+            optim_method='de')
+        theta_current = fitted_constant['theta']
+
+        for ii in range(1, len(idx_ranked) + 1):
+            F_global_handle = make_trend_global_handle(
+                idx_ranked[:ii], Indices_oo, PolyTypes_all[:Mred])
+
+            fitted = fit_kriging_gepck(
+                U_train, Y_aug, F_global_handle,
+                CorrOptions, theta_bounds, theta_current,
+                estim_method=estim_method,
+                optim_method=optim_method)
+
+            theta_current = fitted['theta']
+
+            if fitted['LOO'] < best_LOO:
+                best_LOO    = fitted['LOO']
+                best_fitted = fitted
+                best_ii     = ii
+
+        fitted_kriging = best_fitted
+        NumberOfPoly   = best_ii
+
+    # -----------------------------------------------------------------------
+    # Résultat
+    # -----------------------------------------------------------------------
+    return {
+        'Kriging'       : fitted_kriging,
+        'Error'         : {'LOO': fitted_kriging['LOO']},
+        'AuxSpace'      : {'Marginals': aux_marginals, 'Copula': aux_copula},
+        'ExpDesign'     : {
+            'X'    : X,
+            'Y_aug': Y_aug,
+            'U'    : U_train,
+            'Xred' : Xred,
+        },
+        'pck_config'    : pck_config,
+        'PolyTypes'     : PolyTypes_all[:Mred],
+        'AllIndices'    : AllIndices,
+        'idxranking'    : idxranking,
+        'NumberOfPoly'  : NumberOfPoly,
+        'nonConst'      : nonConst,
+        'OrigMarginals' : input_marginals,
+        'OrigCopula'    : input_copula,
+        'RedMarginals'  : red_marginals,
+        'CorrOptions'   : CorrOptions,
+        'M'             : M,
+        'Mred'          : Mred,
+        'Nout'          : Nout,
+    }
