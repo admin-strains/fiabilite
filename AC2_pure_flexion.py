@@ -47,7 +47,7 @@ from sklearn.cluster import DBSCAN
 from scipy.stats import norm
 from math import comb
 import warnings
-from branche1 import fit_gepck, predict_gepck
+from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 
 
 def _parse(text, name):
@@ -847,7 +847,7 @@ if __name__ == '__main__':
             grad_krg = self.g_krg.gradient(u_ot)   
             return [[grad_pce[i, 0] + grad_krg[i, 0]] for i in range(n_var)]
 
-    class GEPCKFunction(ot.OpenTURNSPythonFunction):
+    class oldGEPCKFunction(ot.OpenTURNSPythonFunction):
         def __init__(self, g_pce, sm_gepck):
             super().__init__(n_var, 1)
             self.g_pce  = g_pce
@@ -896,6 +896,31 @@ if __name__ == '__main__':
             grad_pce = self.g_pce.gradient(ot.Point(list(u)))   # OT Matrix (n_var, 1)
             return [[grad_pce[i, 0] + self.sm.predict_derivatives(u_np, i).item()]
                     for i in range(n_var)]
+
+    # --------------------------------------------------------------------------- #
+    # WRAPPER GEPCK 5 BRANCHES                                                   #
+    class GEPCKFunction(ot.OpenTURNSPythonFunction):
+        def __init__(self, fm):
+            super().__init__(n_var, 1)
+            self.fm = fm
+
+        def _exec(self, u):
+            u_np = np.array(u).reshape(1, -1)
+            return [float(predict_gepck(self.fm, u_np)[0, 0])]
+
+        def _exec_sample(self, U):
+            U_np = np.array(U)
+            return predict_gepck(self.fm, U_np)[:, 0:1].tolist()
+
+        def _exec_sigma(self, u):
+            u_np = np.array(u).reshape(1, -1)
+            _, YSig2 = predict_gepck(self.fm, u_np, return_var=True)
+            return float(np.sqrt(max(0.0, float(YSig2[0, 0]))))
+
+        def _gradient(self, u):
+            u_np = np.array(u).reshape(1, -1)
+            G = predict_gradient_gepck(self.fm, u_np)   # (1, Mred)
+            return [[float(G[0, i])] for i in range(self.fm['Mred'])]
 
     # def eval_PCE():
     #     return do_pce
@@ -1029,10 +1054,27 @@ if __name__ == '__main__':
             y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
             smr_GEK = build_metamodel_GEK(xt, yr, all_grad_r)
-            gepck_impl = GEPCKFunction(g_ot_PCE, smr_GEK)
+            gepck_impl = oldGEPCKFunction(g_ot_PCE, smr_GEK)
             g_ot  = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
-            yt, all_grad = y_hf, all_grad_hf 
+            yt, all_grad = y_hf, all_grad_hf
+
+        elif do_GEPCK:
+            if xt is None: xt, yt, all_grad = build_DOE()
+            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
+                          {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
+            _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
+            _opts      = {'Mode': 'optimal',
+                          'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+            _Y_aug = build_Y_aug(yt, all_grad)
+            print(f"=== GEPCK fit N={len(xt)} ===", flush=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
+            print(f"  LOO={_fm['Error'][0]['LOO']:.4e}  n_poly={_fm['NumberOfPoly']}  theta={_fm['Kriging'][0]['theta']}", flush=True)
+            gepck_impl = GEPCKFunction(_fm)
+            g_ot       = ot.Function(gepck_impl)
+            sigma_func = gepck_impl._exec_sigma
 
         elif do_HF:
             if xt is None: xt = build_DOE()
@@ -1637,7 +1679,7 @@ if __name__ == '__main__':
     """
     update_degree(n0)
 
-    if modele in {'old_GEPCK', 'KRG', 'GEK', 'PCKRG', 'HF'}:
+    if modele in {'old_GEPCK', 'KRG', 'GEK', 'PCKRG', 'HF', 'GEPCK'}:
         event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
         xt_eff = None
 
@@ -2457,7 +2499,7 @@ if __name__ == '__main__':
     #         y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
     #         yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
     #         smr_GEK = build_metamodel_GEK(xt, yr, all_grad_r)
-    #         g_ot_GEPCK  = ot.Function(GEPCKFunction(g_ot_PCE, smr_GEK))   
+    #         g_ot_GEPCK  = ot.Function(oldGEPCKFunction(g_ot_PCE, smr_GEK))
     #         yt, all_grad = y_hf, all_grad_hf # A REVOIR AVANT DE LANCER WARM START
     #         Y = ot.CompositeRandomVector(g_ot_GEPCK, X)
 
