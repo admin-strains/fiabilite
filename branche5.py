@@ -1130,6 +1130,75 @@ def kernel_deriv_factory(family, der, der_prime):
             f'GEK : noyau "{family}" non supporte. Utiliser "gaussian" ou "matern-5_2".')
 
 
+def kernel_second_deriv_factory(family, der1, der2):
+    """
+    Retourne f(X1, X2, theta) -> (n1, n2) calculant
+    d²k(X1, X2) / (dX1_{der1} dX1_{der2})
+    (derivee seconde par rapport au PREMIER argument uniquement).
+
+    Utilisee dans uq_assemble_deriv_global_Kernel pour les blocs cb >= 1 :
+        d/dX1_{der_var} [ dk/dX1_{l-1} ] = d²k/(dX1_{der_var} dX1_{l-1})
+
+    Parameters
+    ----------
+    family : 'gaussian' ou 'matern-5_2'
+    der1   : int  -- 1re composante de derivation (0-indexe)
+    der2   : int  -- 2e  composante de derivation (0-indexe)
+    """
+    if family.lower() == 'gaussian':
+        def f(X1, X2, theta):
+            X1    = np.asarray(X1, dtype=float)
+            X2    = np.asarray(X2, dtype=float)
+            theta = np.asarray(theta, dtype=float).ravel()
+
+            delta = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]   # (n1, n2, M)
+            opts  = {'Handle': uq_eval_Kernel, 'Family': 'gaussian',
+                     'Type': 'separable', 'Isotropic': False, 'Nugget': 0.0}
+            k = uq_eval_Kernel(X1, X2, theta, opts)               # (n1, n2)
+
+            if der1 == der2:
+                i = der1
+                # d²k/dx*_i² = (delta_i²/theta_i² - 1) / theta_i² * k
+                return (delta[:, :, i]**2 / theta[i]**2 - 1) / theta[i]**2 * k
+            else:
+                i, j = der1, der2
+                # d²k/(dx*_i dx*_j) = delta_i * delta_j / (theta_i² * theta_j²) * k
+                return (delta[:, :, i] * delta[:, :, j]
+                        / (theta[i]**2 * theta[j]**2) * k)
+        return f
+
+    elif family.lower() == 'matern-5_2':
+        def f(X1, X2, theta):
+            X1    = np.asarray(X1, dtype=float)
+            X2    = np.asarray(X2, dtype=float)
+            theta = np.asarray(theta, dtype=float).ravel()
+
+            delta  = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]  # (n1, n2, M)
+            a      = np.sqrt(5) * np.abs(delta) / theta            # (n1, n2, M)
+            K_uni  = (1 + a + a**2 / 3) * np.exp(-a)              # (n1, n2, M)
+            K_excl = _prod_excl(K_uni)                             # (n1, n2, M)
+
+            if der1 == der2:
+                i = der1
+                # d²k/dx*_i² = -(5/(3*theta_i²)) * (1 + a_i - a_i²) * exp(-a_i) * K_excl_i
+                return (-(5 / (3 * theta[i]**2))
+                        * (1 + a[:, :, i] - a[:, :, i]**2)
+                        * np.exp(-a[:, :, i]) * K_excl[:, :, i])
+            else:
+                i, j = der1, der2
+                # d²k/(dx*_i dx*_j) = (25/(9*ti²*tj²)) * di*dj*(1+ai)*(1+aj)*exp(-(ai+aj))*K_excl_ij
+                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
+                return ((25 / (9 * theta[i]**2 * theta[j]**2))
+                        * delta[:, :, i] * delta[:, :, j]
+                        * (1 + a[:, :, i]) * (1 + a[:, :, j])
+                        * np.exp(-(a[:, :, i] + a[:, :, j])) * K_excl_ij)
+        return f
+
+    else:
+        raise ValueError(
+            f'kernel_second_deriv_factory : noyau "{family}" non supporte.')
+
+
 def uq_assemble_global_Kernel(X1, X2, theta, family):
     """
     Assemble la matrice de correlation augmentee GEK de taille n1(m+1) x n2(m+1).
@@ -1179,6 +1248,77 @@ def uq_assemble_global_Kernel(X1, X2, theta, family):
                     cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
 
     return R_tilde
+
+
+def uq_assemble_deriv_global_Kernel(X1, X2, theta, family, der_var):
+    """
+    Assemble dr0_tilde/dX1_{der_var} de taille (n1, n2*(m+1)).
+
+    Derivee du vecteur de cross-correlation r0_tilde (bloc rb=0) par rapport
+    a la composante der_var du premier argument X1 (point test).
+
+    Bloc cb=0 : d[k(X1,X2)]/dX1_{der_var}
+              = kernel_deriv_factory(family, der_var, None)
+
+    Bloc cb=l (l=1..m) : d[dk(X1,X2)/dX1_{l-1}]/dX1_{der_var}
+                        = d²k/(dX1_{der_var} dX1_{l-1})
+                        = kernel_second_deriv_factory(family, der_var, l-1)
+
+    Parameters
+    ----------
+    X1      : (n1, m) ndarray  -- points test
+    X2      : (n2, m) ndarray  -- points train
+    theta   : (m,)  ndarray
+    family  : str              'gaussian' ou 'matern-5_2'
+    der_var : int              composante de derivation (0-indexe)
+
+    Returns
+    -------
+    dr0 : (n1, n2*(m+1)) ndarray
+    """
+    X1    = np.asarray(X1, dtype=float)
+    X2    = np.asarray(X2, dtype=float)
+    n1, m = X1.shape
+    n2    = X2.shape[0]
+    theta = np.asarray(theta, dtype=float).ravel()
+
+    dr0 = np.empty((n1, n2 * (m + 1)))
+
+    for cb in range(m + 1):
+        if cb == 0:
+            f = kernel_deriv_factory(family, der_var, None)
+        else:
+            f = kernel_second_deriv_factory(family, der_var, cb - 1)
+        dr0[:, cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
+
+    return dr0
+
+
+def uq_eval_deriv_global_Kernel(X1, X2, theta, options, der_var):
+    """
+    Calcule dr0_tilde/dX1_{der_var} pour GEPCK (cas non-Gram uniquement).
+
+    Derivee du vecteur de cross-correlation augmente r0_tilde par rapport a
+    la composante der_var du point test X1.
+    Utilisee dans predict_deriv pour le terme correlation de dY_hat/dx_{der_var}.
+
+    Parameters
+    ----------
+    X1      : (n1, m) ndarray  -- points test
+    X2      : (n2, m) ndarray  -- points train
+    theta   : (m,)  ndarray
+    options : dict  ('Family', eventuellement 'Nugget' ignore ici)
+    der_var : int   composante de derivation (0-indexe)
+
+    Returns
+    -------
+    dr0 : (n1, n2*(m+1)) ndarray
+    """
+    family = options['Family']
+    X1 = np.asarray(X1, dtype=float)
+    X2 = np.asarray(X2, dtype=float)
+    theta = np.asarray(theta, dtype=float).ravel()
+    return uq_assemble_deriv_global_Kernel(X1, X2, theta, family, der_var)
 
 
 def uq_eval_global_Kernel(X1, X2, theta, options):

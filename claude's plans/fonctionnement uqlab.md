@@ -2126,6 +2126,115 @@ Les deux conventions donnent R̃ symétrique, SDP et BLUP exact — à condition
 
 ---
 
+## Session 29/05/2026 — AC2 : pipeline GEPCK HF (5 branches) sans FORM ni EFF
+
+### Nouveau fichier : AC2_pure_flexion.py + launcher2.py
+
+Copies de `AC_pure_flexion.py` / `launcher.py`. Toutes les modifications sont dans AC2 uniquement.
+
+### Flags et options ajoutés
+
+```python
+do_old_GEPCK = True if modele == 'old_GEPCK' else False  # ancien pipeline GEKPLS+OT (inchangé)
+do_GEPCK     = True if modele == 'GEPCK'     else False  # nouveau pipeline 5 branches
+```
+
+L'ancien `do_GEPCK` (GEKPLS) est renommé `do_old_GEPCK` partout dans `init_g_ot`, `print_visu`, et la légende.
+
+### Structure du bloc principal restructuré
+
+```python
+update_degree(n0)
+
+if modele in {'old_GEPCK', 'KRG', 'GEK', 'PCKRG', 'HF'}:
+    # pipeline existant inchangé : init_g_ot → FORM → print_visu
+    ...
+
+if do_GEPCK:
+    xt, yt, all_grad = init_surrogate()
+    # fit_gepck → predict_gepck → figure 2 panneaux → plt.savefig
+```
+
+### Nouvelle fonction init_surrogate()
+
+```python
+def init_surrogate():
+    """
+    Construit le DOE HF et retourne xt, yt, all_grad.
+    Version allégée de init_g_ot sans wrapper OpenTURNS.
+    sigma_func et event seront ajoutés quand FORM sera intégré.
+    """
+    xt, yt, all_grad = build_DOE()
+    return xt, yt, all_grad
+```
+
+### Imports ajoutés au niveau fichier (avant if __name__)
+
+```python
+import warnings
+from branche1 import fit_gepck, predict_gepck
+```
+
+### Section GEPCK (if do_GEPCK)
+
+- Marginales N(0,1)² + copule indépendante (gradients déjà en espace U via build_DOE)
+- `build_Y_aug(yt, all_grad)` → Y_aug shape (n0*(1+n_var),)
+- `fit_gepck(xt, Y_aug, opts, marginals, copula)` — mode optimal, degrés `range(1, max_degree+1)`, LARS
+- `predict_gepck` sur grille 100×100
+- Figure 2 panneaux : surface GEPCK + incertitude sigma, avec g=0 HF ref et g=0 analytique
+- Sortie : `notre_gepck_hf.png` + print `Figure sauvee`
+
+### Premier run (29/05, n0=5, modele='GEPCK', sans EFF, sans FORM)
+
+| Métrique | Valeur |
+|---|---|
+| N points DOE | 5 |
+| LOO | 2.12e-02 |
+| n_poly | 3 |
+| theta | [0.443, 0.846] |
+
+LOO = 2.12e-02 — facteur ~10 mieux que le modèle analytique `flexion_claude` (2.09e-01).
+
+---
+
+### Session 29/05 — ajout de la dérivée dr̃₀/dx_i (avant predict_gradient)
+
+**Objectif** : préparer le calcul analytique du gradient du métamodèle GEPCK pour FORM.
+
+**Formule** :
+```
+∂ŷ/∂x_i = (∂Ψ(u*)/∂u_i)^T β  +  (∂r̃₀(u*)/∂u_i)^T α_pred
+```
+avec `α_pred = R̃⁻¹(ẏ - F̃β)` précalculé une fois (indépendant de x*).
+
+**Ce qui a été ajouté dans `branche5.py`** :
+
+| Fonction | Localisation | Rôle |
+|---|---|---|
+| `kernel_second_deriv_factory(family, der1, der2)` | après `kernel_deriv_factory` | `∂²k/(∂x*_{der1} ∂x*_{der2})` — dérivée seconde par rapport au 1er argument uniquement |
+| `uq_assemble_deriv_global_Kernel(X1, X2, θ, family, der_var)` | après `uq_assemble_global_Kernel` | Assemble `∂r̃₀/∂x*_{der_var}` : cb=0 via `kernel_deriv_factory(family, der_var, None)`, cb=l via `kernel_second_deriv_factory(family, der_var, l-1)` |
+| `uq_eval_deriv_global_Kernel(X1, X2, θ, options, der_var)` | après `uq_eval_global_Kernel` | Point d'entrée (wrapper), cas non-Gram uniquement |
+
+**Logique de `uq_assemble_deriv_global_Kernel`** :
+- Bloc `cb=0` : `∂k/∂x*_{der_var}` → `kernel_deriv_factory(family, der_var, None)`
+- Bloc `cb=l` (l=1..M) : `∂²k/(∂x*_{der_var} ∂x*_{l-1})` → `kernel_second_deriv_factory(family, der_var, l-1)`
+
+**Formules de `kernel_second_deriv_factory`** :
+
+Gaussien :
+- `der1==der2==i` : `(δᵢ²/θᵢ² - 1) / θᵢ² · k`
+- `der1=i ≠ der2=j` : `δᵢ·δⱼ / (θᵢ²·θⱼ²) · k`
+
+Matern 5/2 :
+- `der1==der2==i` : `-(5/(3θᵢ²)) · (1+aᵢ-aᵢ²) · e^{-aᵢ} · K_excl_i`
+- `der1=i ≠ der2=j` : `(25/(9θᵢ²θⱼ²)) · δᵢ·δⱼ · (1+aᵢ)·(1+aⱼ) · e^{-(aᵢ+aⱼ)} · K_excl_ij`
+
+**Test** : validation par différences finies (ε=1e-5), erreurs ~10⁻¹⁰ pour les deux familles, tous blocs cb=0,1,2.
+
+**Prochaine étape** : dérivée du terme trend `∂Ψ(u*)/∂u_i` — nécessite dérivée seconde des polynômes Hermite/Legendre pour les blocs déjà dérivés de F̃.
+
+---
+
 ## Instructions de travail — protocole d'implémentation des fonctions GEPCK
 
 Pour chaque nouvelle fonction GEPCK (clone d'une fonction PCK) :
