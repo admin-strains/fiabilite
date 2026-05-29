@@ -1472,6 +1472,12 @@ if __name__ == '__main__':
             grid_ot = ot.Sample(grid.tolist())
             Z_gepck = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
             cf = ax.contourf(U1, U2, Z_gepck, levels=20, cmap='RdYlGn', alpha=0.6)
+            plt.colorbar(cf, ax=ax, label='g (old GEPCK)')
+            ax.contour(U1, U2, Z_gepck, levels=[0], colors='blue', linewidths=2)
+        elif do_GEPCK:
+            grid_ot = ot.Sample(grid.tolist())
+            Z_gepck = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+            cf = ax.contourf(U1, U2, Z_gepck, levels=20, cmap='RdYlGn', alpha=0.6)
             plt.colorbar(cf, ax=ax, label='g (GEPCK)')
             ax.contour(U1, U2, Z_gepck, levels=[0], colors='blue', linewidths=2)
 
@@ -1590,6 +1596,8 @@ if __name__ == '__main__':
         if do_PCKRG:
             legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 PCKRG'))
         if do_old_GEPCK:
+            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 old GEPCK'))
+        if do_GEPCK:
             legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 GEPCK'))
         if print_HF:
             legend_lines.append(Line2D([0], [0], color='red',    linestyle='--', linewidth=2, label='g=0 HF'))
