@@ -2087,6 +2087,23 @@ Tout le reste identique : `uq_PCK_initialize` partagée, extraction `pck_config`
 
 ---
 
+### Test end-to-end — `demo_gepck.py` (29/05/2026)
+
+Pipeline complète `fit_gepck` → `predict_gepck` validée sur deux cas.
+
+**Bug corrigé lors du test** : `make_trend_handle_deriv` et `make_trend_global_handle` étaient imbriquées dans `uq_PCK_calculate_coefficients` → inaccessibles depuis `uq_GEPCK_calculate_coefficients`. Fix : supprimées de PCK (PCK n'utilise que `make_trend_handle`), redéfinies en nested dans `uq_GEPCK_calculate_coefficients`.
+
+**`assemble_Y_aug(Y, dYdX, marginals)`** — helper dans `demo_gepck.py` (pas encore dans branche3.py) :
+- Jacobien isoprobabiliste : `Uniform[a,b]` → `jac=(b-a)/2`, `Gaussian(mu,σ)` → `jac=σ`
+- `Y_aug = [Y ; dY/dU_0 ; ... ; dY/dU_{M-1}]` (dimension-major)
+
+**Résultats 2D** (N=15, banana `g=(u2-u1²/2)²+(u1-1)²/4-1`, Gaussian(0,1)², Mode=optimal) :
+- LOO = 1.50e+00, n_poly = 4
+- Courbe g=0 GEPCK visuellement proche de la vraie
+- Quiver gradients au DOE visible et cohérent
+
+---
+
 ### Convention de dérivation dans `uq_assemble_global_Kernel` et `uq_eval_global_Kernel`
 
 **Convention actuelle (Zuhal 2021)** — `der` dérive le 1er argument, `dp` le 2e :

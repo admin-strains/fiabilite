@@ -903,49 +903,6 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
 
         return F_handle
 
-    def make_trend_handle_deriv(selected_idx, Indices, poly_types, der):
-        """
-        Returns F_der_handle(U) → (N, len(selected_idx)) : la dérivée partielle
-        de la matrice de base PCE par rapport à la der-ième dimension de U.
-
-        Implémente ∂Ψ_k/∂U_der = φ'_{α_k,der}(U_der) · ∏_{i≠der} φ_{α_ki}(U_i)
-        en remplaçant uv[:, der, :] par les valeurs dérivées puis en annulant
-        les colonnes où Idx_sel[:, der]==0 (dérivée d'une constante = 0).
-        """
-        Idx_sel = Indices[np.array(selected_idx), :]
-        p_types = poly_types
-
-        def F_der_handle(U):
-            uv  = uq_PCK_eval_unipoly(U, Idx_sel, p_types)   # (N, M, P+1)
-            P   = uv.shape[2] - 1
-            pt  = p_types[der].lower()
-            if pt == 'hermite':
-                uv[:, der, :] = uq_eval_hermite_deriv(P, U[:, der])
-            elif pt == 'legendre':
-                uv[:, der, :] = uq_eval_legendre_deriv(P, U[:, der])
-            Psi = uq_PCE_create_Psi(Idx_sel, uv)
-            # uq_PCE_create_Psi saute les degrés 0 (aa = Indices[:,mm] > 0).
-            # φ'_0 = 0 (dérivée d'une constante) : annuler explicitement.
-            Psi[:, Idx_sel[:, der] == 0] = 0.0
-            return Psi
-
-        return F_der_handle
-
-    def make_trend_global_handle(selected_idx, Indices, poly_types):
-        """
-        Returns F_global(U) → (N*(M+1), P_sel) : matrice F̃ augmentée GEPCK.
-        Empile F(U) puis ∂F/∂U_k(U) pour k=0..M-1 (Zuhal 2021, Eq. 9).
-        """
-        Idx_sel = Indices[np.array(selected_idx), :]
-        M_loc   = Idx_sel.shape[1]
-        F0 = make_trend_handle(selected_idx, Indices, poly_types)
-        Fk = [make_trend_handle_deriv(selected_idx, Indices, poly_types, k)
-              for k in range(M_loc)]
-        def F_global(U):
-            blocks = [F0(U)] + [fk(U) for fk in Fk]
-            return np.vstack(blocks)
-        return F_global
-
     # -----------------------------------------------------------------------
     # Compose Kriging + trend  (mode = 'sequential' or 'optimal')
     # (lines 126-222 in uq_PCK_calculate_coefficients.m)
@@ -1162,6 +1119,43 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
         _, U_train = pce_eval_design_matrix(
             Xred, AllIndices[0], PolyTypes,
             red_marginals, input_copula, aux_marginals)
+
+    # -----------------------------------------------------------------------
+    # Trend handle factories (GEPCK — not shared with PCK)
+    # -----------------------------------------------------------------------
+    def make_trend_handle(selected_idx, Indices, poly_types):
+        Idx_sel = Indices[np.array(selected_idx), :]
+        p_types = poly_types
+        def F_handle(U):
+            uv = uq_PCK_eval_unipoly(U, Idx_sel, p_types)
+            return uq_PCE_create_Psi(Idx_sel, uv)
+        return F_handle
+
+    def make_trend_handle_deriv(selected_idx, Indices, poly_types, der):
+        Idx_sel = Indices[np.array(selected_idx), :]
+        p_types = poly_types
+        def F_der_handle(U):
+            uv  = uq_PCK_eval_unipoly(U, Idx_sel, p_types)
+            P   = uv.shape[2] - 1
+            pt  = p_types[der].lower()
+            if pt == 'hermite':
+                uv[:, der, :] = uq_eval_hermite_deriv(P, U[:, der])
+            elif pt == 'legendre':
+                uv[:, der, :] = uq_eval_legendre_deriv(P, U[:, der])
+            Psi = uq_PCE_create_Psi(Idx_sel, uv)
+            Psi[:, Idx_sel[:, der] == 0] = 0.0
+            return Psi
+        return F_der_handle
+
+    def make_trend_global_handle(selected_idx, Indices, poly_types):
+        Idx_sel = Indices[np.array(selected_idx), :]
+        M_loc   = Idx_sel.shape[1]
+        F0 = make_trend_handle(selected_idx, Indices, poly_types)
+        Fk = [make_trend_handle_deriv(selected_idx, Indices, poly_types, k)
+              for k in range(M_loc)]
+        def F_global(U):
+            return np.vstack([F0(U)] + [fk(U) for fk in Fk])
+        return F_global
 
     # -----------------------------------------------------------------------
     # Fit GEPCK (mode sequential ou optimal)
