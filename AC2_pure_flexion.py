@@ -110,6 +110,11 @@ if __name__ == '__main__':
     tol_warmstart = 0.2                          # nécessité de faire le warm_start
 
     # --------------------------------------------------------------------------- #
+    # PARAMETRES MESH                                                             #
+    global_size     = 0.05   # global_physical_size (0.05 = rapide FORM, 0.007 = très fin)
+    geo_min_approx  = 4      # geometric_approximation_min (4 = fin, 35 = grossier)
+
+    # --------------------------------------------------------------------------- #
     # PARAMETRES GEK/ PCE/ EFF                                                    #
     # 1. GEK
     do_analytic_grad = False
@@ -373,14 +378,14 @@ if __name__ == '__main__':
             Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
                 "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
-                "global_physical_size": 0.05,  # mesh fin pour bonne convergence
+                "global_physical_size": global_size,
                 "max_size": 0.05,
                 "min_size": "-1",
                 "gradation": 1.5,
                 "volume_gradation": 1.5,
                 "optimisation_level": "standard",
                 "anisotropic_ratio": "10",
-                "geometric_approximation_min": "4",
+                "geometric_approximation_min": str(geo_min_approx),
                 "geometric_approximation_max": "25",
                 "geometric_approximation_on_edge": "false",
                 "geometric_approximation_on_face": "true",
@@ -1343,6 +1348,9 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
+                global hf_2d_grid_fixed
+                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
+                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
 
         # --- Points DOE ---
@@ -1394,6 +1402,9 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
+                global hf_2d_grid_fixed
+                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
+                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
 
         if xt is not None:
@@ -1498,7 +1509,9 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                print(f"hf_2d_grid_fixed = {{'params': {{'u1_min':{u1_min},'u1_max':{u1_max},'u2_min':{u2_min},'u2_max':{u2_max},'n_grid_hf':{n_grid_hf}}}, 'Z':{Z_true.tolist()}}}", flush=True)
+                global hf_2d_grid_fixed
+                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
+                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
