@@ -29,7 +29,7 @@ if _dir not in sys.path:
 
 from branche2 import uq_PCK_initialize
 from branche3 import uq_PCK_calculate_coefficients, uq_GEPCK_calculate_coefficients
-from branche4 import uq_PCK_eval, uq_GEPCK_eval
+from branche4 import uq_PCK_eval, uq_GEPCK_eval, uq_GEPCK_eval_deriv
 from branche5 import uq_eval_Kernel, uq_eval_global_Kernel
 
 
@@ -316,6 +316,43 @@ def predict_gepck(fitted_model, X_test,
     """
     return uq_GEPCK_eval(fitted_model, X_test,
                          return_var=return_var, return_cov=return_cov)
+
+
+# ===========================================================================
+# 5.  predict_deriv_gepck  /  predict_gradient_gepck
+#     Gradient analytique ∂ŷ/∂u dans l'espace auxiliaire U.
+# ===========================================================================
+def predict_deriv_gepck(fitted_model, X_test, der_var):
+    """
+    ∂ŷ/∂u_{der_var} analytique du GEPCK.
+
+    Parameters
+    ----------
+    fitted_model : dict retourné par fit_gepck
+    X_test       : (N_test, M)
+    der_var      : int — indice de la variable dans l'espace auxiliaire (0-indexed)
+
+    Returns
+    -------
+    dYMu : (N_test, Nout)
+    """
+    return uq_GEPCK_eval_deriv(fitted_model, X_test, der_var)
+
+
+def predict_gradient_gepck(fitted_model, X_test):
+    """
+    Gradient complet ∂ŷ/∂u dans l'espace auxiliaire U.
+
+    Returns
+    -------
+    G : (N_test, Mred)  — G[:, i] = ∂ŷ/∂u_i
+    """
+    Mred   = fitted_model['Mred']
+    N_test = np.atleast_2d(X_test).shape[0]
+    G = np.zeros((N_test, Mred))
+    for i in range(Mred):
+        G[:, i] = predict_deriv_gepck(fitted_model, X_test, i)[:, 0]
+    return G
 
 
 # ===========================================================================

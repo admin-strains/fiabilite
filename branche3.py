@@ -1211,6 +1211,15 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
         fitted_kriging = best_fitted
         NumberOfPoly   = best_ii
 
+    # Indices finaux utilisés dans le modèle sélectionné
+    final_idx = idx_ranked if mode == 'sequential' else idx_ranked[:best_ii]
+
+    # Closures ∂Ψ/∂u_k pour k=0..Mred-1 — utilisées par predict_deriv_gepck
+    fitted_kriging['F_deriv_handles'] = [
+        make_trend_handle_deriv(final_idx, Indices_oo, PolyTypes_all[:Mred], k)
+        for k in range(Mred)
+    ]
+
     # -----------------------------------------------------------------------
     # Résultat
     # -----------------------------------------------------------------------

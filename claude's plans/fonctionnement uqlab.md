@@ -2231,7 +2231,59 @@ Matern 5/2 :
 
 **Test** : validation par différences finies (ε=1e-5), erreurs ~10⁻¹⁰ pour les deux familles, tous blocs cb=0,1,2.
 
-**Prochaine étape** : dérivée du terme trend `∂Ψ(u*)/∂u_i` — nécessite dérivée seconde des polynômes Hermite/Legendre pour les blocs déjà dérivés de F̃.
+**Étape suivante réalisée** : dérivée du terme trend `∂Ψ(u*)/∂u_i` — voir session ci-dessous.
+
+---
+
+### Session 29/05 — predict_deriv_gepck et predict_gradient_gepck (gradient analytique FORM)
+
+**Objectif** : calculer `∂ŷ/∂u_i` analytiquement pour FORM (First Order Reliability Method).
+
+**Formule implémentée** :
+```
+∂ŷ/∂u_i = [∂Ψ/∂u_i(u*)]ᵀ β  +  [∂r̃₀/∂u_i(u*)]ᵀ α_pred
+```
+avec `α_pred = R̃⁻¹(Y_aug - F̃β)`.
+
+- Terme `∂r̃₀/∂u_i` : `uq_eval_deriv_global_Kernel` (branche5.py, session précédente).
+- Terme `∂Ψ/∂u_i` : closures `make_trend_handle_deriv` — **nested** dans `uq_GEPCK_calculate_coefficients`, donc inaccessibles depuis l'extérieur. Solution : les stocker dans le dict fitted au moment du fit.
+
+**Modifications apportées** :
+
+| Fichier | Ligne | Ajout |
+|---|---|---|
+| `branche3.py` | ~1214 | `final_idx` + `fitted_kriging['F_deriv_handles']` : liste de Mred closures `make_trend_handle_deriv(..., k)` |
+| `branche4.py` | import | `uq_GeneralIsopTransform, uq_eval_deriv_global_Kernel` depuis branche5 |
+| `branche4.py` | ~239 | `uq_GEPCK_eval_one_output_deriv(gepck_oo, U_test, U_train, Y_aug, F_tilde_train, CorrOptions, der_var)` → `(N_test,)` |
+| `branche4.py` | ~375 | `uq_GEPCK_eval_deriv(fitted_model, X_test, der_var)` → X→U + loop Nout → `(N_test, Nout)` |
+| `branche1.py` | import | ajout `uq_GEPCK_eval_deriv` depuis branche4 |
+| `branche1.py` | ~325 | `predict_deriv_gepck(fitted_model, X_test, der_var)` → wrapper → `(N_test, Nout)` |
+| `branche1.py` | ~342 | `predict_gradient_gepck(fitted_model, X_test)` → loop Mred → `(N_test, Mred)` |
+
+**Détail `F_deriv_handles` (branche3.py)** :
+```python
+final_idx = idx_ranked if mode == 'sequential' else idx_ranked[:best_ii]
+fitted_kriging['F_deriv_handles'] = [
+    make_trend_handle_deriv(final_idx, Indices_oo, PolyTypes_all[:Mred], k)
+    for k in range(Mred)
+]
+```
+Stocké dans `fm['Kriging'][0]['F_deriv_handles'][k]` — callable `(N_test, Mred) → (N_test, P_sel)`.
+
+**Détail `uq_GEPCK_eval_one_output_deriv`** :
+```python
+alpha_pred = Rinv @ (Y_aug - F_tilde_train @ beta)   # (N_aug,)
+term1 = gepck_oo['F_deriv_handles'][der_var](U_test) @ beta   # (N_test,)
+term2 = uq_eval_deriv_global_Kernel(U_test, U_train, theta, CrossCorOpts, der_var) @ alpha_pred
+return term1 + term2
+```
+
+**Tests créés** :
+- `test_f_deriv_handles.py` : vérifie `F_deriv_handles` stocké dans `fm['Kriging'][0]`, shapes, FD vs analytique (Legendre seq, Hermite seq, Legendre optimal), dPsi ≠ Psi.
+- `test_predict_deriv_gepck.py` : vérifie `predict_deriv_gepck` vs FD(predict_gepck) (seq + optimal), colonnes `predict_gradient_gepck`, shape, cohérence `uq_GEPCK_eval_one_output_deriv` == `predict_deriv_gepck`.
+- `plot_deriv_gepck.py` : trace `∂ŷ/∂x₀` analytique vs FD sur grille 1D (`x₁=0.3` fixé). FD évite les bords ±1 (hors support Legendre) via `x0_fd = linspace(-0.95, 0.95)`.
+
+**Note transform** : pour Uniform(-1,1) → Legendre, la transform isoprobabiliste est l'identité (u=x), donc `∂ŷ/∂u_i = ∂ŷ/∂x_i`. Les tests FD peuvent être faits en X-space directement.
 
 ---
 

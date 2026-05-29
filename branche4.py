@@ -23,7 +23,7 @@ if _dir not in sys.path:
     sys.path.insert(0, _dir)
 
 from branche3 import uq_Kriging_calc_DiagOfCongruent, uq_Kriging_calc_auxMatrices
-from branche5 import uq_GeneralIsopTransform
+from branche5 import uq_GeneralIsopTransform, uq_eval_deriv_global_Kernel
 
 
 # ===========================================================================
@@ -233,6 +233,59 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
 
 
 # ===========================================================================
+# 2b. uq_GEPCK_eval_one_output_deriv
+#     ∂ŷ/∂u_{der_var} analytique — gradient du GEPCK dans l'espace auxiliaire.
+# ===========================================================================
+def uq_GEPCK_eval_one_output_deriv(gepck_oo, U_test, U_train, Y_aug,
+                                    F_tilde_train, CorrOptions, der_var):
+    """
+    ∂ŷ/∂u_{der_var} analytique pour une sortie GEPCK.
+
+    Formule :
+        ∂ŷ/∂u_i = [∂Ψ/∂u_i(u*)]ᵀ β  +  [∂r̃₀/∂u_i(u*)]ᵀ α_pred
+    avec α_pred = R̃⁻¹(ẏ - F̃β).
+
+    Parameters
+    ----------
+    gepck_oo      : dict de fit_kriging_gepck — doit contenir 'F_deriv_handles'
+    U_test        : (N_test, Mred)
+    U_train       : (N, Mred)
+    Y_aug         : (N*(M+1),)
+    F_tilde_train : (N*(M+1), P)
+    CorrOptions   : dict avec 'Handle'=uq_eval_global_Kernel
+    der_var       : int — indice de la variable (0..Mred-1)
+
+    Returns
+    -------
+    dYMu : (N_test,)
+    """
+    theta = gepck_oo['theta']
+    beta  = gepck_oo['beta']
+    am    = gepck_oo['auxMatrices']
+    N_aug = gepck_oo['R_tilde'].shape[0]
+
+    # --- alpha_pred = R̃⁻¹(ẏ - F̃β)
+    cholR = am['cholR']
+    if cholR is not None:
+        Rinv = np.linalg.solve(cholR, np.linalg.solve(cholR.T, np.eye(N_aug)))
+    else:
+        Rinv = am['Rinv']
+    alpha_pred = Rinv @ (Y_aug - F_tilde_train @ beta)   # (N_aug,)
+
+    # --- Terme 1 : [∂Ψ/∂u_i]ᵀ β
+    dPsi  = gepck_oo['F_deriv_handles'][der_var](U_test)  # (N_test, P)
+    term1 = dPsi @ beta                                   # (N_test,)
+
+    # --- Terme 2 : [∂r̃₀/∂u_i]ᵀ α_pred
+    CrossCorOpts = {**CorrOptions, 'Nugget': 0.0}
+    dr0   = uq_eval_deriv_global_Kernel(
+        U_test, U_train, theta, CrossCorOpts, der_var)    # (N_test, N_aug)
+    term2 = dr0 @ alpha_pred                              # (N_test,)
+
+    return term1 + term2
+
+
+# ===========================================================================
 # 3.  uq_GEPCK_eval
 #     Clone de uq_PCK_eval pour GEPCK (Nout=1 fixé).
 # ===========================================================================
@@ -313,6 +366,49 @@ def uq_GEPCK_eval(fitted_model, X_test, return_var=False, return_cov=False):
         return YMu, YSigma2
     else:
         return YMu
+
+
+# ===========================================================================
+# 3b. uq_GEPCK_eval_deriv
+#     ∂ŷ/∂u_{der_var} en chaque point de X_test (espace auxiliaire U).
+# ===========================================================================
+def uq_GEPCK_eval_deriv(fitted_model, X_test, der_var):
+    """
+    ∂ŷ/∂u_{der_var} analytique en chaque point de X_test.
+
+    Parameters
+    ----------
+    fitted_model : dict de fit_gepck / uq_GEPCK_calculate_coefficients
+    X_test       : (N_test, M)
+    der_var      : int — indice de la variable dans l'espace auxiliaire (0..Mred-1)
+
+    Returns
+    -------
+    dYMu : (N_test, Nout)
+    """
+    X_test   = np.atleast_2d(X_test).astype(float)
+    Mred     = fitted_model['Mred']
+    nonConst = fitted_model['nonConst']
+    Xred_test = X_test[:, nonConst]
+
+    red_marg = fitted_model['RedMarginals']
+    aux_marg = fitted_model['AuxSpace']['Marginals']
+    aux_cop  = fitted_model['AuxSpace']['Copula']
+    red_cop  = {'Type': 'Independent', 'Parameters': np.eye(Mred)}
+    U_test   = uq_GeneralIsopTransform(Xred_test, red_marg, red_cop, aux_marg, aux_cop)
+
+    U_train     = fitted_model['ExpDesign']['U']
+    Y_aug       = fitted_model['ExpDesign']['Y_aug']
+    CorrOptions = fitted_model['CorrOptions']
+
+    Nout = fitted_model['Nout']
+    dYMu = np.zeros((U_test.shape[0], Nout))
+    for oo in range(Nout):
+        gepck_oo      = fitted_model['Kriging'][oo]
+        F_tilde_train = gepck_oo['F_tilde']
+        dYMu[:, oo] = uq_GEPCK_eval_one_output_deriv(
+            gepck_oo, U_test, U_train, Y_aug, F_tilde_train, CorrOptions, der_var)
+    return dYMu
 
 
 # ===========================================================================
