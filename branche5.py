@@ -1117,7 +1117,11 @@ def kernel_deriv_factory(family, der, der_prime):
                         * np.exp(-a[:, :, i]) * K_excl[:, :, i])
             else:
                 i, j = der, der_prime
-                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
+                K_excl_ij = np.where(
+                    np.abs(K_uni[:, :, j]) > 1e-300,
+                    K_excl[:, :, i] / K_uni[:, :, j],
+                    0.0
+                )
                 return (-(25 / (9 * theta[i]**2 * theta[j]**2))
                         * delta[:, :, i] * delta[:, :, j]
                         * (1 + a[:, :, i]) * (1 + a[:, :, j])
@@ -1187,7 +1191,11 @@ def kernel_second_deriv_factory(family, der1, der2):
             else:
                 i, j = der1, der2
                 # d²k/(dx*_i dx*_j) = (25/(9*ti²*tj²)) * di*dj*(1+ai)*(1+aj)*exp(-(ai+aj))*K_excl_ij
-                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
+                K_excl_ij = np.where(
+                    np.abs(K_uni[:, :, j]) > 1e-300,
+                    K_excl[:, :, i] / K_uni[:, :, j],
+                    0.0
+                )
                 return ((25 / (9 * theta[i]**2 * theta[j]**2))
                         * delta[:, :, i] * delta[:, :, j]
                         * (1 + a[:, :, i]) * (1 + a[:, :, j])

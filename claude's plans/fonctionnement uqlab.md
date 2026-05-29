@@ -2287,6 +2287,68 @@ return term1 + term2
 
 ---
 
+## Session 29/05/2026 — Débug GEPCK + premier run
+
+### Bugs identifiés
+
+**Bug 1 — BLOQUANT (non corrigé) : NaN Matern-5/2 dans `branche5.py:1120`**
+
+Cas `[i,j]` (i≠j) dans `kernel_deriv_factory` :
+```python
+K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]   # ← 0/0 = NaN si k_j underflow
+```
+Quand les points sont très éloignés, `k_j = (1+a_j+a_j²/3)·exp(−a_j) → 0` (underflow). `K_excl[:,:,i]` contient aussi ce facteur → 0/0 = NaN. Ce NaN se propage dans R̃ → Rinv → YMu → toutes les prédictions NaN → FORM dérive.
+
+L'underflow se produit quand `a_j = √5·|δⱼ|/θⱼ ≈ 709`, soit `|δⱼ| ≈ 317·θⱼ`. Pour θ petit (ex. θ=0.05), l'underflow arrive dès `|δⱼ| ≈ 16` — atteignable en U-space.
+
+Correction validée mathématiquement : forcer 0/0 → 0 est **exact** (le facteur explicite `(1+aⱼ)·exp(−aⱼ)` tue aussi l'expression entière). Fix minimal :
+```python
+K_excl_ij = np.where(
+    np.abs(K_uni[:, :, j]) > 1e-300,
+    K_excl[:, :, i] / K_uni[:, :, j],
+    0.0
+)
+```
+Non déclenché sur le run n0=5 (8 points → distances modérées), mais latent pour n plus grand.
+
+**Bug 2 — LOGIQUE (corrigé, commit 0247729) : `run_EFF` utilisait le surrogate à la place du modèle HF**
+
+`run_EFF` enrichissait le DOE avec ses propres prédictions GEPCK au lieu d'appeler `run_HF`. Corrigé : `g_ot(u_opt)` et `g_ot.gradient(u_opt)` remplacés par `run_HF(np.array(u_opt))` (lignes 1262–1266 de `AC2_pure_flexion.py`).
+
+**Bug 3 — MINEUR (non corrigé) : second bloc `if do_GEPCK:` (ligne 1750) recrée un DOE from scratch**
+
+Ce bloc de visu standalone appelle `init_surrogate()` → `build_DOE()` → nouveau LHS, perdant le DOE EFF-enrichi. Non bloquant (le run s'arrête à `sys.exit(1)` ligne 1742 avant d'y arriver si FORM converge).
+
+### Run output_2905_1314.txt — GEPCK n0=5, do_EFF=True
+
+**Options :** `modele='GEPCK'`, `do_EFF=True`, `n0=5`, `max_of_maxdegree=2`, noyau Matern-5/2 (défaut).
+
+**EFF :** 3 points ajoutés (DOE 5→6→7→8), convergence à EFF=0.0010 ≤ 0.001.
+
+**Résultats FORM :**
+- 1 mode retenu (DBSCAN, 7 descentes bruit)
+- beta = 7.6910, Pf = 7.30e-15
+- u* = [-7.252, -2.561], fc* = 20.02 MPa, fy* = 472.79 MPa
+- Importance fc/fy = 88.9% / 11.1%
+- n_iter FORM = 16
+
+**Comparaison vs référence :**
+
+| | HF ref | GEPCK n0=5+3EFF | PCKRG n0=5+4EFF |
+|---|---|---|---|
+| beta | 7.9788 | 7.6910 | 7.9652 |
+| Ecart | — | **−3.6%** | −0.17% |
+| u* | [-3.117, -7.345] | [-7.252, -2.561] | [-6.104, -5.117] |
+| n_iter FORM | 7 | 16 | 14 |
+
+**Observations :**
+- Bug 2 fix a permis la convergence (run précédent n0=10 : beta=8.5 sur toutes les descentes, 0 mode).
+- Bug 1 non déclenché (8 points suffisamment proches, 0 NaN/RuntimeWarning).
+- Artefact rebound : u* dans mauvais quadrant, même phénomène que GEK/KRG sans EFF.
+- GEPCK moins précis que PCKRG sur ce run (DOE aléatoire différent entre sessions).
+
+---
+
 ## Instructions de travail — protocole d'implémentation des fonctions GEPCK
 
 Pour chaque nouvelle fonction GEPCK (clone d'une fonction PCK) :

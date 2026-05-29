@@ -599,6 +599,16 @@ if __name__ == '__main__':
             return xt, yt, all_grad
         return xt
 
+    def build_Y_aug(yt, all_grad):
+        """
+        Construit le vecteur gradient-enhanced y_dot (eq. 6 Zuhal et al.).
+        y_dot = [y^1,...,y^n, dg/du1^1,...,dg/du1^n, ..., dg/dum^1,...,dg/dum^n]^T
+        Shape : (n0*(1+n_var),)
+        """
+        y_flat      = yt.flatten()                                         # (n0,)
+        grad_blocks = [all_grad[:, j] for j in range(all_grad.shape[1])]  # n_var blocs de (n0,)
+        return np.concatenate([y_flat] + grad_blocks)                      # (n0*(1+n_var),)
+
     # --------------------------------------------------------------------------- #
     # FONCTION ANALYTIQUE DE REFERENCE                                            #
     # --------------------------------------------------------------------------- #

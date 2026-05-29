@@ -69,8 +69,8 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
     modele = 'GEPCK'
-    do_EFF = True
-    n0 = 10
+    do_EFF = False
+    n0 = 5
     params_names = ['fc','fy']
     n_var = len(params_names)
 
