@@ -1,0 +1,10 @@
+LAUNCHER START
+Traceback (most recent call last):
+  File "C:\_workingDir\_SF\test flexion\launcher.py", line 21, in <module>
+    exec(open(r'C:\_workingDir\_SF\test flexion\AC_pure_flexion.py').read(), {'__name__': '__main__'})
+  File "<string>", line 35, in <module>
+  File "C:\python3\lib\site-packages\openturns\__init__.py", line 49, in <module>
+    from .common import *
+  File "C:\python3\lib\site-packages\openturns\common.py", line 12, in <module>
+    from . import _common
+ImportError: DLL load failed while importing _common: La procédure spécifiée est introuvable.

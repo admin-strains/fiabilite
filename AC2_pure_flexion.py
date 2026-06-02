@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
     modele = 'GEPCK'
-    do_EFF = False
+    do_EFF = True
     n0 = 5
     params_names = ['fc','fy']
     n_var = len(params_names)
@@ -1320,6 +1320,7 @@ if __name__ == '__main__':
 
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
+        global hf_2d_grid_fixed
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
@@ -1348,7 +1349,6 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                global hf_2d_grid_fixed
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
@@ -1375,6 +1375,7 @@ if __name__ == '__main__':
 
     def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D de l'ecart-type conditionnel du surrogate."""
+        global hf_2d_grid_fixed
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
@@ -1402,7 +1403,6 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                global hf_2d_grid_fixed
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
@@ -1454,7 +1454,7 @@ if __name__ == '__main__':
 
 
     def print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff):
-        global u1_min, u1_max, u2_min, u2_max
+        global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
@@ -1509,7 +1509,6 @@ if __name__ == '__main__':
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                global hf_2d_grid_fixed
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')

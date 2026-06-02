@@ -1,0 +1,1178 @@
+LAUNCHER START
+Processed internal points : 0 success, 0 failed 
+**********************************************************************
+	Setting parameters for MESHGEMS surfacic meshing
+**********************************************************************
+physical_size_mode global : OK 
+geometric_size_mode local : OK 
+gradation 1.500000 : OK 
+volume_gradation 1.500000 : OK 
+use_precad yes : OK 
+anisotropic_ratio 10 : OK 
+element_order linear : OK 
+global_physical_size 0.050000r : OK 
+gradation 1.5 : OK 
+max_size 0.050000r : OK 
+metric anisotropic : OK 
+verbose 0 : OK 
+volume_gradation 1.5 : OK 
+**********************************************************************
+	Summary of the parameters for MESHGEMS surfacic meshing
+**********************************************************************
+physical_size_mode : global
+max_size : 5.000000e-02r
+min_size : 1e-5r
+geometric_size_mode : local
+global_physical_size : 5.000000e-02r
+gradation : 1.500000
+volume_gradation : 1.500000
+use_surface_proximity : 0
+surface_proximity_ratio : 
+anisotropic_ratio : 10.000000
+element_order : linear
+use_precad : 1
+verbose : 0
+metric : anisotropic
+**********************************************************************
+		Running MESHGEMS surfacic meshing module
+**********************************************************************
+MeshGEMS CADSURF version : CADSurf 2025 1.0.0
+Checking Collision between elements ......Done
+************************************************************************
+	End of execution of MESHGEMS surfacic meshing module in     0 seconds
+************************************************************************
+Writing Mesh File C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_cadSurf
+FACES 6 
+after comp tag 
+Deleting surfacic meshing session 
+Writing Mesh File C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_surf
+**********************************************************************
+	Setting parameters for MESHGEMS volumic meshing
+**********************************************************************
+max_error_count 20 : OK 
+optimisation_level standard : OK 
+components all : OK 
+rectify_jacobian yes : OK 
+element_order linear : OK 
+optimisation_level standard : OK 
+verbose 10 : OK 
+**********************************************************************
+		Running MESHGEMS volumic meshing module
+**********************************************************************
+MeshGEMS Tetra version : Tetra 2025 1.0.0
+************************************************************************
+	End of execution of MESHGEMS volumic meshing module in     0 seconds
+************************************************************************
+Writing Mesh File C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_tetra
+Deleting volumic meshing session 
+Writing debug files...
+Writing Mesh File C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_vol
+General Postreatments...
+Process triangles faces in ...0.025000 seconds
+Processing tetra segments in ...0.010000 seconds
+Mesh Quadratisation...
+Running quadratization in ...0.006000 seconds
+Managing contacts...
+Tetrahedrons reorganisation...
+
+************************************************************************
+		 Output Mesh 
+ 			 Total of : 10102 points
+			 Total of : 2814 UVs 
+			 Total of : 124 edges
+			 Total of : 1280 triangles
+			 Total of : 6 surfaces 
+			 Total of : 6579 tetrahedrons
+			 Total of : 13798 faces
+************************************************************************
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 5.70452
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.9493
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.60736
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.5395
+0 triangles have a ratio4 greater than 100
+Writing mesh for cinematic computation...
+addNodeGroup in 0.001000 seconds 
+ProcessElements maxDim=3  nbElem=124  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=1280  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=6579  typeProp.level=0 
+ProcessElements in 0.001000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.011000 seconds 
+Writing mesh for static computation...
+Processed splitting Copied CAD Elements in  0.000000 seconds 
+Copied Nodes in  0.000000 seconds 
+Copied Nodes on surfaces in  0.000000 seconds 
+copy Edges in  0.000000 seconds 
+copy triangles in  0.001000 seconds 
+Split tetras in  0.010000 seconds 
+Associate nodes with Uvs in  0.001000 seconds 
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=124  typeProp.level=-2 
+ProcessElements in 0.001000 seconds 
+ProcessElements maxDim=3  nbElem=1280  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=26316  typeProp.level=0 
+ProcessElements in 0.003000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.006000 seconds 
+Closing model 
+
+FullLorentz : False
+LorentzToSdp : False
+MKLPardiso_params 
+MUMPS_params 
+MyPardiso_params 
+SdpToLorentz : 0
+activated_plasticity : True
+approach : kinematic
+calculate_error : false
+cinematic_params 
+customized_inc : [1]
+max_nbOfDiv : 0
+printIntPointSolutioEvolution : False
+scaling : 1
+sensitivity_analysis : true
+sensitivity_regions : [{"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]}, {"param": "YIELD_STRENGTH", "rebars": ["HA1", "HA2", "HA3", "HA4"]}]
+static_params 
+tetra_discontinuities : False
+trace_sur_point_integration : False
+welds_throat_limit : True
+write_debug_files : true
+
+Enregistrement des options du calcul 
+Lecture du modele cao: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0.dscad
+Lecture du Maillage: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed
+Read MESH in file C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+Process triangles faces in ...0.026000 seconds
+Processing tetra segments in ...0.012000 seconds
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 5.70452
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.9493
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.60736
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.5395
+0 triangles have a ratio4 greater than 100
+************************************************************************
+				Getting output mesh		...getting 10102 points
+		...getting 2814 UVs
+		...getting 12 edges
+		...getting 1280 triangles
+		...getting 6 surfaces
+		...getting 6579 tetrahedrons
+		...getting 13798 faces
+		...getting boundaries
+		...getting reinforcement bars 
+		...getting materials
+		...getting load cases 
+			Found analysis : Yield_analysis0
+			Boundary0 -- ISU = 4 -- IsMean : 0 -- support : 1  1  1  0  0  0  
+			Boundary1 -- ISU = 5 -- IsMean : 0 -- load : 0.000000  0.000000  -0.240000  0.000000  -0.000000  -0.000000  
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 1 per-LC decompositions from 'per_lc_load_values'
+  [0] = 'Load_case0'  coeff = 1.0000
+			Found analysis : Yield_analysis0
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 0 per-LC decompositions from 'per_lc_dead_load_values'
+		...getting result surfaces 
+			Found analysis : Yield_analysis0
+			No results surfaces were tagged
+		...getting result points 
+			Found analysis : Yield_analysis0
+			No results points were tagged
+		...getting strengthened surfaces 
+			Found analysis : Yield_analysis0
+			No strengthened surfaces were tagged
+		...getting jointed shapes 
+			Found analysis : Yield_analysis0
+			No Jointed shapes were tagged
+		...getting move meshes 
+			Found analysis : Yield_analysis0
+		...setting integration points
+			Calculations will be made with an 4 points integration scheme
+************************************************************************
+
+Allocation des tableaux de sorties du calcul 
+Debut du calcul...
+DEBUT DE RUN.c
+		Integration a 4 points 
+		Le calcul BA et/ou Mixte est disponible uniquement sans les discontinuites entre les tetraedres et sans les NLGEOM
+		Calcul sans les discontinuites entre les tetraedres
+DoPLCinem()
+---ALLOC()
+---INPUTDATA()
+---DoRebars()
+-----Nombre Ddls associes aux aciers = 0
+---InitPLCinem_NoDisc()
+		Nombres de cones VM acier volumiques = 0 
+		Nombres de cones de rebar = 257 
+		Nombres de cones b�ton volumiques = 52632 
+		Nombres de cones de contact = 0 
+---InitFextCinem()
+-----ISU_MEAN: 0
+-----ISU: 6
+-----NREBAR: 4
+-----avant ArrayWithoutDoublon_long NDDL_Fext= 699
+-----apres ArrayWithoutDoublon_long NDDL_Fext= 699
+---InitPermFextCinem()
+---Assembling 1 per-LC FEXT vectors
+---MatMosPLCinem_NoDisc()
+Matrices des contraintes
+FEXT
+CINEM
+CONES
+ORDDL_ConVal_int
+---BuildSensOps()
+[Sensitivity] Region 0: COMPRESSIVE_STRENGTH:Block1, theta=4.282690e+01, type=0
+[Sensitivity] Region 1: YIELD_STRENGTH:HA1,HA2,HA3,HA4, theta=5.495961e+02, type=0
+---Init_PtInt()
+InitSysLin
+Check de A
+Check de H
+Check cones
+InitSolver
+Boucle FillGvarDvi0
+Boucle FillGlamDvi0Dli0a
+Boucle FillNnz Gvar
+Boucle NnziL
+Boucle Glam NnziL
+Boucle alloc ConParL
+Boucle FillNnzConPar
+Boucle ConParL 1 
+Boucle ConParL 2 
+Boucle quicksort_index_int 
+Boucle FillNnz cones 
+Boucle FillNnz Glam 
+Boucle ConParV alloc 
+Boucle FillNnzConPar Cone
+Boucle FillNnzConPar Glam
+quicksort_index_int ConParV
+Check system total
+PrintCarac
+-----Nombre Ddls = 346098
+-----Nombre Ddls final = 30306
+-----Nombre ContEg = 158596
+-----Nombre ContEg final = 700
+-----Nombre total de cones = 52889
+-----Nombre de cones de Lorentz = 257
+-----Nombre de cones SDP = 52632
+-----Nombre Groupes de variables = 52632
+-----Nombre Groupes de mult. de lag. = 26316
+-----Taille System Lineaire final = 31006
+-----Nombre de non-zeros = 1222111
+-----Solver used = MUMPS
+-----Omp num threads max = 64
+
+InitPtInt
+
+ It |  Mode  |  Alpha0 | Gamma |     Mu    |  Alpha |     pObj    |     dObj    |    ReP    |  RePiTot  |    ReD    | Type |    ReG    |   Time   
+---------------------------------------------------------------------------------------------------------------------------------------------------
+  0 |  init  |  1.0000 | 0.000 |  0.00E+00 | 1.0000 | +3.0609E+01 | +0.0000E+00 |  1.00E+00 |  1.00E-01 |  1.00E+00 |   1  |  1.00E+00 |     0.40 
+[PtInt-trace] iter=1 step=AssembMat-start
+[PtInt-trace] iter=1 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=1 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=1 (symbolic) start
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=1 done info[0]=0 infog[0]=0
+[DiagKKT] n=31006 nnz=1222111 NcA0=700 NvA0=30306
+[DiagKKT] col_norm: zero=700 weak(<1e-8)=0 min=0.000e+00 max=7.124e+06
+[DiagKKT] row_norm: zero=0 weak(<1e-8)=0
+  [DiagKKT] weak col 0 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 1 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 2 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 3 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 4 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 5 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 6 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 7 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 8 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 9 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 10 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 11 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 12 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 13 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 14 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 15 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 16 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 17 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 18 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 19 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 20 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 21 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 22 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 23 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 24 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 25 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 26 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 27 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 28 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 29 (lam): norm=0.000e+00 nnz=1
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=1 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=1 step=CallSolver(0)-done
+[PtInt-trace] iter=1 step=FindAlpha(0)-start
+[PtInt-trace] iter=1 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=1 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=1 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=1 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=1 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=1 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=1 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=1 step=FillInc-done
+  1 | normal |  0.0076 | 0.920 |  9.20E-01 | 0.9297 | +7.8286E+02 | +1.4630E+03 |  7.03E-02 |  7.03E-03 |  7.03E-02 |   1  |  2.27E+01 |     1.57 
+[PtInt-trace] iter=2 step=AssembMat-start
+[PtInt-trace] iter=2 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=2 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=2 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=2 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=2 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=2 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=2 step=CallSolver(0)-done
+[PtInt-trace] iter=2 step=FindAlpha(0)-start
+[PtInt-trace] iter=2 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=2 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=2 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=2 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=2 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=2 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=2 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=2 step=FillInc-done
+  2 | normal |  0.9750 | 0.000 |  3.63E-04 | 0.9489 | +7.4427E+02 | +7.7402E+01 |  3.59E-03 |  3.59E-04 |  3.59E-03 |   1  |  1.16E+00 |     2.34 
+[PtInt-trace] iter=3 step=AssembMat-start
+[PtInt-trace] iter=3 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=3 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=3 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=3 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=3 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=3 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=3 step=CallSolver(0)-done
+[PtInt-trace] iter=3 step=FindAlpha(0)-start
+[PtInt-trace] iter=3 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=3 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=3 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=3 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=3 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=3 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=3 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=3 step=FillInc-done
+  3 | normal |  0.7966 | 0.009 |  1.02E-02 | 0.9321 | +7.3813E+02 | +8.6514E+00 |  2.44E-04 |  2.44E-05 |  2.44E-04 |   1  |  8.34E-02 |     3.33 
+[PtInt-trace] iter=4 step=AssembMat-start
+[PtInt-trace] iter=4 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=4 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=4 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=4 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=4 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=4 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=4 step=CallSolver(0)-done
+[PtInt-trace] iter=4 step=FindAlpha(0)-start
+[PtInt-trace] iter=4 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=4 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=4 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=4 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=4 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=4 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=4 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=4 step=FillInc-done
+  4 | normal |  0.6919 | 0.037 |  3.07E-03 | 0.4899 | +6.9715E+02 | +6.3286E+00 |  1.24E-04 |  1.24E-05 |  1.24E-04 |   1  |  4.32E-02 |     4.00 
+[PtInt-trace] iter=5 step=AssembMat-start
+[PtInt-trace] iter=5 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=5 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=5 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=5 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=5 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=5 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=5 step=CallSolver(0)-done
+[PtInt-trace] iter=5 step=FindAlpha(0)-start
+[PtInt-trace] iter=5 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=5 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=5 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=5 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=5 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=5 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=5 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=5 step=FillInc-done
+  5 | normal |  0.1886 | 0.540 |  2.34E-02 | 0.1514 | +7.2280E+02 | +5.4236E+00 |  1.06E-04 |  1.06E-05 |  1.06E-04 |   1  |  3.93E-02 |     4.87 
+[PtInt-trace] iter=6 step=AssembMat-start
+[PtInt-trace] iter=6 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=6 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=6 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=6 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=6 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=6 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=6 step=CallSolver(0)-done
+[PtInt-trace] iter=6 step=FindAlpha(0)-start
+[PtInt-trace] iter=6 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=6 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=6 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=6 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=6 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=6 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=6 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=6 step=FillInc-done
+  6 | normal |  0.2081 | 0.505 |  1.98E-02 | 0.1487 | +7.4231E+02 | +4.4636E+00 |  8.99E-05 |  8.99E-06 |  8.99E-05 |   1  |  3.56E-02 |     5.74 
+[PtInt-trace] iter=7 step=AssembMat-start
+[PtInt-trace] iter=7 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=7 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=7 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=7 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=7 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=7 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=7 step=CallSolver(0)-done
+[PtInt-trace] iter=7 step=FindAlpha(0)-start
+[PtInt-trace] iter=7 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=7 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=7 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=7 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=7 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=7 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=7 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=7 step=FillInc-done
+  7 | normal |  0.2506 | 0.432 |  1.54E-02 | 0.1466 | +7.5081E+02 | +3.6696E+00 |  7.67E-05 |  7.67E-06 |  7.67E-05 |   1  |  3.20E-02 |     6.81 
+[PtInt-trace] iter=8 step=AssembMat-start
+[PtInt-trace] iter=8 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=8 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=8 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=8 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=8 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=8 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=8 step=CallSolver(0)-done
+[PtInt-trace] iter=8 step=FindAlpha(0)-start
+[PtInt-trace] iter=8 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=8 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=8 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=8 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=8 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=8 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=8 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=8 step=FillInc-done
+  8 | normal |  0.1422 | 0.637 |  2.03E-02 | 0.1776 | +7.8187E+02 | +2.4737E+00 |  6.31E-05 |  6.31E-06 |  6.31E-05 |   1  |  2.89E-02 |     7.70 
+[PtInt-trace] iter=9 step=AssembMat-start
+[PtInt-trace] iter=9 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=9 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=9 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=9 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=9 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=9 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=9 step=CallSolver(0)-done
+[PtInt-trace] iter=9 step=FindAlpha(0)-start
+[PtInt-trace] iter=9 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=9 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=9 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=9 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=9 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=9 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=9 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=9 step=FillInc-done
+  9 | normal |  0.2306 | 0.468 |  1.35E-02 | 0.4314 | +7.8995E+02 | +1.6402E+00 |  3.59E-05 |  3.59E-06 |  3.59E-05 |   1  |  1.98E-02 |     8.52 
+[PtInt-trace] iter=10 step=AssembMat-start
+[PtInt-trace] iter=10 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=10 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=10 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=10 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=10 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=10 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=10 step=CallSolver(0)-done
+[PtInt-trace] iter=10 step=FindAlpha(0)-start
+[PtInt-trace] iter=10 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=10 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=10 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=10 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=10 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=10 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=10 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=10 step=FillInc-done
+ 10 | normal |  0.1949 | 0.534 |  1.06E-02 | 0.7586 | +7.5004E+02 | +9.6705E-01 |  8.66E-06 |  8.66E-07 |  8.66E-06 |   1  |  8.79E-03 |     9.31 
+[PtInt-trace] iter=11 step=AssembMat-start
+[PtInt-trace] iter=11 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=11 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=11 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=11 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=11 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=11 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=11 step=CallSolver(0)-done
+[PtInt-trace] iter=11 step=FindAlpha(0)-start
+[PtInt-trace] iter=11 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=11 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=11 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=11 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=11 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=11 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=11 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=11 step=FillInc-done
+ 11 | normal |  0.3051 | 0.362 |  3.18E-03 | 0.4494 | +5.7500E+02 | +8.0794E-01 |  4.77E-06 |  4.77E-07 |  4.77E-06 |   1  |  5.67E-03 |    10.33 
+[PtInt-trace] iter=12 step=AssembMat-start
+[PtInt-trace] iter=12 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=12 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=12 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=12 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=12 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=12 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=12 step=CallSolver(0)-done
+[PtInt-trace] iter=12 step=FindAlpha(0)-start
+[PtInt-trace] iter=12 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=12 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=12 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=12 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=12 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=12 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=12 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=12 step=FillInc-done
+ 12 | normal |  0.3567 | 0.295 |  1.67E-03 | 0.8844 | +2.6237E+02 | +7.9824E-01 |  5.51E-07 |  5.51E-08 |  5.51E-07 |   1  |  1.82E-03 |    11.09 
+[PtInt-trace] iter=13 step=AssembMat-start
+[PtInt-trace] iter=13 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=13 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=13 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=13 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=13 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=13 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=13 step=CallSolver(0)-done
+[PtInt-trace] iter=13 step=FindAlpha(0)-start
+[PtInt-trace] iter=13 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=13 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=13 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=13 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=13 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=13 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=13 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=13 step=FillInc-done
+ 13 | normal |  0.8555 | 0.008 |  1.43E-05 | 0.7579 | +6.9077E+01 | +1.6876E+00 |  1.33E-07 |  1.33E-08 |  1.33E-07 |   1  |  4.37E-04 |    11.75 
+[PtInt-trace] iter=14 step=AssembMat-start
+[PtInt-trace] iter=14 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=14 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=14 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=14 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=14 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=14 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=14 step=CallSolver(0)-done
+[PtInt-trace] iter=14 step=FindAlpha(0)-start
+[PtInt-trace] iter=14 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=14 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=14 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=14 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=14 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=14 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=14 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=14 step=FillInc-done
+ 14 | normal |  0.2743 | 0.385 |  1.68E-04 | 0.3850 | +5.4415E+01 | +3.0133E+00 |  8.20E-08 |  8.20E-09 |  8.20E-08 |   1  |  3.31E-04 |    12.87 
+[PtInt-trace] iter=15 step=AssembMat-start
+[PtInt-trace] iter=15 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=15 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=15 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=15 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=15 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=15 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=15 step=CallSolver(0)-done
+[PtInt-trace] iter=15 step=FindAlpha(0)-start
+[PtInt-trace] iter=15 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=15 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=15 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=15 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=15 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=15 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=15 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=15 step=FillInc-done
+ 15 | normal |  0.2084 | 0.497 |  1.64E-04 | 0.6009 | +4.0441E+01 | +4.5791E+00 |  3.27E-08 |  3.27E-09 |  3.27E-08 |   1  |  2.29E-04 |    13.95 
+[PtInt-trace] iter=16 step=AssembMat-start
+[PtInt-trace] iter=16 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=16 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=16 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=16 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=16 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=16 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=16 step=CallSolver(0)-done
+[PtInt-trace] iter=16 step=FindAlpha(0)-start
+[PtInt-trace] iter=16 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=16 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=16 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=16 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=16 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=16 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=16 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=16 step=FillInc-done
+ 16 | normal |  0.3062 | 0.335 |  7.65E-05 | 0.6533 | +2.5866E+01 | +5.5811E+00 |  1.14E-08 |  1.14E-09 |  1.14E-08 |   1  |  1.29E-04 |    14.60 
+[PtInt-trace] iter=17 step=AssembMat-start
+[PtInt-trace] iter=17 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=17 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=17 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=17 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=17 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=17 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=17 step=CallSolver(0)-done
+[PtInt-trace] iter=17 step=FindAlpha(0)-start
+[PtInt-trace] iter=17 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=17 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=17 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=17 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=17 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=17 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=17 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=17 step=FillInc-done
+ 17 | normal |  0.3569 | 0.266 |  3.43E-05 | 0.4897 | +1.8882E+01 | +5.8817E+00 |  5.79E-09 |  5.79E-10 |  5.79E-09 |   1  |  8.24E-05 |    15.26 
+[PtInt-trace] iter=18 step=AssembMat-start
+[PtInt-trace] iter=18 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=18 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=18 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=18 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=18 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=18 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=18 step=CallSolver(0)-done
+[PtInt-trace] iter=18 step=FindAlpha(0)-start
+[PtInt-trace] iter=18 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=18 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=18 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=18 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=18 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=18 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=18 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=18 step=FillInc-done
+ 18 | normal |  0.3734 | 0.246 |  2.03E-05 | 0.5839 | +1.3361E+01 | +6.0806E+00 |  2.41E-09 |  2.41E-10 |  2.41E-09 |   1  |  4.61E-05 |    16.02 
+[PtInt-trace] iter=19 step=AssembMat-start
+[PtInt-trace] iter=19 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=19 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=19 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=19 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=19 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=19 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=19 step=CallSolver(0)-done
+[PtInt-trace] iter=19 step=FindAlpha(0)-start
+[PtInt-trace] iter=19 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=19 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=19 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=19 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=19 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=19 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=19 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=19 step=FillInc-done
+ 19 | normal |  0.3696 | 0.251 |  1.15E-05 | 0.5477 | +1.0472E+01 | +6.1796E+00 |  1.09E-09 |  1.09E-10 |  1.09E-09 |   1  |  2.72E-05 |    17.03 
+[PtInt-trace] iter=20 step=AssembMat-start
+[PtInt-trace] iter=20 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=20 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=20 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=20 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=20 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=20 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=20 step=CallSolver(0)-done
+[PtInt-trace] iter=20 step=FindAlpha(0)-start
+[PtInt-trace] iter=20 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=20 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=20 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=20 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=20 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=20 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=20 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=20 step=FillInc-done
+ 20 | normal |  0.0727 | 0.797 |  2.17E-05 | 0.1296 | +1.0363E+01 | +6.1829E+00 |  9.49E-10 |  9.49E-11 |  9.49E-10 |   1  |  2.64E-05 |    17.68 
+[PtInt-trace] iter=21 step=AssembMat-start
+[PtInt-trace] iter=21 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=21 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=21 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=21 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=21 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=21 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=21 step=CallSolver(0)-done
+[PtInt-trace] iter=21 step=FindAlpha(0)-start
+[PtInt-trace] iter=21 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=21 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=21 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=21 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=21 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=21 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=21 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=21 step=FillInc-done
+ 21 | normal |  0.3161 | 0.320 |  8.46E-06 | 0.4309 | +9.1788E+00 | +6.2237E+00 |  5.40E-10 |  5.40E-11 |  5.40E-10 |   1  |  1.87E-05 |    18.53 
+[PtInt-trace] iter=22 step=AssembMat-start
+[PtInt-trace] iter=22 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=22 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=22 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=22 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=22 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=22 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=22 step=CallSolver(0)-done
+[PtInt-trace] iter=22 step=FindAlpha(0)-start
+[PtInt-trace] iter=22 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=22 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=22 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=22 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=22 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=22 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=22 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=22 step=FillInc-done
+ 22 | normal |  0.3868 | 0.231 |  4.31E-06 | 0.4675 | +8.1512E+00 | +6.2589E+00 |  2.88E-10 |  2.88E-11 |  2.88E-10 |   1  |  1.20E-05 |    19.30 
+[PtInt-trace] iter=23 step=AssembMat-start
+[PtInt-trace] iter=23 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=23 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=23 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=23 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=23 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=23 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=23 step=CallSolver(0)-done
+[PtInt-trace] iter=23 step=FindAlpha(0)-start
+[PtInt-trace] iter=23 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=23 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=23 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=23 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=23 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=23 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=23 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=23 step=FillInc-done
+ 23 | normal |  0.2984 | 0.345 |  4.13E-06 | 0.6910 | +7.3251E+00 | +6.2887E+00 |  8.89E-11 |  8.92E-12 |  8.89E-11 |   1  |  6.55E-06 |    20.04 
+[PtInt-trace] iter=24 step=AssembMat-start
+[PtInt-trace] iter=24 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=24 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=24 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=24 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=24 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=24 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=24 step=CallSolver(0)-done
+[PtInt-trace] iter=24 step=FindAlpha(0)-start
+[PtInt-trace] iter=24 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=24 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=24 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=24 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=24 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=24 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=24 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=24 step=FillInc-done
+ 24 | normal |  0.2545 | 0.414 |  2.72E-06 | 0.7066 | +6.9118E+00 | +6.3043E+00 |  2.61E-11 |  2.61E-12 |  2.61E-11 |   1  |  3.84E-06 |    21.15 
+[PtInt-trace] iter=25 step=AssembMat-start
+[PtInt-trace] iter=25 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=25 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=25 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=25 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=25 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=25 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=25 step=CallSolver(0)-done
+[PtInt-trace] iter=25 step=FindAlpha(0)-start
+[PtInt-trace] iter=25 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=25 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=25 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=25 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=25 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=25 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=25 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=25 step=FillInc-done
+ 25 | normal |  0.4868 | 0.135 |  5.19E-07 | 0.5573 | +6.6290E+00 | +6.3143E+00 |  1.15E-11 |  1.19E-12 |  1.15E-11 |   1  |  1.99E-06 |    21.98 
+[PtInt-trace] iter=26 step=AssembMat-start
+[PtInt-trace] iter=26 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=26 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=26 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=26 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=26 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=26 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=26 step=CallSolver(0)-done
+[PtInt-trace] iter=26 step=FindAlpha(0)-start
+[PtInt-trace] iter=26 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=26 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=26 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=26 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=26 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=26 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=26 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=26 step=FillInc-done
+ 26 | normal |  0.2496 | 0.423 |  8.41E-07 | 0.4805 | +6.5454E+00 | +6.3180E+00 |  6.00E-12 |  6.25E-13 |  6.00E-12 |   1  |  1.44E-06 |    22.97 
+[PtInt-trace] iter=27 step=AssembMat-start
+[PtInt-trace] iter=27 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=27 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=27 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=27 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=27 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=27 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=27 step=CallSolver(0)-done
+[PtInt-trace] iter=27 step=FindAlpha(0)-start
+[PtInt-trace] iter=27 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=27 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=27 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=27 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=27 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=27 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=27 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=27 step=FillInc-done
+ 27 | normal |  0.2790 | 0.375 |  5.39E-07 | 0.5235 | +6.4741E+00 | +6.3211E+00 |  1.75E-11 |  3.41E-13 |  2.86E-12 |   1  |  9.67E-07 |    24.17 
+[PtInt-trace] iter=28 step=AssembMat-start
+[PtInt-trace] iter=28 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=28 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=28 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=28 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=28 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=28 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=28 step=CallSolver(0)-done
+[PtInt-trace] iter=28 step=FindAlpha(0)-start
+[PtInt-trace] iter=28 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=28 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=28 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=28 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=28 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=28 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=28 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=28 step=FillInc-done
+ 28 | normal |  0.3804 | 0.238 |  2.30E-07 | 0.5066 | +6.4176E+00 | +6.3237E+00 |  3.76E-11 |  1.71E-13 |  1.41E-12 |   1  |  5.94E-07 |    25.28 
+[PtInt-trace] iter=29 step=AssembMat-start
+[PtInt-trace] iter=29 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=29 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=29 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=29 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=29 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=29 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=29 step=CallSolver(0)-done
+[PtInt-trace] iter=29 step=FindAlpha(0)-start
+[PtInt-trace] iter=29 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=29 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=29 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=29 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=29 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=29 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=29 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=29 step=FillInc-done
+ 29 | normal |  0.1104 | 0.704 |  4.18E-07 | 0.2737 | +6.4103E+00 | +6.3240E+00 |  4.29E-11 |  1.71E-13 |  1.03E-12 |   1  |  5.46E-07 |    25.98 
+[PtInt-trace] iter=30 step=AssembMat-start
+[PtInt-trace] iter=30 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=30 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=30 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=30 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=30 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=30 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=30 step=CallSolver(0)-done
+[PtInt-trace] iter=30 step=FindAlpha(0)-start
+[PtInt-trace] iter=30 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=30 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=30 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=30 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=30 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=30 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=30 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=30 step=FillInc-done
+ 30 | normal |  0.4764 | 0.144 |  7.83E-08 | 0.4090 | +6.3816E+00 | +6.3255E+00 |  8.13E-11 |  1.14E-13 |  6.21E-13 |   1  |  3.55E-07 |    27.06 
+[PtInt-trace] iter=31 step=AssembMat-start
+[PtInt-trace] iter=31 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=31 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=31 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=31 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=31 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=31 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=31 step=CallSolver(0)-done
+[PtInt-trace] iter=31 step=FindAlpha(0)-start
+[PtInt-trace] iter=31 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=31 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=31 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=31 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=31 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=31 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=31 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=31 step=FillInc-done
+ 31 | normal |  0.2167 | 0.481 |  1.70E-07 | 0.7876 | +6.3598E+00 | +6.3266E+00 |  4.39E-10 |  5.68E-14 |  1.42E-13 |   1  |  2.10E-07 |    27.79 
+[PtInt-trace] iter=32 step=AssembMat-start
+[PtInt-trace] iter=32 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=32 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=32 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=32 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=32 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=32 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=32 step=CallSolver(0)-done
+[PtInt-trace] iter=32 step=FindAlpha(0)-start
+[PtInt-trace] iter=32 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=32 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=32 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=32 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=32 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=32 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=32 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=32 step=FillInc-done
+ 32 | normal |  0.2838 | 0.367 |  7.70E-08 | 0.4563 | +6.3507E+00 | +6.3272E+00 |  4.96E-10 |  5.68E-14 |  1.18E-13 |   1  |  1.49E-07 |    28.80 
+[PtInt-trace] iter=33 step=AssembMat-start
+[PtInt-trace] iter=33 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=33 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=33 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=33 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=33 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=33 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=33 step=CallSolver(0)-done
+[PtInt-trace] iter=33 step=FindAlpha(0)-start
+[PtInt-trace] iter=33 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=33 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=33 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=33 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=33 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=33 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=33 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=33 step=FillInc-done
+ 33 | normal |  0.4317 | 0.184 |  2.74E-08 | 0.4606 | +6.3424E+00 | +6.3277E+00 |  1.94E-09 |  5.68E-14 |  1.58E-13 |   1  |  9.30E-08 |    29.50 
+[PtInt-trace] iter=34 step=AssembMat-start
+[PtInt-trace] iter=34 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=34 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=34 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=34 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=34 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=34 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=34 step=CallSolver(0)-done
+[PtInt-trace] iter=34 step=FindAlpha(0)-start
+[PtInt-trace] iter=34 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=34 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=34 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=34 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=34 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=34 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=34 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=34 step=FillInc-done
+ 34 | normal |  0.2571 | 0.410 |  3.81E-08 | 0.4138 | +6.3391E+00 | +6.3280E+00 |  3.24E-09 |  5.68E-14 |  2.28E-13 |   1  |  7.03E-08 |    30.54 
+[PtInt-trace] iter=35 step=AssembMat-start
+[PtInt-trace] iter=35 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=35 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=35 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=35 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=35 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=35 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=35 step=CallSolver(0)-done
+[PtInt-trace] iter=35 step=FindAlpha(0)-start
+[PtInt-trace] iter=35 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=35 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=35 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=35 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=35 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=35 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=35 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=35 step=FillInc-done
+ 35 | normal |  0.2668 | 0.394 |  2.77E-08 | 0.6682 | +6.3349E+00 | +6.3283E+00 |  1.33E-08 |  5.68E-14 |  7.10E-13 |   1  |  4.18E-08 |    31.21 
+[PtInt-trace] iter=36 step=AssembMat-start
+[PtInt-trace] iter=36 step=AssembMat-done, AssembVec-start
+[PtInt-trace] iter=36 step=AssembVec-done, CallSolver(0)-start
+[CallMumps-trace] iter=36 Cor=0 MUMPS job=2 (numeric) start
+[CallMumps-trace] iter=36 Cor=0 MUMPS job=2 attempt info[0]=0 infog[0]=0
+[CallMumps-trace] iter=36 Cor=0 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=36 Cor=0 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=36 step=CallSolver(0)-done
+[PtInt-trace] iter=36 step=FindAlpha(0)-start
+[PtInt-trace] iter=36 step=FindAlpha(0)-done, Corrector-start
+[PtInt-trace] iter=36 step=Corrector-done, AssembVec-start
+[PtInt-trace] iter=36 step=AssembVec-done, CallSolver(1)-start
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[PtInt-trace] iter=36 step=CallSolver(1)-done, FindAlpha(1)-start
+[PtInt-trace] iter=36 step=FindAlpha(1)-done, FillInc-start
+[PtInt-trace] iter=36 step=FillInc-done
+ 36 | normal |  0.2221 | 0.471 |  1.97E-08 | 0.6298 | +6.3328E+00 | +6.3284E+00 |  2.41E-08 |  5.68E-14 |  2.88E-12 |   1  |  2.79E-08 |    31.96 
+
+############################################################
+### DIAGNOSTIC : AssembVec avec residus IPM converges    ###
+############################################################
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=6.623e-11  ||RP0||=5.755e-08  ||RPi(sum)||=1.383e-13  ||RCi(sum)||=1.127e-05
+[AssembVec] gamma=0.000e+00 gammaHeur=1  Ncones=52889 NGvars=52632 NGlams=26316
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=5.755e-08  max|SysB|=2.408e-08 at idx=56358
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=1.050e-01  max|SysB|=1.666e-02 at idx=168304
+[AssembVec] Phase 3 prep: NGvars=52632 (special=52632 general=0) max||Hi_inv||=2.846e+12 at iGvar=8872  mean||Hi_inv||=1.253e+10
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.799e+03  Hi_inv[0][0]=1.101e+00  ||SysB[iPosV..]||=2.537e-04
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.937e+03  Hi_inv[0][0]=2.893e+03  ||SysB[iPosV..]||=3.281e-04
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.050e+04  Hi_inv[0][0]=1.295e+04  ||SysB[iPosV..]||=4.249e-05
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.879e+00  Hi_inv[0][0]=7.115e-01  ||SysB[iPosV..]||=4.125e-04
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=6.264e+03  Hi_inv[0][0]=7.398e+00  ||SysB[iPosV..]||=2.501e-04
+[AssembVec] Gvar[8872] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.846e+12  Hi_inv[0][0]=2.845e+12  ||SysB[iPosV..]||=1.130e-05
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=4.943e+08 at iGvar=10270  sum_in=1.318e+01 sum_out=1.157e+05
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=3.558e+03  max|SysB|=2.338e+02 at idx=53988
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=3.558e+03  max|SysB|=2.338e+02 at idx=53988
+############################################################
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=1.782819e-03  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=1.783e-03  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=52889 NGvars=52632 NGlams=26316
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=1.783e-03  max|SysB|=1.778e-05 at idx=211228
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=1.783e-03  max|SysB|=1.778e-05 at idx=211228
+[AssembVec] Phase 3 prep: NGvars=52632 (special=52632 general=0) max||Hi_inv||=2.846e+12 at iGvar=8872  mean||Hi_inv||=1.253e+10
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.799e+03  Hi_inv[0][0]=1.101e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.937e+03  Hi_inv[0][0]=2.893e+03  ||SysB[iPosV..]||=9.454e-06
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.050e+04  Hi_inv[0][0]=1.295e+04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.879e+00  Hi_inv[0][0]=7.115e-01  ||SysB[iPosV..]||=9.454e-06
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=6.264e+03  Hi_inv[0][0]=7.398e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[8872] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.846e+12  Hi_inv[0][0]=2.845e+12  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=1.338e+10 at iGvar=37345  sum_in=2.754e-01 sum_out=2.974e+06
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=5.528e+05  max|SysB|=1.693e+05 at idx=70704
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=5.528e+05  max|SysB|=1.693e+05 at idx=70704
+[SensSolve] AFTER  AssembVec : ||SysB||=5.528163e+05  max|SysB|=1.693360e+05 at idx=70704  (NcA=158596 NvA=346098)
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=3.382531e+00  max|SysX|=4.596622e-02 at local_idx=704  (off=157896 n=31006)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=1.341749e-11  ||SysB[pardiso]||=6.178768e-03
+[SensSolve]                     relative=2.171548e-09  max|r|=7.986736e-12 at local_idx=20554  (off=157896 n=31006)
+
+========================================================================
+[Sensitivity] Region 0 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 1.544637e+01
+  ||dXi|| total               = 1.507152e+01
+  ||dXi|| region cones        = 4.244796e+00
+  ||dXi|| outside region      = 1.446141e+01
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = -6.5201875788e-05
+      (B) region SDP                       = -1.1647470384e-02
+      (B) region Lorentz                   = 0.0000000000e+00
+      (B) outside SDP                      = 1.0745897117e-02
+      (B) outside Lorentz                  = 8.3637139086e-04
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -1.1647470384e-02
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 8.1467621926e-03
+      (D) Lorentz region                   = 0.0000000000e+00
+      (D) SDP region                       = 8.1467621926e-03
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = -6.5201875788e-05
+  (D)+(B_region) [chain rule, diagnostic]  = -3.5007081913e-03
+  (D) envelope only [USED -> dAlpha]       = 8.1467621926e-03
+========================================================================
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=0.000000e+00  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=0.000e+00  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=52889 NGvars=52632 NGlams=26316
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=0.000e+00  max|SysB|=0.000e+00 at idx=-1
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=4.605e-04  max|SysB|=1.029e-04 at idx=167902
+[AssembVec] Phase 3 prep: NGvars=52632 (special=52632 general=0) max||Hi_inv||=2.846e+12 at iGvar=8872  mean||Hi_inv||=1.253e+10
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.799e+03  Hi_inv[0][0]=1.101e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.937e+03  Hi_inv[0][0]=2.893e+03  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.050e+04  Hi_inv[0][0]=1.295e+04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.879e+00  Hi_inv[0][0]=7.115e-01  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=6.264e+03  Hi_inv[0][0]=7.398e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[8872] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.846e+12  Hi_inv[0][0]=2.845e+12  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=0.000e+00 at iGvar=-1  sum_in=0.000e+00 sum_out=0.000e+00
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=4.605e-04  max|SysB|=1.029e-04 at idx=167902
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=4.605e-04  max|SysB|=1.029e-04 at idx=167902
+[SensSolve] AFTER  AssembVec : ||SysB||=4.605334e-04  max|SysB|=1.028587e-04 at idx=167902  (NcA=158596 NvA=346098)
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 (solve) start
+[CallMumps-trace] iter=36 Cor=1 MUMPS job=3 done info[0]=0 infog[0]=0
+C:\python3\lib\site-packages\sklearn\cross_decomposition\_pls.py:308: UserWarning: y residual is constant at iteration 1
+  warnings.warn(f"y residual is constant at iteration {k}")
+C:\python3\lib\site-packages\numpy\_core\_methods.py:223: RuntimeWarning: Degrees of freedom <= 0 for slice
+  ret = _var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+C:\python3\lib\site-packages\numpy\_core\_methods.py:212: RuntimeWarning: invalid value encountered in divide
+  ret = um.true_divide(
+======================================================================
+CALCUL DE FIABILITE -- FLEXION PURE BETON
+======================================================================
+[]
+('Deleting file: ', 'Yield_analysis0_0_kine.dsmetares', 'True', '0', 'metares')
+les sensibilités sont calculées pour les elements : dict_items([('COMPRESSIVE_STRENGTH:Block1', 0.008146762192623646), ('YIELD_STRENGTH:HA1,HA2,HA3,HA4', 0.00479921494098587)])
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=4.486757e-02  max|SysX|=4.799164e-03 at local_idx=699  (off=157896 n=31006)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=3.893638e-14  ||SysB[pardiso]||=4.605334e-04
+[SensSolve]                     relative=8.454625e-11  max|r|=1.927423e-14 at local_idx=24451  (off=157896 n=31006)
+
+========================================================================
+[Sensitivity] Region 1 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 2.437461e-01
+  ||dXi|| total               = 2.401058e-01
+  ||dXi|| region cones        = 1.511788e-02
+  ||dXi|| outside region      = 2.396294e-01
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = -1.8729233287e-03
+      (B) region SDP                       = 0.0000000000e+00
+      (B) region Lorentz                   = -1.9075001681e-03
+      (B) outside SDP                      = 3.4576839464e-05
+      (B) outside Lorentz                  = 0.0000000000e+00
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -1.9075001681e-03
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 4.7992149410e-03
+      (D) Lorentz region                   = 4.7992149410e-03
+      (D) SDP region                       = 0.0000000000e+00
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = -1.8729233287e-03
+  (D)+(B_region) [chain rule, diagnostic]  = 2.8917147729e-03
+  (D) envelope only [USED -> dAlpha]       = 4.7992149410e-03
+========================================================================
+
+
+-----Point Interieur termine
+
+---INCDATA()
+		Travail des charges permanentes =   0.0000000E+00 
+		Deformation VM Volume           =   0.0000000E+00 
+		Deformation VM Spherique        =   0.0000000E+00 
+		Deformation VM Face Tangentiel  =   0.0000000E+00 
+		Deformation VM Saut Normal      =   0.0000000E+00 
+		Deformation Tresca Tangentielle =   0.0000000E+00 
+		Deformation Tresca Normale      =   0.0000000E+00 
+---EcrDataCinem()
+---DEALLOC()
+free()
+...Fin du calcul 
+Ecriture du fichier MED de resultats 
+Eciture du dict med......Fin
+Ecriture fichier med......Fin
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=257  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=0  typeProp.level=-1 
+No Elements
+ProcessElements maxDim=1  nbElem=0  typeProp.level=0 
+No Elements
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.002000 seconds 
+entree dans fillRebarCinem
+Nombre edges dans le maillage = 257
+avant  WriteField(CmnMED_FieldPlasticRebarDisp
+apres  WriteField(CmnMED_FieldPlasticRebarDisp
+avant  WriteField(CmnMED_FieldKineRebarStresses
+apres  WriteField(CmnMED_FieldKineRebarStresses
+Ecriture des meta-resultats 
+Fin de l'ecriture des meta-resultats
+Liberation de memoire 
+Fin de la session de calcul 
+Traceback (most recent call last):
+  File "C:\_workingDir\_SF\test flexion\launcher.py", line 21, in <module>
+    exec(open(r'C:\_workingDir\_SF\test flexion\AC_pure_flexion.py').read(), {'__name__': '__main__'})
+  File "<string>", line 1008, in <module>
+  File "<string>", line 514, in build_metamodel_GEK
+  File "C:\python3\lib\site-packages\smt\surrogate_models\surrogate_model.py", line 274, in train
+    self._train()
+  File "C:\python3\lib\site-packages\smt\surrogate_models\kpls.py", line 157, in _train
+    self._new_train()
+  File "C:\python3\lib\site-packages\smt\surrogate_models\krg_based\krg_based.py", line 560, in _new_train
+    D = self._compute_training_distances(X, y, is_acting)
+  File "C:\python3\lib\site-packages\smt\surrogate_models\krg_based\krg_based.py", line 704, in _compute_training_distances
+    if np.min(np.sum(np.abs(D), axis=1)) == 0.0:
+  File "C:\python3\lib\site-packages\numpy\_core\fromnumeric.py", line 3302, in min
+    return _wrapreduction(a, np.minimum, 'min', axis, None, out,
+  File "C:\python3\lib\site-packages\numpy\_core\fromnumeric.py", line 86, in _wrapreduction
+    return ufunc.reduce(obj, axis, dtype, out, **passkwargs)
+ValueError: zero-size array to reduction operation minimum which has no identity

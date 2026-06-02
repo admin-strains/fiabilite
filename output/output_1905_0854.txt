@@ -1,0 +1,1204 @@
+LAUNCHER START
+======================================================================
+CALCUL DE FIABILITE -- FLEXION PURE BETON
+======================================================================
+On passe à max_degree = 2 car le DOE est de 15 > n0_min(2) = 7
+U_doe_fixed = ot.Sample([
+    [-0.0017087636021598,  1.3324529921939048],
+    [ 0.6101574964500577, -0.3098455061093959],
+    [-0.5710268126191504, -1.7050846569032012],
+    [ 0.2575873360888508,  0.3059394495979129],
+    [ 0.1214292569567443, -1.0095536573141610],
+    [ 1.6240183629247424, -0.5307216014412333],
+    [-0.0866973071119619, -0.1724802252849487],
+    [-0.4189833467378679,  0.5970506039797940],
+    [-0.8430033283970018, -0.0052598779049998],
+    [ 0.8683739888443799, -1.4595645554444574],
+    [-1.6808131497285246,  0.7103655184818380],
+    [ 1.4785787876852774,  0.2389009341514639],
+    [-1.1173048249346753, -0.6964007339259781],
+    [ 0.7454833633751983,  1.0430379366107354],
+    [-0.6943486266967820,  2.1139438171681828],
+])
+Checking Collision between elements ......Done
+Deleting surfacic meshing session 
+Deleting volumic meshing session 
+Running quadratization in ...
+************************************************************************
+		 Output Mesh 
+ 			 Total of : 3172 points
+			 Total of : 1547 UVs 
+			 Total of : 116 edges
+			 Total of : 646 triangles
+			 Total of : 11 surfaces 
+			 Total of : 1873 tetrahedrons
+			 Total of : 4060 faces
+************************************************************************
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+Writing mesh for cinematic computation...
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.001000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=1873  typeProp.level=0 
+ProcessElements in 0.000000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.012000 seconds 
+Writing mesh for static computation...
+Processed splitting Copied CAD Elements in  0.000000 seconds 
+Copied Nodes in  0.000000 seconds 
+Copied Nodes on surfaces in  0.000000 seconds 
+copy Edges in  0.001000 seconds 
+copy triangles in  0.000000 seconds 
+Split tetras in  0.002000 seconds 
+Associate nodes with Uvs in  0.001000 seconds 
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=7492  typeProp.level=0 
+ProcessElements in 0.001000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.006000 seconds 
+Closing model 
+
+FullLorentz : False
+LorentzToSdp : False
+MKLPardiso_params 
+MUMPS_params 
+MyPardiso_params 
+SdpToLorentz : 0
+activated_plasticity : True
+approach : kinematic
+calculate_error : false
+cinematic_params 
+customized_inc : [1]
+max_nbOfDiv : 0
+printIntPointSolutioEvolution : False
+scaling : 1
+sensitivity_analysis : true
+sensitivity_regions : [{"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]}, {"param": "YIELD_STRENGTH", "rebars": ["HA1", "HA2", "HA3", "HA4", "HA5", "HA6", "HA7", "HA8", "HA9", "HA10", "HA11", "HA12", "HA13", "HA14", "HA15", "HA16", "HA17", "HA18", "HA19", "HA20", "HA21", "HA22", "HA23", "HA24"]}]
+static_params 
+tetra_discontinuities : False
+trace_sur_point_integration : False
+welds_throat_limit : True
+write_debug_files : true
+
+Enregistrement des options du calcul 
+Lecture du modele cao: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0.dscad
+Lecture du Maillage: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed
+Read MESH in file C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+************************************************************************
+				Getting output mesh		...getting 3172 points
+		...getting 1547 UVs
+		...getting 20 edges
+		...getting 646 triangles
+		...getting 11 surfaces
+		...getting 1873 tetrahedrons
+		...getting 4060 faces
+		...getting boundaries
+		...getting reinforcement bars 
+		...getting materials
+		...getting interface constraints
+[InterfaceConstraints_Parser] no constraints in C:\workspace\storage\admin\SF\test_pure_flexion.ds/interface_constraints.txt (file missing or empty)
+		...      0 interface constraints loaded
+		...getting load cases 
+			Found analysis : Yield_analysis0
+			Boundary0 -- ISU = 4 -- IsMean : 0 -- support : 1  1  1  0  0  0  
+			Boundary1 -- ISU = 10 -- IsMean : 2 -- load : 0.000000  0.000000  -0.740000  -0.000000  -0.000000  -0.000000  
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 1 per-LC decompositions from 'per_lc_load_values'
+  [0] = 'Load_case0'  coeff = 1.0000
+			Found analysis : Yield_analysis0
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 0 per-LC decompositions from 'per_lc_dead_load_values'
+		...getting result surfaces 
+			Found analysis : Yield_analysis0
+			No results surfaces were tagged
+		...getting result points 
+			Found analysis : Yield_analysis0
+			No results points were tagged
+		...getting strengthened surfaces 
+			Found analysis : Yield_analysis0
+			No strengthened surfaces were tagged
+		...getting jointed shapes 
+			Found analysis : Yield_analysis0
+			No Jointed shapes were tagged
+		...getting move meshes 
+			Found analysis : Yield_analysis0
+		...setting integration points
+			Calculations will be made with an 4 points integration scheme
+************************************************************************
+
+Allocation des tableaux de sorties du calcul 
+Debut du calcul...
+DEBUT DE RUN.c
+		Integration a 4 points 
+		Le calcul BA et/ou Mixte est disponible uniquement sans les discontinuites entre les tetraedres et sans les NLGEOM
+		Calcul sans les discontinuites entre les tetraedres
+DoPLCinem()
+---ALLOC()
+---INPUTDATA()
+---DoRebars()
+-----Nombre Ddls associes aux aciers = 0
+---InitPLCinem_NoDisc()
+  [BEDDINGS] ISU=4: 49 nodes total, 25 blocked (NSUNO==1), 24 skipped (NSUNO>1), d=3
+		Nombres de cones VM acier volumiques = 0 
+		Nombres de cones de rebar = 1787 
+		Nombres de cones b�ton volumiques = 14984 
+		Nombres de cones de contact = 0 
+---InitFextCinem()
+-----ISU_MEAN: 1
+-----ISU: 11
+-----NREBAR: 24
+-----avant ArrayWithoutDoublon_long NDDL_Fext= 6
+-----apres ArrayWithoutDoublon_long NDDL_Fext= 6
+---InitPermFextCinem()
+---Assembling 1 per-LC FEXT vectors
+---MatMosPLCinem_NoDisc()
+Matrices des contraintes
+FEXT
+CINEM
+CONES
+ORDDL_ConVal_int
+---BuildSensOps()
+[Sensitivity] Region 0: COMPRESSIVE_STRENGTH:Block1, theta=4.764835e+01, type=0
+[Sensitivity] Region 1: YIELD_STRENGTH:HA1,HA2,HA3,HA4,HA5,HA6,HA7,HA8,HA9,HA10,HA11,HA12,HA13,HA14,HA15,HA16,HA17,HA18,HA19,HA20,HA21,HA22,HA23,HA24, theta=5.901730e+02, type=0
+---Init_PtInt()
+InitSysLin
+Check de A
+Check de H
+Check cones
+InitSolver
+Boucle FillGvarDvi0
+[TIMING][SOCP-Init] FillGvarDvi0  t=0.052s (NGvars=14984)
+Boucle FillGlamDvi0Dli0a
+[TIMING][SOCP-Init] FillGlamDvi0Dli0  t=0.012s (NGlams=7492)
+Boucle FillNnz Gvar
+[TIMING][SOCP-Init] FillNnz_Gvar  t=0.028s
+Boucle NnziL
+[TIMING][SOCP-Init] NnziL  t=0.000s (Nca0=154)
+Boucle Glam NnziL
+[TIMING][SOCP-Init] Glam_NnziL  t=0.021s
+Boucle alloc ConParL
+[TIMING][SOCP-Init] alloc_ConParL  t=0.000s
+Boucle FillNnzConPar
+[TIMING][SOCP-Init] FillNnzConPar_Gvar  t=0.000s
+Boucle ConParL 1 
+[TIMING][SOCP-Init] ConParL_1  t=0.000s
+Boucle ConParL 2 
+[TIMING][SOCP-Init] ConParL_2  t=0.000s
+Boucle quicksort_index_int 
+[TIMING][SOCP-Init] quicksort_ConParL  t=0.000s (Nnz_L=1489)
+Boucle FillNnz cones 
+[TIMING][SOCP-Init] FillNnz_cones  t=0.002s (Ncones=16771)
+Boucle FillNnz Glam 
+[TIMING][SOCP-Init] FillNnz_Glam  t=0.008s
+Boucle ConParV alloc 
+[TIMING][SOCP-Init] ConParV_alloc  t=0.011s (Nva0=9522)
+Boucle FillNnzConPar Cone
+[TIMING][SOCP-Init] FillNnzConPar_Cone  t=0.003s
+Boucle FillNnzConPar Glam
+[TIMING][SOCP-Init] FillNnzConPar_Glam  t=0.012s
+quicksort_index_int ConParV
+[TIMING][SOCP-Init] quicksort_ConParV  t=0.135s (Nnz_total=369214)
+[NNZ] SysA total NNZ = 369214 (= upper triangle, after dedup) on n=9676 → density=7.89e-03
+[TIMING][SOCP-Init] assemble_partie_haute  t=0.000s
+[TIMING][SOCP-Init] assemble_partie_basse  t=0.006s
+[TIMING][SOCP-Init] norms_total  t=0.009s
+Check system total
+PrintCarac
+-----Nombre Ddls = 99426
+-----Nombre Ddls final = 9522
+-----Nombre ContEg = 45106
+-----Nombre ContEg final = 154
+-----Nombre total de cones = 16771
+-----Nombre de cones de Lorentz = 1787
+-----Nombre de cones SDP = 14984
+-----Nombre Groupes de variables = 14984
+-----Nombre Groupes de mult. de lag. = 7492
+-----Taille System Lineaire final = 9676
+-----Nombre de non-zeros = 369214
+-----Solver used = MUMPS
+-----Omp num threads max = 64
+
+InitPtInt
+
+ It |  Mode  |  Alpha0 | Gamma |     Mu    |  Alpha |     pObj    |     dObj    |    ReP    |  RePiTot  |    ReD    | Type |    ReG    |   Time   
+---------------------------------------------------------------------------------------------------------------------------------------------------
+  0 |  init  |  1.0000 | 0.000 |  0.00E+00 | 1.0000 | +8.9468E+02 | +0.0000E+00 |  1.00E+00 |  1.00E-01 |  1.00E+00 |   1  |  1.00E+00 |     0.62 
+[DiagKKT] n=9676 nnz=369214 NcA0=154 NvA0=9522
+[DiagKKT] col_norm: zero=154 weak(<1e-8)=0 min=0.000e+00 max=4.618e+05
+[DiagKKT] row_norm: zero=6 weak(<1e-8)=0
+  [DiagKKT] weak col 0 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 1 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 2 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 3 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 4 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 5 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 6 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 7 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 8 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 9 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 10 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 11 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 12 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 13 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 14 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 15 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 16 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 17 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 18 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 19 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 20 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 21 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 22 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 23 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 24 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 25 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 26 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 27 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 28 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak col 29 (lam): norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 154: norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 155: norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 156: norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 157: norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 158: norm=0.000e+00 nnz=1
+  [DiagKKT] weak row 159: norm=0.000e+00 nnz=1
+  1 | normal |  0.6985 | 0.028 |  2.83E-02 | 0.9486 | +3.3619E+02 | +3.8582E-01 |  5.14E-02 |  5.14E-03 |  5.14E-02 |   1  |  5.83E-02 |     3.44 
+  2 | normal |  0.9673 | 0.000 |  8.94E-06 | 0.9205 | +6.8094E+01 | +2.5735E-01 |  4.08E-03 |  4.08E-04 |  4.08E-03 |   1  |  5.35E-03 |     4.78 
+  3 | normal |  0.6806 | 0.052 |  2.81E-04 | 0.7628 | +3.4497E+01 | +6.4608E-01 |  9.69E-04 |  9.69E-05 |  9.69E-04 |   1  |  1.49E-03 |     6.14 
+  4 | normal |  0.6992 | 0.055 |  8.19E-05 | 0.7578 | +1.4460E+01 | +1.1651E+00 |  2.35E-04 |  2.35E-05 |  2.35E-04 |   1  |  4.15E-04 |     7.79 
+  5 | normal |  0.5239 | 0.129 |  5.35E-05 | 0.6369 | +7.5362E+00 | +1.4551E+00 |  8.52E-05 |  8.52E-06 |  8.52E-05 |   1  |  1.70E-04 |     8.83 
+  6 | normal |  0.3743 | 0.254 |  4.32E-05 | 0.4256 | +5.6546E+00 | +1.5470E+00 |  4.89E-05 |  4.89E-06 |  4.89E-05 |   1  |  1.12E-04 |    10.77 
+  7 | normal |  0.4835 | 0.145 |  1.62E-05 | 0.5562 | +3.7658E+00 | +1.6236E+00 |  2.17E-05 |  2.17E-06 |  2.17E-05 |   1  |  5.63E-05 |    13.10 
+  8 | normal |  0.4528 | 0.169 |  9.53E-06 | 0.6239 | +2.7052E+00 | +1.6591E+00 |  8.17E-06 |  8.17E-07 |  8.17E-06 |   1  |  2.62E-05 |    13.79 
+  9 | normal |  0.4310 | 0.193 |  5.05E-06 | 0.4877 | +2.3243E+00 | +1.6747E+00 |  4.18E-06 |  4.18E-07 |  4.18E-06 |   1  |  1.56E-05 |    16.14 
+ 10 | normal |  0.1649 | 0.585 |  9.13E-06 | 0.5359 | +2.1882E+00 | +1.6770E+00 |  1.94E-06 |  1.94E-07 |  1.94E-06 |   1  |  1.17E-05 |    17.34 
+ 11 | normal |  0.4042 | 0.219 |  2.56E-06 | 0.4557 | +2.0174E+00 | +1.6855E+00 |  1.06E-06 |  1.06E-07 |  1.06E-06 |   1  |  7.43E-06 |    19.50 
+ 12 | normal |  0.1710 | 0.571 |  4.24E-06 | 0.7520 | +1.9157E+00 | +1.6898E+00 |  2.62E-07 |  2.62E-08 |  2.62E-07 |   1  |  4.90E-06 |    20.89 
+ 13 | normal |  0.4895 | 0.135 |  6.62E-07 | 0.4410 | +1.8342E+00 | +1.6943E+00 |  1.47E-07 |  1.47E-08 |  1.47E-07 |   1  |  3.02E-06 |    22.19 
+ 14 | normal |  0.1475 | 0.620 |  1.87E-06 | 0.6687 | +1.8006E+00 | +1.6962E+00 |  4.85E-08 |  4.85E-09 |  4.85E-08 |   1  |  2.24E-06 |    24.38 
+ 15 | normal |  0.3563 | 0.267 |  5.99E-07 | 0.6835 | +1.7509E+00 | +1.6988E+00 |  1.54E-08 |  1.54E-09 |  1.54E-08 |   1  |  1.12E-06 |    26.19 
+ 16 | normal |  0.2232 | 0.469 |  5.24E-07 | 0.6136 | +1.7350E+00 | +1.6999E+00 |  5.93E-09 |  5.93E-10 |  5.93E-09 |   1  |  7.52E-07 |    27.39 
+ 17 | normal |  0.2700 | 0.389 |  2.93E-07 | 0.5177 | +1.7245E+00 | +1.7005E+00 |  2.86E-09 |  2.86E-10 |  2.86E-09 |   1  |  5.14E-07 |    28.57 
+ 18 | normal |  0.4407 | 0.175 |  9.00E-08 | 0.5665 | +1.7140E+00 | +1.7012E+00 |  1.24E-09 |  1.24E-10 |  1.24E-09 |   1  |  2.74E-07 |    30.38 
+ 19 | normal |  0.2414 | 0.437 |  1.20E-07 | 0.5881 | +1.7101E+00 | +1.7016E+00 |  5.11E-10 |  5.11E-11 |  5.11E-10 |   1  |  1.83E-07 |    31.60 
+ 20 | normal |  0.3724 | 0.247 |  4.53E-08 | 0.3325 | +1.7082E+00 | +1.7018E+00 |  3.41E-10 |  3.41E-11 |  3.41E-10 |   1  |  1.37E-07 |    33.34 
+ 21 | normal |  0.0664 | 0.814 |  1.12E-07 | 0.2487 | +1.7079E+00 | +1.7018E+00 |  2.56E-10 |  2.56E-11 |  2.56E-10 |   1  |  1.31E-07 |    34.51 
+ 22 | normal |  0.4319 | 0.183 |  2.40E-08 | 0.3855 | +1.7062E+00 | +1.7020E+00 |  1.58E-10 |  1.58E-11 |  1.58E-10 |   1  |  8.97E-08 |    35.12 
+ 23 | normal |  0.0755 | 0.790 |  7.09E-08 | 0.1842 | +1.7060E+00 | +1.7020E+00 |  1.29E-10 |  1.29E-11 |  1.29E-10 |   1  |  8.62E-08 |    36.81 
+ 24 | normal |  0.2958 | 0.349 |  3.01E-08 | 0.3957 | +1.7051E+00 | +1.7021E+00 |  7.77E-11 |  7.77E-12 |  7.94E-11 |   1  |  6.40E-08 |    37.68 
+ 25 | normal |  0.3006 | 0.342 |  2.19E-08 | 0.4969 | +1.7043E+00 | +1.7023E+00 |  3.91E-11 |  3.91E-12 |  4.52E-11 |   1  |  4.31E-08 |    38.72 
+ 26 | normal |  0.4040 | 0.212 |  9.13E-09 | 0.5387 | +1.7035E+00 | +1.7024E+00 |  2.46E-11 |  1.80E-12 |  3.43E-11 |   1  |  2.48E-08 |    40.39 
+
+############################################################
+### DIAGNOSTIC : AssembVec avec residus IPM converges    ###
+############################################################
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=3.817e-08  ||RP0||=3.973e-11  ||RPi(sum)||=3.821e-10  ||RCi(sum)||=6.318e-06
+[AssembVec] gamma=0.000e+00 gammaHeur=1  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=3.817e-08  max|SysB|=3.430e-10 at idx=132519
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=3.316e+00  max|SysB|=3.635e-01 at idx=49426
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=9.422e+06 at iGvar=12227  mean||Hi_inv||=2.518e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.226e+03  Hi_inv[0][0]=6.393e+00  ||SysB[iPosV..]||=5.527e-03
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.171e-04  Hi_inv[0][0]=1.155e-04  ||SysB[iPosV..]||=3.901e-02
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.484e+04  Hi_inv[0][0]=8.704e+00  ||SysB[iPosV..]||=7.087e-03
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.374e-04  Hi_inv[0][0]=2.421e-04  ||SysB[iPosV..]||=3.828e-02
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.119e+03  Hi_inv[0][0]=7.206e+00  ||SysB[iPosV..]||=4.531e-03
+[AssembVec] Gvar[12227] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.422e+06  Hi_inv[0][0]=9.235e+06  ||SysB[iPosV..]||=3.133e-02
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=2.254e+04 at iGvar=918  sum_in=2.994e+02 sum_out=8.137e+01
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=4.498e+00  max|SysB|=6.206e-01 at idx=36672
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=4.752e+00  max|SysB|=6.206e-01 at idx=36672
+############################################################
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=5.889614e-02  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=5.890e-02  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=5.890e-02  max|SysB|=1.065e-03 at idx=91690
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=5.890e-02  max|SysB|=1.065e-03 at idx=91690
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=9.422e+06 at iGvar=12227  mean||Hi_inv||=2.518e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.226e+03  Hi_inv[0][0]=6.393e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.171e-04  Hi_inv[0][0]=1.155e-04  ||SysB[iPosV..]||=8.784e-04
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.484e+04  Hi_inv[0][0]=8.704e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.374e-04  Hi_inv[0][0]=2.421e-04  ||SysB[iPosV..]||=8.784e-04
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.119e+03  Hi_inv[0][0]=7.206e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[12227] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.422e+06  Hi_inv[0][0]=9.235e+06  ||SysB[iPosV..]||=8.677e-04
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=5.440e+06 at iGvar=12227  sum_in=4.434e+00 sum_out=4.488e+04
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=1.030e+04  max|SysB|=5.364e+03 at idx=26964
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=1.030e+04  max|SysB|=5.364e+03 at idx=26964
+[SensSolve] AFTER  AssembVec : ||SysB||=1.029847e+04  max|SysB|=5.363913e+03 at idx=26964  (NcA=45106 NvA=99426)
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=5.398672e-01  max|SysX|=2.489531e-01 at local_idx=79  (off=44952 n=9676)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=1.240800e-10  ||SysB[pardiso]||=8.779742e-02
+[SensSolve]                     relative=1.413254e-09  max|r|=4.158687e-11 at local_idx=8281  (off=44952 n=9676)
+
+========================================================================
+[Sensitivity] Region 0 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 7.165247e-01
+  ||dXi|| total               = 6.083657e-01
+  ||dXi|| region cones        = 2.651566e-01
+  ||dXi|| outside region      = 5.475407e-01
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = -2.6671368030e-05
+      (B) region SDP                       = -5.7814719311e-02
+      (B) region Lorentz                   = 0.0000000000e+00
+      (B) outside SDP                      = 1.6305392205e-04
+      (B) outside Lorentz                  = 5.7624994021e-02
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -5.7814719311e-02
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 1.0417511651e-02
+      (D) Lorentz region                   = 0.0000000000e+00
+      (D) SDP region                       = 1.0417511651e-02
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = -2.6671368030e-05
+  (D)+(B_region) [chain rule, diagnostic]  = -4.7397207660e-02
+  (D) envelope only [USED -> dAlpha]       = 1.0417511651e-02
+========================================================================
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=0.000000e+00  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=0.000e+00  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=0.000e+00  max|SysB|=0.000e+00 at idx=-1
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=8.989e-03  max|SysB|=3.431e-03 at idx=48919
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=9.422e+06 at iGvar=12227  mean||Hi_inv||=2.518e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.226e+03  Hi_inv[0][0]=6.393e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.171e-04  Hi_inv[0][0]=1.155e-04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.484e+04  Hi_inv[0][0]=8.704e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=3.374e-04  Hi_inv[0][0]=2.421e-04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.119e+03  Hi_inv[0][0]=7.206e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[12227] Dim=6 Ncones=1 isId=1  ||Hi_inv||=9.422e+06  Hi_inv[0][0]=9.235e+06  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=0.000e+00 at iGvar=-1  sum_in=0.000e+00 sum_out=0.000e+00
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=8.989e-03  max|SysB|=3.431e-03 at idx=48919
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=8.989e-03  max|SysB|=3.431e-03 at idx=48919
+[SensSolve] AFTER  AssembVec : ||SysB||=8.988522e-03  max|SysB|=3.431162e-03 at idx=48919  (NcA=45106 NvA=99426)
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=4.397524e-02  max|SysX|=1.992532e-02 at local_idx=79  (off=44952 n=9676)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=6.116338e-12  ||SysB[pardiso]||=8.988522e-03
+[SensSolve]                     relative=6.804609e-10  max|r|=2.294482e-12 at local_idx=5902  (off=44952 n=9676)
+
+========================================================================
+[Sensitivity] Region 1 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 5.717350e-02
+  ||dXi|| total               = 4.854154e-02
+  ||dXi|| region cones        = 2.396715e-03
+  ||dXi|| outside region      = 4.848234e-02
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = 1.2833719468e-06
+      (B) region SDP                       = 0.0000000000e+00
+      (B) region Lorentz                   = -4.6436518908e-03
+      (B) outside SDP                      = 4.6449352627e-03
+      (B) outside Lorentz                  = 0.0000000000e+00
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -4.6436518908e-03
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 2.0355561130e-03
+      (D) Lorentz region                   = 2.0355561130e-03
+      (D) SDP region                       = 0.0000000000e+00
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = 1.2833719468e-06
+  (D)+(B_region) [chain rule, diagnostic]  = -2.6080957778e-03
+  (D) envelope only [USED -> dAlpha]       = 2.0355561130e-03
+========================================================================
+
+
+-----Point Interieur termine
+
+---INCDATA()
+		Travail des charges permanentes =   0.0000000E+00 
+		Deformation VM Volume           =   0.0000000E+00 
+		Deformation VM Spherique        =   0.0000000E+00 
+		Deformation VM Face Tangentiel  =   0.0000000E+00 
+		Deformation VM Saut Normal      =   0.0000000E+00 
+		Deformation Tresca Tangentielle =   0.0000000E+00 
+		Deformation Tresca Normale      =   0.0000000E+00 
+---EcrDataCinem()
+---DEALLOC()
+free()
+...Fin du calcul 
+Ecriture du fichier MED de resultats 
+Eciture du dict med......Fin
+Ecriture fichier med......Fin
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=1787  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=0  typeProp.level=-1 
+No Elements
+ProcessElements maxDim=1  nbElem=0  typeProp.level=0 
+No Elements
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.004000 seconds 
+entree dans fillRebarCinem
+Nombre edges dans le maillage = 1787
+avant  WriteField(CmnMED_FieldPlasticRebarDisp
+apres  WriteField(CmnMED_FieldPlasticRebarDisp
+avant  WriteField(CmnMED_FieldKineRebarStresses
+apres  WriteField(CmnMED_FieldKineRebarStresses
+Ecriture des meta-resultats 
+Fin de l'ecriture des meta-resultats
+Liberation de memoire 
+Fin de la session de calcul 
+Checking Collision between elements ......Done
+Deleting surfacic meshing session 
+Deleting volumic meshing session 
+Running quadratization in ...
+************************************************************************
+		 Output Mesh 
+ 			 Total of : 3172 points
+			 Total of : 1547 UVs 
+			 Total of : 116 edges
+			 Total of : 646 triangles
+			 Total of : 11 surfaces 
+			 Total of : 1873 tetrahedrons
+			 Total of : 4060 faces
+************************************************************************
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+Writing mesh for cinematic computation...
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=1873  typeProp.level=0 
+ProcessElements in 0.001000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.008000 seconds 
+Writing mesh for static computation...
+Processed splitting Copied CAD Elements in  0.000000 seconds 
+Copied Nodes in  0.000000 seconds 
+Copied Nodes on surfaces in  0.000000 seconds 
+copy Edges in  0.000000 seconds 
+copy triangles in  0.000000 seconds 
+Split tetras in  0.002000 seconds 
+Associate nodes with Uvs in  0.001000 seconds 
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=7492  typeProp.level=0 
+ProcessElements in 0.001000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.006000 seconds 
+Closing model 
+
+FullLorentz : False
+LorentzToSdp : False
+MKLPardiso_params 
+MUMPS_params 
+MyPardiso_params 
+SdpToLorentz : 0
+activated_plasticity : True
+approach : kinematic
+calculate_error : false
+cinematic_params 
+customized_inc : [1]
+max_nbOfDiv : 0
+printIntPointSolutioEvolution : False
+scaling : 1
+sensitivity_analysis : true
+sensitivity_regions : [{"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]}, {"param": "YIELD_STRENGTH", "rebars": ["HA1", "HA2", "HA3", "HA4", "HA5", "HA6", "HA7", "HA8", "HA9", "HA10", "HA11", "HA12", "HA13", "HA14", "HA15", "HA16", "HA17", "HA18", "HA19", "HA20", "HA21", "HA22", "HA23", "HA24"]}]
+static_params 
+tetra_discontinuities : False
+trace_sur_point_integration : False
+welds_throat_limit : True
+write_debug_files : true
+
+Enregistrement des options du calcul 
+Lecture du modele cao: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0.dscad
+Lecture du Maillage: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed
+Read MESH in file C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+************************************************************************
+				Getting output mesh		...getting 3172 points
+		...getting 1547 UVs
+		...getting 20 edges
+		...getting 646 triangles
+		...getting 11 surfaces
+		...getting 1873 tetrahedrons
+		...getting 4060 faces
+		...getting boundaries
+		...getting reinforcement bars 
+		...getting materials
+		...getting interface constraints
+[InterfaceConstraints_Parser] no constraints in C:\workspace\storage\admin\SF\test_pure_flexion.ds/interface_constraints.txt (file missing or empty)
+		...      0 interface constraints loaded
+		...getting load cases 
+			Found analysis : Yield_analysis0
+			Boundary0 -- ISU = 4 -- IsMean : 0 -- support : 1  1  1  0  0  0  
+			Boundary1 -- ISU = 10 -- IsMean : 2 -- load : 0.000000  0.000000  -0.740000  -0.000000  -0.000000  -0.000000  
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 1 per-LC decompositions from 'per_lc_load_values'
+  [0] = 'Load_case0'  coeff = 1.0000
+			Found analysis : Yield_analysis0
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 0 per-LC decompositions from 'per_lc_dead_load_values'
+		...getting result surfaces 
+			Found analysis : Yield_analysis0
+			No results surfaces were tagged
+		...getting result points 
+			Found analysis : Yield_analysis0
+			No results points were tagged
+		...getting strengthened surfaces 
+			Found analysis : Yield_analysis0
+			No strengthened surfaces were tagged
+		...getting jointed shapes 
+			Found analysis : Yield_analysis0
+			No Jointed shapes were tagged
+		...getting move meshes 
+			Found analysis : Yield_analysis0
+		...setting integration points
+			Calculations will be made with an 4 points integration scheme
+************************************************************************
+
+Allocation des tableaux de sorties du calcul 
+Debut du calcul...
+DEBUT DE RUN.c
+		Integration a 4 points 
+		Le calcul BA et/ou Mixte est disponible uniquement sans les discontinuites entre les tetraedres et sans les NLGEOM
+		Calcul sans les discontinuites entre les tetraedres
+DoPLCinem()
+---ALLOC()
+---INPUTDATA()
+---DoRebars()
+-----Nombre Ddls associes aux aciers = 0
+---InitPLCinem_NoDisc()
+  [BEDDINGS] ISU=4: 49 nodes total, 25 blocked (NSUNO==1), 24 skipped (NSUNO>1), d=3
+		Nombres de cones VM acier volumiques = 0 
+		Nombres de cones de rebar = 1787 
+		Nombres de cones b�ton volumiques = 14984 
+		Nombres de cones de contact = 0 
+---InitFextCinem()
+-----ISU_MEAN: 1
+-----ISU: 11
+-----NREBAR: 24
+-----avant ArrayWithoutDoublon_long NDDL_Fext= 6
+-----apres ArrayWithoutDoublon_long NDDL_Fext= 6
+---InitPermFextCinem()
+---Assembling 1 per-LC FEXT vectors
+---MatMosPLCinem_NoDisc()
+Matrices des contraintes
+FEXT
+CINEM
+CONES
+ORDDL_ConVal_int
+---BuildSensOps()
+[Sensitivity] Region 0: COMPRESSIVE_STRENGTH:Block1, theta=5.126507e+01, type=0
+[Sensitivity] Region 1: YIELD_STRENGTH:HA1,HA2,HA3,HA4,HA5,HA6,HA7,HA8,HA9,HA10,HA11,HA12,HA13,HA14,HA15,HA16,HA17,HA18,HA19,HA20,HA21,HA22,HA23,HA24, theta=5.406583e+02, type=0
+---Init_PtInt()
+InitSysLin
+Check de A
+Check de H
+Check cones
+InitSolver
+Boucle FillGvarDvi0
+[TIMING][SOCP-Init] FillGvarDvi0  t=0.066s (NGvars=14984)
+Boucle FillGlamDvi0Dli0a
+[TIMING][SOCP-Init] FillGlamDvi0Dli0  t=0.060s (NGlams=7492)
+Boucle FillNnz Gvar
+[TIMING][SOCP-Init] FillNnz_Gvar  t=0.037s
+Boucle NnziL
+[TIMING][SOCP-Init] NnziL  t=0.000s (Nca0=154)
+Boucle Glam NnziL
+[TIMING][SOCP-Init] Glam_NnziL  t=0.018s
+Boucle alloc ConParL
+[TIMING][SOCP-Init] alloc_ConParL  t=0.000s
+Boucle FillNnzConPar
+[TIMING][SOCP-Init] FillNnzConPar_Gvar  t=0.044s
+Boucle ConParL 1 
+[TIMING][SOCP-Init] ConParL_1  t=0.000s
+Boucle ConParL 2 
+[TIMING][SOCP-Init] ConParL_2  t=0.000s
+Boucle quicksort_index_int 
+[TIMING][SOCP-Init] quicksort_ConParL  t=0.020s (Nnz_L=1489)
+Boucle FillNnz cones 
+[TIMING][SOCP-Init] FillNnz_cones  t=0.003s (Ncones=16771)
+Boucle FillNnz Glam 
+[TIMING][SOCP-Init] FillNnz_Glam  t=0.008s
+Boucle ConParV alloc 
+[TIMING][SOCP-Init] ConParV_alloc  t=0.011s (Nva0=9522)
+Boucle FillNnzConPar Cone
+[TIMING][SOCP-Init] FillNnzConPar_Cone  t=0.003s
+Boucle FillNnzConPar Glam
+[TIMING][SOCP-Init] FillNnzConPar_Glam  t=0.012s
+quicksort_index_int ConParV
+[TIMING][SOCP-Init] quicksort_ConParV  t=0.027s (Nnz_total=369214)
+[NNZ] SysA total NNZ = 369214 (= upper triangle, after dedup) on n=9676 → density=7.89e-03
+[TIMING][SOCP-Init] assemble_partie_haute  t=0.000s
+[TIMING][SOCP-Init] assemble_partie_basse  t=0.002s
+[TIMING][SOCP-Init] norms_total  t=0.008s
+Check system total
+PrintCarac
+-----Nombre Ddls = 99426
+-----Nombre Ddls final = 9522
+-----Nombre ContEg = 45106
+-----Nombre ContEg final = 154
+-----Nombre total de cones = 16771
+-----Nombre de cones de Lorentz = 1787
+-----Nombre de cones SDP = 14984
+-----Nombre Groupes de variables = 14984
+-----Nombre Groupes de mult. de lag. = 7492
+-----Taille System Lineaire final = 9676
+-----Nombre de non-zeros = 369214
+-----Solver used = MUMPS
+-----Omp num threads max = 64
+
+InitPtInt
+
+ It |  Mode  |  Alpha0 | Gamma |     Mu    |  Alpha |     pObj    |     dObj    |    ReP    |  RePiTot  |    ReD    | Type |    ReG    |   Time   
+---------------------------------------------------------------------------------------------------------------------------------------------------
+  0 |  init  |  1.0000 | 0.000 |  0.00E+00 | 1.0000 | +8.2699E+02 | +0.0000E+00 |  1.00E+00 |  1.00E-01 |  1.00E+00 |   1  |  1.00E+00 |     0.59 
+  1 | normal |  0.6987 | 0.028 |  2.83E-02 | 0.9485 | +3.4757E+02 | +4.1380E-01 |  5.15E-02 |  5.15E-03 |  5.15E-02 |   1  |  5.87E-02 |     1.82 
+  2 | normal |  0.9658 | 0.000 |  1.09E-05 | 0.9244 | +7.0869E+01 | +2.6881E-01 |  3.89E-03 |  3.89E-04 |  3.89E-03 |   1  |  5.21E-03 |     3.17 
+  3 | normal |  0.6820 | 0.053 |  2.77E-04 | 0.7586 | +3.5127E+01 | +6.0899E-01 |  9.39E-04 |  9.39E-05 |  9.39E-04 |   1  |  1.47E-03 |     4.37 
+  4 | normal |  0.6916 | 0.057 |  8.34E-05 | 0.7458 | +1.4687E+01 | +1.0927E+00 |  2.39E-04 |  2.39E-05 |  2.39E-04 |   1  |  4.23E-04 |     5.53 
+  5 | normal |  0.5454 | 0.114 |  4.83E-05 | 0.6576 | +7.2434E+00 | +1.3828E+00 |  8.17E-05 |  8.17E-06 |  8.17E-05 |   1  |  1.63E-04 |     7.28 
+  6 | normal |  0.3828 | 0.244 |  3.97E-05 | 0.4958 | +5.1061E+00 | +1.4866E+00 |  4.12E-05 |  4.12E-06 |  4.12E-05 |   1  |  9.71E-05 |     8.84 
+  7 | normal |  0.3883 | 0.235 |  2.28E-05 | 0.4806 | +3.8030E+00 | +1.5316E+00 |  2.14E-05 |  2.14E-06 |  2.14E-05 |   1  |  5.93E-05 |    10.36 
+  8 | normal |  0.2606 | 0.408 |  2.42E-05 | 0.6307 | +2.9717E+00 | +1.5504E+00 |  7.91E-06 |  7.91E-07 |  7.91E-06 |   1  |  3.50E-05 |    12.11 
+  9 | normal |  0.3479 | 0.284 |  9.94E-06 | 0.5334 | +2.4698E+00 | +1.5755E+00 |  3.69E-06 |  3.69E-07 |  3.69E-06 |   1  |  2.11E-05 |    14.49 
+ 10 | normal |  0.3157 | 0.327 |  6.88E-06 | 0.5028 | +2.1883E+00 | +1.5899E+00 |  1.83E-06 |  1.83E-07 |  1.83E-06 |   1  |  1.36E-05 |    16.06 
+ 11 | normal |  0.3424 | 0.290 |  3.95E-06 | 0.6165 | +1.9427E+00 | +1.6029E+00 |  7.03E-07 |  7.03E-08 |  7.03E-07 |   1  |  7.49E-06 |    16.82 
+ 12 | normal |  0.1287 | 0.662 |  4.96E-06 | 0.2466 | +1.9157E+00 | +1.6042E+00 |  5.30E-07 |  5.30E-08 |  5.30E-07 |   1  |  6.83E-06 |    18.07 
+ 13 | normal |  0.3145 | 0.325 |  2.22E-06 | 0.5893 | +1.7985E+00 | +1.6106E+00 |  2.18E-07 |  2.18E-08 |  2.18E-07 |   1  |  4.07E-06 |    19.28 
+ 14 | normal |  0.2431 | 0.434 |  1.77E-06 | 0.7812 | +1.7198E+00 | +1.6148E+00 |  4.76E-08 |  4.76E-09 |  4.76E-08 |   1  |  2.25E-06 |    20.47 
+ 15 | normal |  0.2618 | 0.403 |  9.08E-07 | 0.3009 | +1.7021E+00 | +1.6159E+00 |  3.33E-08 |  3.33E-09 |  3.33E-08 |   1  |  1.85E-06 |    22.00 
+ 16 | normal |  0.0790 | 0.781 |  1.44E-06 | 0.3169 | +1.6963E+00 | +1.6161E+00 |  2.27E-08 |  2.27E-09 |  2.27E-08 |   1  |  1.72E-06 |    24.60 
+ 17 | normal |  0.5427 | 0.096 |  1.65E-07 | 0.5445 | +1.6589E+00 | +1.6181E+00 |  1.04E-08 |  1.04E-09 |  1.04E-08 |   1  |  8.72E-07 |    26.30 
+ 18 | normal |  0.3096 | 0.329 |  2.87E-07 | 0.4939 | +1.6462E+00 | +1.6190E+00 |  5.24E-09 |  5.24E-10 |  5.24E-09 |   1  |  5.83E-07 |    27.76 
+ 19 | normal |  0.2203 | 0.474 |  2.76E-07 | 0.4208 | +1.6406E+00 | +1.6194E+00 |  3.04E-09 |  3.04E-10 |  3.04E-09 |   1  |  4.54E-07 |    28.76 
+ 20 | normal |  0.4401 | 0.176 |  7.97E-08 | 0.5065 | +1.6323E+00 | +1.6199E+00 |  1.50E-09 |  1.50E-10 |  1.50E-09 |   1  |  2.64E-07 |    30.47 
+ 21 | normal |  0.1478 | 0.619 |  1.64E-07 | 0.5677 | +1.6299E+00 | +1.6202E+00 |  6.48E-10 |  6.48E-11 |  6.48E-10 |   1  |  2.07E-07 |    31.15 
+ 22 | normal |  0.2007 | 0.511 |  1.06E-07 | 0.3406 | +1.6284E+00 | +1.6203E+00 |  4.27E-10 |  4.27E-11 |  4.27E-10 |   1  |  1.73E-07 |    32.28 
+ 23 | normal |  0.2987 | 0.345 |  5.95E-08 | 0.6877 | +1.6251E+00 | +1.6206E+00 |  1.33E-10 |  1.33E-11 |  1.34E-10 |   1  |  9.48E-08 |    34.05 
+ 24 | normal |  0.2301 | 0.456 |  4.33E-08 | 0.3397 | +1.6243E+00 | +1.6207E+00 |  8.81E-11 |  8.81E-12 |  9.14E-11 |   1  |  7.73E-08 |    35.25 
+ 25 | normal |  0.4251 | 0.190 |  1.47E-08 | 0.4648 | +1.6231E+00 | +1.6209E+00 |  4.72E-11 |  4.72E-12 |  4.93E-11 |   1  |  4.82E-08 |    36.97 
+ 26 | normal |  0.0603 | 0.830 |  4.00E-08 | 0.1488 | +1.6231E+00 | +1.6209E+00 |  4.01E-11 |  4.01E-12 |  4.20E-11 |   1  |  4.70E-08 |    38.22 
+ 27 | normal |  0.3891 | 0.228 |  1.07E-08 | 0.6803 | +1.6221E+00 | +1.6211E+00 |  1.28E-11 |  1.28E-12 |  4.44E-11 |   1  |  2.23E-08 |    39.96 
+
+############################################################
+### DIAGNOSTIC : AssembVec avec residus IPM converges    ###
+############################################################
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=2.718e-08  ||RP0||=2.073e-11  ||RPi(sum)||=2.721e-10  ||RCi(sum)||=5.241e-06
+[AssembVec] gamma=0.000e+00 gammaHeur=1  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=2.718e-08  max|SysB|=4.435e-10 at idx=128019
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=3.524e+00  max|SysB|=3.662e-01 at idx=49426
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=7.762e+06 at iGvar=874  mean||Hi_inv||=2.825e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.855e+03  Hi_inv[0][0]=5.102e+00  ||SysB[iPosV..]||=5.678e-03
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.992e-04  Hi_inv[0][0]=1.026e-04  ||SysB[iPosV..]||=4.209e-02
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.116e+04  Hi_inv[0][0]=9.003e+00  ||SysB[iPosV..]||=9.375e-03
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.922e-04  Hi_inv[0][0]=2.011e-04  ||SysB[iPosV..]||=4.043e-02
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.297e+03  Hi_inv[0][0]=5.412e+00  ||SysB[iPosV..]||=4.363e-03
+[AssembVec] Gvar[ 874] Dim=6 Ncones=1 isId=1  ||Hi_inv||=7.762e+06  Hi_inv[0][0]=7.761e+06  ||SysB[iPosV..]||=1.608e-04
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=3.201e+04 at iGvar=9634  sum_in=3.167e+02 sum_out=7.086e+01
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=4.417e+00  max|SysB|=4.549e-01 at idx=42180
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=4.674e+00  max|SysB|=4.549e-01 at idx=42180
+############################################################
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=5.889614e-02  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=5.890e-02  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=5.890e-02  max|SysB|=1.065e-03 at idx=91690
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=5.890e-02  max|SysB|=1.065e-03 at idx=91690
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=7.762e+06 at iGvar=874  mean||Hi_inv||=2.825e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.855e+03  Hi_inv[0][0]=5.102e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.992e-04  Hi_inv[0][0]=1.026e-04  ||SysB[iPosV..]||=8.784e-04
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.116e+04  Hi_inv[0][0]=9.003e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.922e-04  Hi_inv[0][0]=2.011e-04  ||SysB[iPosV..]||=8.784e-04
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.297e+03  Hi_inv[0][0]=5.412e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[ 874] Dim=6 Ncones=1 isId=1  ||Hi_inv||=7.762e+06  Hi_inv[0][0]=7.761e+06  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=2.476e+06 at iGvar=12227  sum_in=4.434e+00 sum_out=2.260e+04
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=4.937e+03  max|SysB|=2.344e+03 at idx=34632
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=4.937e+03  max|SysB|=2.344e+03 at idx=34632
+[SensSolve] AFTER  AssembVec : ||SysB||=4.936625e+03  max|SysB|=2.344391e+03 at idx=34632  (NcA=45106 NvA=99426)
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=2.157270e-01  max|SysX|=8.478203e-02 at local_idx=43  (off=44952 n=9676)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=1.563767e-11  ||SysB[pardiso]||=7.798451e-02
+[SensSolve]                     relative=2.005227e-10  max|r|=4.540496e-12 at local_idx=9409  (off=44952 n=9676)
+
+========================================================================
+[Sensitivity] Region 0 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 2.110132e-01
+  ||dXi|| total               = 1.850740e-01
+  ||dXi|| region cones        = 3.680479e-02
+  ||dXi|| outside region      = 1.813775e-01
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = -2.7794253418e-05
+      (B) region SDP                       = -9.5537627292e-03
+      (B) region Lorentz                   = 0.0000000000e+00
+      (B) outside SDP                      = -1.1521725106e-05
+      (B) outside Lorentz                  = 9.5374902009e-03
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -9.5537627292e-03
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 6.8852716349e-03
+      (D) Lorentz region                   = 0.0000000000e+00
+      (D) SDP region                       = 6.8852716349e-03
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = -2.7794253418e-05
+  (D)+(B_region) [chain rule, diagnostic]  = -2.6684910943e-03
+  (D) envelope only [USED -> dAlpha]       = 6.8852716349e-03
+========================================================================
+
+[SensSolve] BEFORE AssembVec : ||RD=bRD||=0.000000e+00  ||RP0=bRP0||=0.000000e+00
+
+[AssembVec] === ENTRY ===
+[AssembVec] ||RD||=0.000e+00  ||RP0||=0.000e+00  ||RPi(sum)||=0.000e+00  ||RCi(sum)||=0.000e+00
+[AssembVec] gamma=0.000e+00 gammaHeur=0  Ncones=16771 NGvars=14984 NGlams=7492
+[AssembVec] AFTER Phase 1 (init RD/RP0)    ||SysB||=0.000e+00  max|SysB|=0.000e+00 at idx=-1
+[AssembVec] AFTER Phase 2 (cones)          ||SysB||=9.181e-03  max|SysB|=3.431e-03 at idx=48919
+[AssembVec] Phase 3 prep: NGvars=14984 (special=14984 general=0) max||Hi_inv||=7.762e+06 at iGvar=874  mean||Hi_inv||=2.825e+04
+[AssembVec] Gvar[   0] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.855e+03  Hi_inv[0][0]=5.102e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   1] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.992e-04  Hi_inv[0][0]=1.026e-04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   2] Dim=6 Ncones=1 isId=1  ||Hi_inv||=1.116e+04  Hi_inv[0][0]=9.003e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   3] Dim=6 Ncones=1 isId=1  ||Hi_inv||=2.922e-04  Hi_inv[0][0]=2.011e-04  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[   4] Dim=6 Ncones=1 isId=1  ||Hi_inv||=4.297e+03  Hi_inv[0][0]=5.412e+00  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Gvar[ 874] Dim=6 Ncones=1 isId=1  ||Hi_inv||=7.762e+06  Hi_inv[0][0]=7.761e+06  ||SysB[iPosV..]||=0.000e+00
+[AssembVec] Phase 3 amplification: max(||Hi_inv*Rdi||/||Rdi||)=0.000e+00 at iGvar=-1  sum_in=0.000e+00 sum_out=0.000e+00
+[AssembVec] AFTER Phase 3 (Gvars)          ||SysB||=9.181e-03  max|SysB|=3.431e-03 at idx=48919
+[AssembVec] AFTER Phase 4 (Glams) [FINAL]  ||SysB||=9.181e-03  max|SysB|=3.431e-03 at idx=48919
+[SensSolve] AFTER  AssembVec : ||SysB||=9.180517e-03  max|SysB|=3.431162e-03 at idx=48919  (NcA=45106 NvA=99426)
+[SensSolve] AFTER  CallSolver: ||SysX[pardiso]||=2.200393e-02  max|SysX|=7.660076e-03 at local_idx=43  (off=44952 n=9676)
+[SensSolve] BACK-SOLVE RESIDUAL: ||SysB - SysA*SysX||=1.390601e-12  ||SysB[pardiso]||=9.180517e-03
+[SensSolve]                     relative=1.514731e-10  max|r|=4.231660e-13 at local_idx=8749  (off=44952 n=9676)
+
+========================================================================
+[Sensitivity] Region 1 INSTRUMENTATION
+========================================================================
+  ||dVar||                    = 2.069178e-02
+  ||dXi|| total               = 1.825742e-02
+  ||dXi|| region cones        = 8.826116e-04
+  ||dXi|| outside region      = 1.823607e-02
+------------------------------------------------------------------------
+  (A) CVec.dVar                            = 0.0000000000e+00
+  (B) total Sum_all_cones Ci.dXi           = 1.3216438642e-06
+      (B) region SDP                       = 0.0000000000e+00
+      (B) region Lorentz                   = -9.0891903731e-04
+      (B) outside SDP                      = 9.1024068118e-04
+      (B) outside Lorentz                  = 0.0000000000e+00
+      (B) contact (iSource<0)              = 0.0000000000e+00
+      (B) region (= SDP+Lorentz)           = -9.0891903731e-04
+  (C) dCVec.Var                            = 0.0000000000e+00
+------------------------------------------------------------------------
+  (D) Sum dCi.Xi (region only, envelope)   = 2.3357073564e-03
+      (D) Lorentz region                   = 2.3357073564e-03
+      (D) SDP region                       = 0.0000000000e+00
+------------------------------------------------------------------------
+  (A)+(B)+(C) [diagnostic, envelope -> 0]  = 1.3216438642e-06
+  (D)+(B_region) [chain rule, diagnostic]  = 1.4267883191e-03
+  (D) envelope only [USED -> dAlpha]       = 2.3357073564e-03
+========================================================================
+
+
+-----Point Interieur termine
+
+---INCDATA()
+		Travail des charges permanentes =   0.0000000E+00 
+		Deformation VM Volume           =   0.0000000E+00 
+		Deformation VM Spherique        =   0.0000000E+00 
+		Deformation VM Face Tangentiel  =   0.0000000E+00 
+		Deformation VM Saut Normal      =   0.0000000E+00 
+		Deformation Tresca Tangentielle =   0.0000000E+00 
+		Deformation Tresca Normale      =   0.0000000E+00 
+---EcrDataCinem()
+---DEALLOC()
+free()
+...Fin du calcul 
+Ecriture du fichier MED de resultats 
+Eciture du dict med......Fin
+Ecriture fichier med......Fin
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=1787  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=1  nbElem=0  typeProp.level=-1 
+No Elements
+ProcessElements maxDim=1  nbElem=0  typeProp.level=0 
+No Elements
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.004000 seconds 
+entree dans fillRebarCinem
+Nombre edges dans le maillage = 1787
+avant  WriteField(CmnMED_FieldPlasticRebarDisp
+apres  WriteField(CmnMED_FieldPlasticRebarDisp
+avant  WriteField(CmnMED_FieldKineRebarStresses
+apres  WriteField(CmnMED_FieldKineRebarStresses
+Ecriture des meta-resultats 
+Fin de l'ecriture des meta-resultats
+Liberation de memoire 
+Fin de la session de calcul 
+Checking Collision between elements ......Done
+Deleting surfacic meshing session 
+Deleting volumic meshing session 
+Running quadratization in ...
+************************************************************************
+		 Output Mesh 
+ 			 Total of : 3172 points
+			 Total of : 1547 UVs 
+			 Total of : 116 edges
+			 Total of : 646 triangles
+			 Total of : 11 surfaces 
+			 Total of : 1873 tetrahedrons
+			 Total of : 4060 faces
+************************************************************************
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+Writing mesh for cinematic computation...
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=1873  typeProp.level=0 
+ProcessElements in 0.000000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.008000 seconds 
+Writing mesh for static computation...
+Processed splitting Copied CAD Elements in  0.000000 seconds 
+Copied Nodes in  0.000000 seconds 
+Copied Nodes on surfaces in  0.000000 seconds 
+copy Edges in  0.000000 seconds 
+copy triangles in  0.000000 seconds 
+Split tetras in  0.002000 seconds 
+Associate nodes with Uvs in  0.001000 seconds 
+addNodeGroup in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=116  typeProp.level=-2 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=646  typeProp.level=-1 
+ProcessElements in 0.000000 seconds 
+ProcessElements maxDim=3  nbElem=7492  typeProp.level=0 
+ProcessElements in 0.001000 seconds 
+End of ProcessXYZ
+avant processEquivalence
+apres processEquivalence
+apres pushMesh
+fin process
+avant write MMS
+Write MedFileMeshes in 0.006000 seconds 
+Closing model 
+
+FullLorentz : False
+LorentzToSdp : False
+MKLPardiso_params 
+MUMPS_params 
+MyPardiso_params 
+SdpToLorentz : 0
+activated_plasticity : True
+approach : kinematic
+calculate_error : false
+cinematic_params 
+customized_inc : [1]
+max_nbOfDiv : 0
+printIntPointSolutioEvolution : False
+scaling : 1
+sensitivity_analysis : true
+sensitivity_regions : [{"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]}, {"param": "YIELD_STRENGTH", "rebars": ["HA1", "HA2", "HA3", "HA4", "HA5", "HA6", "HA7", "HA8", "HA9", "HA10", "HA11", "HA12", "HA13", "HA14", "HA15", "HA16", "HA17", "HA18", "HA19", "HA20", "HA21", "HA22", "HA23", "HA24"]}]
+static_params 
+tetra_discontinuities : False
+trace_sur_point_integration : False
+welds_throat_limit : True
+write_debug_files : true
+
+Enregistrement des options du calcul 
+Lecture du modele cao: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0.dscad
+Lecture du Maillage: C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed
+Read MESH in file C:\workspace\storage\admin\SF\test_pure_flexion.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+
+************************************************************************
+				Verifying mesh quality
+
+				Writing mesh quality file
+
+*************** MAXIMUM RATIOS : 
+Rapport spheres tetraedres : Ratio1 = 3.3382
+0 tetrahedrons have a ratio1 greater than 4000
+Rapport aretes tetraedres: Ratio2 = 2.67552
+0 tetrahedrons have a ratio2 greater than 100
+Rapport Diametre et arete  = 2.54466
+0 tetrahedrons have a ratio3 greater than 50
+Rapport cercles triangles = 1.67542
+0 triangles have a ratio4 greater than 100
+************************************************************************
+				Getting output mesh		...getting 3172 points
+		...getting 1547 UVs
+		...getting 20 edges
+		...getting 646 triangles
+		...getting 11 surfaces
+		...getting 1873 tetrahedrons
+		...getting 4060 faces
+		...getting boundaries
+		...getting reinforcement bars 
+		...getting materials
+		...getting interface constraints
+[InterfaceConstraints_Parser] no constraints in C:\workspace\storage\admin\SF\test_pure_flexion.ds/interface_constraints.txt (file missing or empty)
+		...      0 interface constraints loaded
+		...getting load cases 
+			Found analysis : Yield_analysis0
+			Boundary0 -- ISU = 4 -- IsMean : 0 -- support : 1  1  1  0  0  0  
+			Boundary1 -- ISU = 10 -- IsMean : 2 -- load : 0.000000  0.000000  -0.740000  -0.000000  -0.000000  -0.000000  
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 1 per-LC decompositions from 'per_lc_load_values'
+  [0] = 'Load_case0'  coeff = 1.0000
+			Found analysis : Yield_analysis0
+			Found analysis : Yield_analysis0
+[Sensitivity] Parsed 0 per-LC decompositions from 'per_lc_dead_load_values'
+		...getting result surfaces 
+			Found analysis : Yield_analysis0
+			No results surfaces were tagged
+		...getting result points 
+			Found analysis : Yield_analysis0
+			No results points were tagged
+		...getting strengthened surfaces 
+			Found analysis : Yield_analysis0
+			No strengthened surfaces were tagged
+		...getting jointed shapes 
+			Found analysis : Yield_analysis0
+			No Jointed shapes were tagged
+		...getting move meshes 
+			Found analysis : Yield_analysis0
+		...setting integration points
+			Calculations will be made with an 4 points integration scheme
+************************************************************************
+
+Allocation des tableaux de sorties du calcul 
+Debut du calcul...
+DEBUT DE RUN.c
+		Integration a 4 points 
+		Le calcul BA et/ou Mixte est disponible uniquement sans les discontinuites entre les tetraedres et sans les NLGEOM
+		Calcul sans les discontinuites entre les tetraedres
+DoPLCinem()
+---ALLOC()
+---INPUTDATA()
+---DoRebars()
+-----Nombre Ddls associes aux aciers = 0
+---InitPLCinem_NoDisc()
+  [BEDDINGS] ISU=4: 49 nodes total, 25 blocked (NSUNO==1), 24 skipped (NSUNO>1), d=3
+		Nombres de cones VM acier volumiques = 0 
+		Nombres de cones de rebar = 1787 
+		Nombres de cones b�ton volumiques = 14984 
+		Nombres de cones de contact = 0 
+---InitFextCinem()
+-----ISU_MEAN: 1
+-----ISU: 11
+-----NREBAR: 24
+-----avant ArrayWithoutDoublon_long NDDL_Fext= 6
+-----apres ArrayWithoutDoublon_long NDDL_Fext= 6
+---InitPermFextCinem()
+---Assembling 1 per-LC FEXT vectors
+---MatMosPLCinem_NoDisc()
+Matrices des contraintes
+FEXT
+CINEM
+CONES
+ORDDL_ConVal_int
+---BuildSensOps()
+[Sensitivity] Region 0: COMPRESSIVE_STRENGTH:Block1, theta=4.451267e+01, type=0
+[Sensitivity] Region 1: YIELD_STRENGTH:HA1,HA2,HA3,HA4,HA5,HA6,HA7,HA8,HA9,HA10,HA11,HA12,HA13,HA14,HA15,HA16,HA17,HA18,HA19,HA20,HA21,HA22,HA23,HA24, theta=4.985923e+02, type=0
+---Init_PtInt()
+InitSysLin
+Check de A
+Check de H
+Check cones
+InitSolver
+Boucle FillGvarDvi0
+[TIMING][SOCP-Init] FillGvarDvi0  t=0.000s (NGvars=14984)
+Boucle FillGlamDvi0Dli0a
+[TIMING][SOCP-Init] FillGlamDvi0Dli0  t=0.004s (NGlams=7492)
+Boucle FillNnz Gvar
+[TIMING][SOCP-Init] FillNnz_Gvar  t=0.000s
+Boucle NnziL
+[TIMING][SOCP-Init] NnziL  t=0.000s (Nca0=154)
+Boucle Glam NnziL
+[TIMING][SOCP-Init] Glam_NnziL  t=0.000s
+Boucle alloc ConParL
+[TIMING][SOCP-Init] alloc_ConParL  t=0.000s
+Boucle FillNnzConPar
+[TIMING][SOCP-Init] FillNnzConPar_Gvar  t=0.001s
+Boucle ConParL 1 
+[TIMING][SOCP-Init] ConParL_1  t=0.000s
+Boucle ConParL 2 
+[TIMING][SOCP-Init] ConParL_2  t=0.000s
+Boucle quicksort_index_int 
+[TIMING][SOCP-Init] quicksort_ConParL  t=0.000s (Nnz_L=1489)
+Boucle FillNnz cones 
+[TIMING][SOCP-Init] FillNnz_cones  t=0.002s (Ncones=16771)
+Boucle FillNnz Glam 
+[TIMING][SOCP-Init] FillNnz_Glam  t=0.007s
+Boucle ConParV alloc 
+[TIMING][SOCP-Init] ConParV_alloc  t=0.010s (Nva0=9522)
+Boucle FillNnzConPar Cone
+[TIMING][SOCP-Init] FillNnzConPar_Cone  t=0.003s
+Boucle FillNnzConPar Glam
+[TIMING][SOCP-Init] FillNnzConPar_Glam  t=0.010s
+quicksort_index_int ConParV
+[TIMING][SOCP-Init] quicksort_ConParV  t=0.039s (Nnz_total=369214)
+[NNZ] SysA total NNZ = 369214 (= upper triangle, after dedup) on n=9676 → density=7.89e-03
+[TIMING][SOCP-Init] assemble_partie_haute  t=0.000s
+[TIMING][SOCP-Init] assemble_partie_basse  t=0.003s
+[TIMING][SOCP-Init] norms_total  t=0.008s
+Check system total
+PrintCarac
+-----Nombre Ddls = 99426
+-----Nombre Ddls final = 9522
+-----Nombre ContEg = 45106
+-----Nombre ContEg final = 154
+-----Nombre total de cones = 16771
+-----Nombre de cones de Lorentz = 1787
+-----Nombre de cones SDP = 14984
+-----Nombre Groupes de variables = 14984
+-----Nombre Groupes de mult. de lag. = 7492
+-----Taille System Lineaire final = 9676
+-----Nombre de non-zeros = 369214
+-----Solver used = MUMPS
+-----Omp num threads max = 64
+
+InitPtInt
+
+ It |  Mode  |  Alpha0 | Gamma |     Mu    |  Alpha |     pObj    |     dObj    |    ReP    |  RePiTot  |    ReD    | Type |    ReG    |   Time   
+---------------------------------------------------------------------------------------------------------------------------------------------------
+  0 |  init  |  1.0000 | 0.000 |  0.00E+00 | 1.0000 | +7.6005E+02 | +0.0000E+00 |  1.00E+00 |  1.00E-01 |  1.00E+00 |   1  |  1.00E+00 |     0.30 
+  1 | normal |  0.6984 | 0.028 |  2.83E-02 | 0.9487 | +3.4459E+02 | +3.5986E-01 |  5.13E-02 |  5.13E-03 |  5.13E-02 |   1  |  5.85E-02 |     1.71 
+  2 | normal |  0.9684 | 0.000 |  8.96E-06 | 0.9283 | +6.4594E+01 | +2.3221E-01 |  3.67E-03 |  3.67E-04 |  3.67E-03 |   1  |  4.89E-03 |     2.73 
+  3 | normal |  0.6960 | 0.048 |  2.33E-04 | 0.7614 | +3.1883E+01 | +5.2600E-01 |  8.77E-04 |  8.77E-05 |  8.77E-04 |   1  |  1.36E-03 |     3.35 
+  4 | normal |  0.6864 | 0.059 |  8.01E-05 | 0.7457 | +1.3569E+01 | +9.7970E-01 |  2.23E-04 |  2.23E-05 |  2.23E-04 |   1  |  3.94E-04 |     5.30 
+  5 | normal |  0.5393 | 0.119 |  4.69E-05 | 0.6511 | +6.7996E+00 | +1.2470E+00 |  7.78E-05 |  7.78E-06 |  7.78E-05 |   1  |  1.55E-04 |     7.07 
+  6 | normal |  0.3850 | 0.242 |  3.75E-05 | 0.4685 | +4.8873E+00 | +1.3426E+00 |  4.14E-05 |  4.14E-06 |  4.14E-05 |   1  |  9.55E-05 |     8.71 
+  7 | normal |  0.3898 | 0.234 |  2.23E-05 | 0.4317 | +3.7423E+00 | +1.3846E+00 |  2.35E-05 |  2.35E-06 |  2.35E-05 |   1  |  6.20E-05 |    10.16 
+  8 | normal |  0.4247 | 0.196 |  1.22E-05 | 0.6691 | +2.5277E+00 | +1.4275E+00 |  7.78E-06 |  7.78E-07 |  7.78E-06 |   1  |  2.74E-05 |    11.10 
+  9 | normal |  0.3876 | 0.237 |  6.49E-06 | 0.5551 | +2.0972E+00 | +1.4466E+00 |  3.46E-06 |  3.46E-07 |  3.46E-06 |   1  |  1.54E-05 |    13.39 
+ 10 | normal |  0.3272 | 0.311 |  4.79E-06 | 0.5613 | +1.8625E+00 | +1.4566E+00 |  1.52E-06 |  1.52E-07 |  1.52E-06 |   1  |  9.20E-06 |    14.65 
+ 11 | normal |  0.3688 | 0.257 |  2.37E-06 | 0.6072 | +1.6896E+00 | +1.4646E+00 |  5.96E-07 |  5.96E-08 |  5.96E-07 |   1  |  4.95E-06 |    16.42 
+ 12 | normal |  0.4383 | 0.181 |  8.97E-07 | 0.5834 | +1.5872E+00 | +1.4694E+00 |  2.48E-07 |  2.48E-08 |  2.48E-07 |   1  |  2.56E-06 |    18.06 
+ 13 | normal |  0.0552 | 0.843 |  2.16E-06 | 0.1325 | +1.5848E+00 | +1.4693E+00 |  2.15E-07 |  2.15E-08 |  2.15E-07 |   1  |  2.50E-06 |    19.78 
+ 14 | normal |  0.4409 | 0.176 |  4.42E-07 | 0.6676 | +1.5242E+00 | +1.4722E+00 |  7.16E-08 |  7.16E-09 |  7.16E-08 |   1  |  1.12E-06 |    21.62 
+ 15 | normal |  0.2764 | 0.379 |  4.25E-07 | 0.5119 | +1.5086E+00 | +1.4730E+00 |  3.50E-08 |  3.50E-09 |  3.50E-08 |   1  |  7.63E-07 |    22.46 
+ 16 | normal |  0.3039 | 0.338 |  2.57E-07 | 0.5717 | +1.4959E+00 | +1.4738E+00 |  1.50E-08 |  1.50E-09 |  1.50E-08 |   1  |  4.73E-07 |    23.53 
+ 17 | normal |  0.3011 | 0.341 |  1.62E-07 | 0.5857 | +1.4879E+00 | +1.4743E+00 |  6.20E-09 |  6.20E-10 |  6.20E-09 |   1  |  2.91E-07 |    25.33 
+ 18 | normal |  0.0870 | 0.761 |  2.21E-07 | 0.2789 | +1.4871E+00 | +1.4744E+00 |  4.47E-09 |  4.47E-10 |  4.47E-09 |   1  |  2.71E-07 |    26.53 
+ 19 | normal |  0.3259 | 0.306 |  8.31E-08 | 0.7218 | +1.4812E+00 | +1.4749E+00 |  1.24E-09 |  1.24E-10 |  1.24E-09 |   1  |  1.35E-07 |    28.89 
+ 20 | normal |  0.1520 | 0.610 |  8.25E-08 | 0.5180 | +1.4801E+00 | +1.4750E+00 |  6.00E-10 |  6.00E-11 |  6.00E-10 |   1  |  1.08E-07 |    31.22 
+ 21 | normal |  0.3067 | 0.333 |  3.60E-08 | 0.3948 | +1.4789E+00 | +1.4752E+00 |  3.63E-10 |  3.63E-11 |  3.63E-10 |   1  |  7.96E-08 |    32.43 
+ 22 | normal |  0.1247 | 0.671 |  5.34E-08 | 0.6805 | +1.4781E+00 | +1.4753E+00 |  1.16E-1

@@ -1,0 +1,4 @@
+[1D] N=20  LOO=1.0381e+00  n_poly=1
+Figure 1D sauvegardee : demo_pck_1d.png
+[2D] N=40  LOO=1.3453e-02  n_poly=8
+Figure 2D sauvegardee : demo_pck_2d.png
