@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'
+    modele = 'PCKRG'
     do_EFF = True
     n0 = 5
     params_names = ['fc','fy']
@@ -1622,6 +1622,7 @@ if __name__ == '__main__':
     """
     DEBUT DE CODE
     """
+
     update_degree(n0)
     event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
     xt_eff = None
