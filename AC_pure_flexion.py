@@ -1202,11 +1202,10 @@ if __name__ == '__main__':
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
             xt_eff.append(np.array(u_opt))
             # --- On reconstruit le modèle ---
-            g_val = g_ot(ot.Point(u_opt))[0]
+            g_val, grad_U, _ = run_HF(np.array(u_opt))
             xt = np.vstack([xt, [np.array(u_opt)]])
             yt = np.vstack([yt, [[g_val]]])
-            grad_ot  = g_ot.gradient(ot.Point(u_opt))
-            grad_val = np.array([[grad_ot[i, 0] for i in range(n_var)]])
+            grad_val = np.array([grad_U])
             all_grad = np.vstack([all_grad, grad_val])
             # --- Upgrade max_degree si assez de points ---
             _degree_avant = max_degree
