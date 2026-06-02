@@ -1,8 +1,0 @@
-LAUNCHER START
-Traceback (most recent call last):
-  File "C:\_workingDir\_SF\test flexion\launcher.py", line 24, in <module>
-    exec(open(r'C:\_workingDir\_SF\test flexion\AC_pure_flexion.py').read(), {'__name__': '__main__'})
-  File "<string>", line 160
-    if modele = None:
-       ^^^^^^^^^^^^^
-SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='?

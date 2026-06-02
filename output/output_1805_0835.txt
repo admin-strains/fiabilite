@@ -1,9 +1,0 @@
-LAUNCHER START
-======================================================================
-CALCUL DE FIABILITE -- FLEXION PURE BETON
-======================================================================
-Traceback (most recent call last):
-  File "C:\_workingDir\_SF\test flexion\launcher.py", line 24, in <module>
-    exec(open(r'C:\_workingDir\_SF\test flexion\AC_pure_flexion.py').read(), {'__name__': '__main__'})
-  File "<string>", line 1284, in <module>
-TypeError: init_FORM() takes 4 positional arguments but 10 were given

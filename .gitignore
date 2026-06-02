@@ -1,0 +1,24 @@
+# Sous-dossiers à ne pas tracker
+(ancien) résultats et comparaison/
+.vs/
+2026_1205 résultats et comparaisons/
+2026_3004 résultats et comparaisons/
+__pycache__/
+ac_copies/
+archive claude code/
+archive/
+claude's plans/
+claude_fix/
+debug_resultats_comparaison/
+output/
+ressources code/
+ressources pdf/
+resume session a relire/
+version du ac_pure_flexion avant le 27_05/
+visu obtenues/
+visu_ana/
+word de resultat et comparaison/
+
+# Fichiers output à la racine
+output_*.txt
+C：tmpform_out.txt
