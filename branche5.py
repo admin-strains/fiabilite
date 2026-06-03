@@ -1097,10 +1097,7 @@ def kernel_deriv_factory(family, der, der_prime):
             delta  = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]      # (n1, n2, M)
             a      = np.sqrt(5) * np.abs(delta) / theta                # (n1, n2, M)
 
-            # a > 500 : (1+a+a²/3)·exp(-a) → 0 (∞·0), limite exacte = 0
-            K_uni  = np.where(a < 500.0,
-                              (1 + a + a**2 / 3) * np.exp(-a),
-                              0.0)                                      # (n1, n2, M)
+            K_uni  = (1 + a + a**2 / 3) * np.exp(-a)                  # (n1, n2, M)
             K_excl = _prod_excl(K_uni)                                 # (n1, n2, M)
 
             if der is None and der_prime is None:
@@ -1120,11 +1117,7 @@ def kernel_deriv_factory(family, der, der_prime):
                         * np.exp(-a[:, :, i]) * K_excl[:, :, i])
             else:
                 i, j = der, der_prime
-                K_excl_ij = np.where(
-                    np.abs(K_uni[:, :, j]) > 1e-300,
-                    K_excl[:, :, i] / K_uni[:, :, j],
-                    0.0
-                )
+                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
                 return (-(25 / (9 * theta[i]**2 * theta[j]**2))
                         * delta[:, :, i] * delta[:, :, j]
                         * (1 + a[:, :, i]) * (1 + a[:, :, j])
@@ -1182,10 +1175,7 @@ def kernel_second_deriv_factory(family, der1, der2):
 
             delta  = X1[:, np.newaxis, :] - X2[np.newaxis, :, :]  # (n1, n2, M)
             a      = np.sqrt(5) * np.abs(delta) / theta            # (n1, n2, M)
-            # a > 500 : (1+a+a²/3)·exp(-a) → 0 (∞·0), limite exacte = 0
-            K_uni  = np.where(a < 500.0,
-                              (1 + a + a**2 / 3) * np.exp(-a),
-                              0.0)                                  # (n1, n2, M)
+            K_uni  = (1 + a + a**2 / 3) * np.exp(-a)              # (n1, n2, M)
             K_excl = _prod_excl(K_uni)                             # (n1, n2, M)
 
             if der1 == der2:
@@ -1197,11 +1187,7 @@ def kernel_second_deriv_factory(family, der1, der2):
             else:
                 i, j = der1, der2
                 # d²k/(dx*_i dx*_j) = (25/(9*ti²*tj²)) * di*dj*(1+ai)*(1+aj)*exp(-(ai+aj))*K_excl_ij
-                K_excl_ij = np.where(
-                    np.abs(K_uni[:, :, j]) > 1e-300,
-                    K_excl[:, :, i] / K_uni[:, :, j],
-                    0.0
-                )
+                K_excl_ij = K_excl[:, :, i] / K_uni[:, :, j]
                 return ((25 / (9 * theta[i]**2 * theta[j]**2))
                         * delta[:, :, i] * delta[:, :, j]
                         * (1 + a[:, :, i]) * (1 + a[:, :, j])
