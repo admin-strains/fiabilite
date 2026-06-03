@@ -106,7 +106,7 @@ if __name__ == '__main__':
     do_warmstart = False
 
     tol_FORM = 1.0                                    # précision acceptée par FORM
-    tol_all_modes = 0.01                              #comparaison entre deux modes   
+    tol_all_modes = 2.0                               #comparaison entre deux modes
     tol_warmstart = 0.2                          # nécessité de faire le warm_start
 
     # --------------------------------------------------------------------------- #
@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = 1e-3                                            # critere d'arret EFF
+    tol_EFF = 8e-3                                            # critere d'arret EFF
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
     n_max_EFF = 1000

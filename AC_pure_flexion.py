@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'PCKRG'
+    modele = 'GEPCK'
     do_EFF = True
     n0 = 5
     params_names = ['fc','fy']
@@ -1202,10 +1202,11 @@ if __name__ == '__main__':
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
             xt_eff.append(np.array(u_opt))
             # --- On reconstruit le modèle ---
-            g_val, grad_U, _ = run_HF(np.array(u_opt))
+            g_val = g_ot(ot.Point(u_opt))[0]
             xt = np.vstack([xt, [np.array(u_opt)]])
             yt = np.vstack([yt, [[g_val]]])
-            grad_val = np.array([grad_U])
+            grad_ot  = g_ot.gradient(ot.Point(u_opt))
+            grad_val = np.array([[grad_ot[i, 0] for i in range(n_var)]])
             all_grad = np.vstack([all_grad, grad_val])
             # --- Upgrade max_degree si assez de points ---
             _degree_avant = max_degree
@@ -1621,7 +1622,6 @@ if __name__ == '__main__':
     """
     DEBUT DE CODE
     """
-
     update_degree(n0)
     event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
     xt_eff = None
