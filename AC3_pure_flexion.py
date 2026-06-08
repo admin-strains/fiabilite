@@ -928,6 +928,35 @@ if __name__ == '__main__':
             G = predict_gradient_gepck(self.fm, u_np)   # (1, Mred)
             return [[float(G[0, i])] for i in range(self.fm['Mred'])]
 
+    # --------------------------------------------------------------------------- #
+    # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
+
+    class BoundSurrogateFunction(ot.OpenTURNSPythonFunction):
+        """
+        g_bound(u) = g_ot(u) + sign * 2 * sigma_func(u)
+        sign = +1  →  borne supérieure  g_sup = μ̂g + 2σ̂g
+        sign = -1  →  borne inférieure  g_inf = μ̂g − 2σ̂g
+
+        Wrappeur externe : ne modifie aucune classe existante.
+        Compatible avec tous les modèles (GEPCK, KRG, GEK, PCKRG).
+        Pas de _gradient défini → OT utilise différences finies si FORM est appelé.
+        """
+        def __init__(self, g_ot, sigma_func, sign):
+            super().__init__(n_var, 1)
+            self._g_ot       = g_ot
+            self._sigma_func = sigma_func
+            self._sign       = sign   # +1 ou -1
+
+        def _exec(self, u):
+            u_pt  = ot.Point(list(u))
+            mu    = self._g_ot(u_pt)[0]
+            sigma = self._sigma_func(u_pt)
+            return [mu + self._sign * 2.0 * sigma]
+
+    # Usage :
+    #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
+    #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
+
     # def eval_PCE():
     #     return do_pce
     # --------------------------------------------------------------------------- #
@@ -1260,7 +1289,7 @@ if __name__ == '__main__':
                 r_i = form_i.getResult()
             except Exception as e:
                 print(f"  [{label}] FORM echoue ({type(e).__name__})", flush=True)
-                return
+                return None
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
             res_IS  = run_IS([r_i], ev_i)
@@ -1269,9 +1298,21 @@ if __name__ == '__main__':
             cov_v   = res_IS.getCoefficientOfVariation()
             print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
                   f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
+            return beta_IS
+
+        def _three_form_is(g_ot_i, sigma_func_i, label):
+            """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio."""
+            g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
+            g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
+            b_mid = _form_is_iter(g_ot_i, f"{label} μ")
+            b_sup = _form_is_iter(g_sup_i, f"{label} sup")
+            b_inf = _form_is_iter(g_inf_i, f"{label} inf")
+            if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
+                ratio = abs(b_sup - b_inf) / abs(b_mid)
+                print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
-        _form_is_iter(g_ot, f"N={len(xt)} initial")
+        _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
 
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
@@ -1309,7 +1350,7 @@ if __name__ == '__main__':
 
             # --- FORM+IS sur le surrogate mis à jour ---
             iter_count += 1
-            _form_is_iter(g_ot, f"N={len(xt)} EFF iter {iter_count}")
+            _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
 
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
