@@ -110,6 +110,12 @@ if __name__ == '__main__':
     tol_warmstart = 0.2                          # nécessité de faire le warm_start
 
     # --------------------------------------------------------------------------- #
+    # PARAMETRES IS                                                               #
+    do_IS   = True
+    n_IS    = 10000                                       # taille échantillon IS
+    cov_IS  = 0.05                                             # critère d'arrêt COV
+
+    # --------------------------------------------------------------------------- #
     # PARAMETRES MESH                                                             #
     global_size     = 0.05   # global_physical_size (0.05 = rapide FORM, 0.007 = très fin)
     geo_min_approx  = 4      # geometric_approximation_min (4 = fin, 35 = grossier)
@@ -1695,6 +1701,49 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.show()
 
+    # --------------------------------------------------------------------------- #
+    # FONCTION IS POST-FORM                                                       #
+    def run_IS(modes, event):
+        """
+        Importance Sampling post-FORM sur le surrogate.
+        Distribution instrumentale : mixture de N(u*_i) pondérée par les Pf_FORM_i.
+        Mono-modal : N simple centré sur u*.
+        Retourne un ProbabilitySimulationResult.
+        """
+        if len(modes) == 1:
+            g_imp = ot.Normal(n_var)
+            g_imp.setMu(modes[0].getStandardSpaceDesignPoint())
+            importance_dist = g_imp
+        else:
+            gaussians  = []
+            pf_weights = []
+            for m in modes:
+                g_i = ot.Normal(n_var)
+                g_i.setMu(m.getStandardSpaceDesignPoint())
+                gaussians.append(g_i)
+                pf_weights.append(m.getEventProbability())
+            importance_dist = ot.Mixture(gaussians, pf_weights)
+
+        experiment = ot.ImportanceSamplingExperiment(importance_dist, n_IS)
+        std_event  = ot.StandardEvent(event)
+        algo = ot.ProbabilitySimulationAlgorithm(std_event, experiment)
+        algo.setMaximumCoefficientOfVariation(cov_IS)
+        algo.setMaximumOuterSampling(n_IS)
+        algo.run()
+        return algo.getResult()
+
+    def print_results_IS(result_IS):
+        pf   = result_IS.getProbabilityEstimate()
+        cov  = result_IS.getCoefficientOfVariation()
+        ci   = result_IS.getConfidenceLength(0.95)
+        beta = float(-ot.Normal().computeQuantile(pf)[0])
+        print(f"=== Importance Sampling ===", flush=True)
+        print(f"  Pf_IS   = {pf:.4e}", flush=True)
+        print(f"  beta_IS = {beta:.4f}", flush=True)
+        print(f"  COV     = {cov:.4f}", flush=True)
+        print(f"  IC 95%  = [{pf - ci/2:.4e}, {pf + ci/2:.4e}]", flush=True)
+        print(f"  N_IS    = {result_IS.getOuterSampling()}", flush=True)
+
     """
     DEBUT DE CODE
     """
@@ -1756,6 +1805,9 @@ if __name__ == '__main__':
             print_results(modes[1], g_ot)
             print('Les résultats du mode 1 sont : ')
         print_results(best_result, g_ot)
+        if do_IS and modes:
+            result_IS = run_IS(modes, event)
+            print_results_IS(result_IS)
         print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
 
     """
