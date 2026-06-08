@@ -130,6 +130,8 @@ if __name__ == '__main__':
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 8e-3                                            # critere d'arret EFF
+    tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
+    EFF_criteria = 'BB'         # critere d'arret EFF : 'BB' | 'BS' | 'both'
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
     n_max_EFF = 1000
@@ -1301,7 +1303,8 @@ if __name__ == '__main__':
             return beta_IS
 
         def _three_form_is(g_ot_i, sigma_func_i, label):
-            """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio."""
+            """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
+            Retourne le ratio si calculable, None sinon."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
             b_mid = _form_is_iter(g_ot_i, f"{label} μ")
@@ -1310,6 +1313,8 @@ if __name__ == '__main__':
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
                 ratio = abs(b_sup - b_inf) / abs(b_mid)
                 print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
+                return ratio
+            return None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
         _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
@@ -1331,7 +1336,12 @@ if __name__ == '__main__':
         print(f"  EFF initial : EFF(u_opt)={f(u_opt)[0]:.6f}, tol={tol_EFF}", flush=True)
 
         iter_count = 0
-        while abs(f(u_opt)[0]) > tol_EFF:
+        count_valid_BB = 0
+        if EFF_criteria == 'BB':
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
+        else:
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
+        while _cond():
             _sigG = sigma_func(u_opt)
             _muG  = g_ot(ot.Point(u_opt))[0]
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
@@ -1348,9 +1358,14 @@ if __name__ == '__main__':
             degree_upgraded = (max_degree != _degree_avant)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
-            # --- FORM+IS sur le surrogate mis à jour ---
-            iter_count += 1
-            _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
+            # --- FORM+IS sur le surrogate mis à jour (BB uniquement) ---
+            if EFF_criteria == 'BB':
+                iter_count += 1
+                _ratio = _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
+                if _ratio is not None and _ratio < tol_BB:
+                    count_valid_BB += 1
+                else:
+                    count_valid_BB = 0
 
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
@@ -1389,7 +1404,10 @@ if __name__ == '__main__':
             print(f"    EFF = {term1+term2+term3+term4:.8e}", flush=True)
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
-        print(f"  EFF converge : EFF(u_opt)={f(u_opt)[0]:.4f} <= {tol_EFF} ({len(xt_eff)} point(s) ajoutes)", flush=True)
+        _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
+        _exit_bb  = count_valid_BB >= 3
+        _reason   = "EFF" if _exit_eff else "BB (3 iter valides)"
+        print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}  count_valid_BB={count_valid_BB}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
