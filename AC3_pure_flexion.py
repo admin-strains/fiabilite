@@ -131,7 +131,8 @@ if __name__ == '__main__':
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 8e-3                                            # critere d'arret EFF
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
-    EFF_criteria = 'BB'         # critere d'arret EFF : 'BB' | 'BS' | 'both'
+    tol_BS       = 0.005        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
+    EFF_criteria = 'BS'         # critere d'arret EFF : 'BB' | 'BS' | 'both'
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
     n_max_EFF = 1000
@@ -1317,7 +1318,12 @@ if __name__ == '__main__':
             return None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
-        _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
+        count_valid_BB = 0
+        count_valid_BS = 0
+        if EFF_criteria == 'BB':
+            _ratio_init = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
+            if _ratio_init is not None and _ratio_init < tol_BB:
+                count_valid_BB = 1
 
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
@@ -1336,11 +1342,16 @@ if __name__ == '__main__':
         print(f"  EFF initial : EFF(u_opt)={f(u_opt)[0]:.6f}, tol={tol_EFF}", flush=True)
 
         iter_count = 0
-        count_valid_BB = 0
         if EFF_criteria == 'BB':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
+        elif EFF_criteria == 'BS':
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
+
+        _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
+        list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
+
         while _cond():
             _sigG = sigma_func(u_opt)
             _muG  = g_ot(ot.Point(u_opt))[0]
@@ -1366,6 +1377,21 @@ if __name__ == '__main__':
                     count_valid_BB += 1
                 else:
                     count_valid_BB = 0
+
+            # --- Suivi convergence beta_IS ---
+            _b_mid = _form_is_iter(g_ot, f"N={len(xt)} μ conv")
+            if EFF_criteria == 'BS':
+                if _b_mid is not None and list_beta_IS and _b_mid != 0:
+                    _ratio_conv = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
+                    print(f"  [N={len(xt)}] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_conv:.4f}", flush=True)
+                    if _ratio_conv < tol_BS:
+                        count_valid_BS += 1
+                    else:
+                        count_valid_BS = 0
+                else:
+                    count_valid_BS = 0
+            if _b_mid is not None:
+                list_beta_IS.append(_b_mid)
 
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
@@ -1405,9 +1431,19 @@ if __name__ == '__main__':
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
         _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb  = count_valid_BB >= 3
-        _reason   = "EFF" if _exit_eff else "BB (3 iter valides)"
-        print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}  count_valid_BB={count_valid_BB}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
+        _exit_bb  = count_valid_BB >= 3 and EFF_criteria == 'BB'
+        _exit_bs  = count_valid_BS >= 3 and EFF_criteria == 'BS'
+        if _exit_eff:
+            _reason = "EFF"
+        elif _exit_bb:
+            _reason = "BB (3 iter valides)"
+        elif _exit_bs:
+            _reason = "BS (3 iter valides)"
+        else:
+            _reason = "?"
+        print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}"
+              f"  count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}"
+              f"  ({len(xt_eff)} point(s) ajoutes)", flush=True)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
