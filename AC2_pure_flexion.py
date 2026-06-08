@@ -1758,114 +1758,112 @@ if __name__ == '__main__':
         print_results(best_result, g_ot)
         print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
 
-    if do_GEPCK:
-        xt, yt, all_grad = init_surrogate()
-
-        # =========================================================================== #
-        # NOTRE MODELE HF GEPCK (pipeline 5 branches)                                 #
-        # =========================================================================== #
-        _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
-                      {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
-        _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-        _opts      = {'Mode': 'optimal',
-                      'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-
-        _Y_aug = build_Y_aug(yt, all_grad)
-        print(f"=== Notre GEPCK HF (5 branches) N={len(xt)} ===", flush=True)
-        print(f"  Y_aug shape = {_Y_aug.shape}  (attendu {len(xt)*(n_var+1)},)", flush=True)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
-
-        _loo   = _fm['Error'][0]['LOO']
-        _npoly = _fm['NumberOfPoly']
-        _theta = _fm['Kriging'][0]['theta']
-        print(f"  LOO={_loo:.4e}  n_poly={_npoly}  theta={_theta}", flush=True)
-
-        # Prediction sur grille
-        _ng  = 100
-        _u1g = np.linspace(u1_min, u1_max, _ng)
-        _u2g = np.linspace(u2_min, u2_max, _ng)
-        _U1, _U2 = np.meshgrid(_u1g, _u2g)
-        _grid    = np.column_stack([_U1.ravel(), _U2.ravel()])
-
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            _YMu, _YSig = predict_gepck(_fm, _grid, return_var=True)
-
-        _Z_gepck = _YMu[:, 0].reshape(_ng, _ng)
-        _Z_sigma = np.sqrt(np.maximum(_YSig[:, 0], 0)).reshape(_ng, _ng)
-
-        # Figure 2 panneaux
-        _fig, _axes = plt.subplots(1, 2, figsize=(14, 6))
-
-        # Panneau gauche : surface GEPCK
-        _ax = _axes[0]
-        _cf = _ax.contourf(_U1, _U2, _Z_gepck, levels=20, cmap='RdYlGn', alpha=0.65, extend='both')
-        plt.colorbar(_cf, ax=_ax, label='g GEPCK HF')
-        _ax.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
-
-        if print_HF and hf_2d_grid_fixed is not None:
-            _u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            _u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            _U1_hf, _U2_hf = np.meshgrid(_u1_hf, _u2_hf)
-            _Z_hf  = np.array(hf_2d_grid_fixed['Z'])
-            _ax.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
-
-        if print_ana:
-            _calc_a = flexion_claude()
-            _u1_a   = np.linspace(_calc_a.u1_lim_plast, u1_max, n_grid)
-            _u2_a   = np.array([_calc_a.u2p_LS(u) for u in _u1_a])
-            _ax.plot(_u1_a, _u2_a, color='green', linestyle='-.', linewidth=2)
-            _ax.plot([_calc_a.u1_lim_plast]*2,
-                     [_calc_a.u2p_LS(_calc_a.u1_lim_plast), u2_max],
-                     color='green', linestyle='-.', linewidth=2)
-
-        _ax.scatter(xt[:, 0], xt[:, 1], c='black', s=40, zorder=6, label=f'DOE (N={len(xt)})')
-        _scale_q = np.percentile(np.linalg.norm(all_grad, axis=1), 75) + 1e-12
-        _ax.quiver(xt[:, 0], xt[:, 1], all_grad[:, 0], all_grad[:, 1],
-                   color='red', alpha=0.6, scale=_scale_q * 10, width=0.004, label='dg/du')
-
-        _legend_els = [Line2D([0],[0], color='blue', lw=2, label='g=0 GEPCK HF')]
-        if print_HF and hf_2d_grid_fixed is not None:
-            _legend_els.append(Line2D([0],[0], color='red', lw=2, ls='--', label='g=0 HF ref'))
-        if print_ana:
-            _legend_els.append(Line2D([0],[0], color='green', lw=2, ls='-.', label='g=0 ana'))
-        _handles, _ = _ax.get_legend_handles_labels()
-        _ax.legend(handles=_handles + _legend_els, fontsize=8, loc='upper right')
-        _ax.set_xlabel('u1 (fc)')
-        _ax.set_ylabel('u2 (fy)')
-        _ax.set_xlim(u1_min, u1_max)
-        _ax.set_ylim(u2_min, u2_max)
-        _ax.set_title(f'Notre GEPCK HF\nN={len(xt)}, LOO={_loo:.2e}, n_poly={_npoly}')
-        _ax.grid(True, alpha=0.25)
-
-        # Panneau droit : incertitude
-        _ax2 = _axes[1]
-        _cf2 = _ax2.contourf(_U1, _U2, _Z_sigma, levels=20, cmap='Blues')
-        plt.colorbar(_cf2, ax=_ax2, label='sigma GEPCK HF')
-        _ax2.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
-        if print_HF and hf_2d_grid_fixed is not None:
-            _ax2.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
-        _ax2.scatter(xt[:, 0], xt[:, 1], c='red', s=40, zorder=6, label=f'DOE (N={len(xt)})')
-        _ax2.set_xlabel('u1')
-        _ax2.set_ylabel('u2')
-        _ax2.set_xlim(u1_min, u1_max)
-        _ax2.set_ylim(u2_min, u2_max)
-        _ax2.set_title('Incertitude GEPCK HF (sigma)')
-        _ax2.grid(True, alpha=0.25)
-
-        plt.tight_layout()
-        plt.savefig(r'C:\_workingDir\_SF\test flexion\notre_gepck_hf.png', dpi=150)
-        print(f"Figure sauvee : notre_gepck_hf.png", flush=True)
-        plt.show()
-        
-
-
     """
     DEBUT DANCIEN CODE COMMENTE
     """
+    # if do_GEPCK:
+    #     xt, yt, all_grad = init_surrogate()
+
+    #     # =========================================================================== #
+    #     # NOTRE MODELE HF GEPCK (pipeline 5 branches)                                 #
+    #     # =========================================================================== #
+    #     _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
+    #                   {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
+    #     _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
+    #     _opts      = {'Mode': 'optimal',
+    #                   'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+
+    #     _Y_aug = build_Y_aug(yt, all_grad)
+    #     print(f"=== Notre GEPCK HF (5 branches) N={len(xt)} ===", flush=True)
+    #     print(f"  Y_aug shape = {_Y_aug.shape}  (attendu {len(xt)*(n_var+1)},)", flush=True)
+
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore')
+    #         _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
+
+    #     _loo   = _fm['Error'][0]['LOO']
+    #     _npoly = _fm['NumberOfPoly']
+    #     _theta = _fm['Kriging'][0]['theta']
+    #     print(f"  LOO={_loo:.4e}  n_poly={_npoly}  theta={_theta}", flush=True)
+
+    #     # Prediction sur grille
+    #     _ng  = 100
+    #     _u1g = np.linspace(u1_min, u1_max, _ng)
+    #     _u2g = np.linspace(u2_min, u2_max, _ng)
+    #     _U1, _U2 = np.meshgrid(_u1g, _u2g)
+    #     _grid    = np.column_stack([_U1.ravel(), _U2.ravel()])
+
+    #     with warnings.catch_warnings():
+    #         warnings.simplefilter('ignore')
+    #         _YMu, _YSig = predict_gepck(_fm, _grid, return_var=True)
+
+    #     _Z_gepck = _YMu[:, 0].reshape(_ng, _ng)
+    #     _Z_sigma = np.sqrt(np.maximum(_YSig[:, 0], 0)).reshape(_ng, _ng)
+
+    #     # Figure 2 panneaux
+    #     _fig, _axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    #     # Panneau gauche : surface GEPCK
+    #     _ax = _axes[0]
+    #     _cf = _ax.contourf(_U1, _U2, _Z_gepck, levels=20, cmap='RdYlGn', alpha=0.65, extend='both')
+    #     plt.colorbar(_cf, ax=_ax, label='g GEPCK HF')
+    #     _ax.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
+
+    #     if print_HF and hf_2d_grid_fixed is not None:
+    #         _u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+    #         _u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+    #         _U1_hf, _U2_hf = np.meshgrid(_u1_hf, _u2_hf)
+    #         _Z_hf  = np.array(hf_2d_grid_fixed['Z'])
+    #         _ax.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
+
+    #     if print_ana:
+    #         _calc_a = flexion_claude()
+    #         _u1_a   = np.linspace(_calc_a.u1_lim_plast, u1_max, n_grid)
+    #         _u2_a   = np.array([_calc_a.u2p_LS(u) for u in _u1_a])
+    #         _ax.plot(_u1_a, _u2_a, color='green', linestyle='-.', linewidth=2)
+    #         _ax.plot([_calc_a.u1_lim_plast]*2,
+    #                  [_calc_a.u2p_LS(_calc_a.u1_lim_plast), u2_max],
+    #                  color='green', linestyle='-.', linewidth=2)
+
+    #     _ax.scatter(xt[:, 0], xt[:, 1], c='black', s=40, zorder=6, label=f'DOE (N={len(xt)})')
+    #     _scale_q = np.percentile(np.linalg.norm(all_grad, axis=1), 75) + 1e-12
+    #     _ax.quiver(xt[:, 0], xt[:, 1], all_grad[:, 0], all_grad[:, 1],
+    #                color='red', alpha=0.6, scale=_scale_q * 10, width=0.004, label='dg/du')
+
+    #     _legend_els = [Line2D([0],[0], color='blue', lw=2, label='g=0 GEPCK HF')]
+    #     if print_HF and hf_2d_grid_fixed is not None:
+    #         _legend_els.append(Line2D([0],[0], color='red', lw=2, ls='--', label='g=0 HF ref'))
+    #     if print_ana:
+    #         _legend_els.append(Line2D([0],[0], color='green', lw=2, ls='-.', label='g=0 ana'))
+    #     _handles, _ = _ax.get_legend_handles_labels()
+    #     _ax.legend(handles=_handles + _legend_els, fontsize=8, loc='upper right')
+    #     _ax.set_xlabel('u1 (fc)')
+    #     _ax.set_ylabel('u2 (fy)')
+    #     _ax.set_xlim(u1_min, u1_max)
+    #     _ax.set_ylim(u2_min, u2_max)
+    #     _ax.set_title(f'Notre GEPCK HF\nN={len(xt)}, LOO={_loo:.2e}, n_poly={_npoly}')
+    #     _ax.grid(True, alpha=0.25)
+
+    #     # Panneau droit : incertitude
+    #     _ax2 = _axes[1]
+    #     _cf2 = _ax2.contourf(_U1, _U2, _Z_sigma, levels=20, cmap='Blues')
+    #     plt.colorbar(_cf2, ax=_ax2, label='sigma GEPCK HF')
+    #     _ax2.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
+    #     if print_HF and hf_2d_grid_fixed is not None:
+    #         _ax2.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
+    #     _ax2.scatter(xt[:, 0], xt[:, 1], c='red', s=40, zorder=6, label=f'DOE (N={len(xt)})')
+    #     _ax2.set_xlabel('u1')
+    #     _ax2.set_ylabel('u2')
+    #     _ax2.set_xlim(u1_min, u1_max)
+    #     _ax2.set_ylim(u2_min, u2_max)
+    #     _ax2.set_title('Incertitude GEPCK HF (sigma)')
+    #     _ax2.grid(True, alpha=0.25)
+
+    #     plt.tight_layout()
+    #     plt.savefig(r'C:\_workingDir\_SF\test flexion\notre_gepck_hf.png', dpi=150)
+    #     print(f"Figure sauvee : notre_gepck_hf.png", flush=True)
+    #     plt.show()
+    
     # --------------------------------------------------------------------------- #
     # DEBUT DE CODE                                                               #
     # --------------------------------------------------------------------------- #
