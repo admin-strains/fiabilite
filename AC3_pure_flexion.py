@@ -1318,8 +1318,9 @@ if __name__ == '__main__':
             return None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
-        count_valid_BB = 0
-        count_valid_BS = 0
+        count_valid_BB   = 0
+        count_valid_BS   = 0
+        count_valid_both = 0
         if EFF_criteria == 'BB':
             _ratio_init = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
             if _ratio_init is not None and _ratio_init < tol_BB:
@@ -1346,6 +1347,8 @@ if __name__ == '__main__':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
         elif EFF_criteria == 'BS':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
+        elif EFF_criteria == 'both':
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
 
@@ -1390,6 +1393,21 @@ if __name__ == '__main__':
                         count_valid_BS = 0
                 else:
                     count_valid_BS = 0
+            # --- Critere both : BB et BS simultanement ---
+            if EFF_criteria == 'both':
+                iter_count += 1
+                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} both iter {iter_count}")
+                if _b_mid is not None and list_beta_IS and _b_mid != 0:
+                    _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
+                    print(f"  [N={len(xt)} both] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
+                else:
+                    _ratio_bs = None
+                if (_ratio_bb is not None and _ratio_bb < tol_BB and
+                        _ratio_bs is not None and _ratio_bs < tol_BS):
+                    count_valid_both += 1
+                else:
+                    count_valid_both = 0
+
             if _b_mid is not None:
                 list_beta_IS.append(_b_mid)
 
@@ -1431,19 +1449,22 @@ if __name__ == '__main__':
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
         _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb  = count_valid_BB >= 3 and EFF_criteria == 'BB'
-        _exit_bs  = count_valid_BS >= 3 and EFF_criteria == 'BS'
+        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria == 'BB'
+        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria == 'BS'
+        _exit_both = count_valid_both >= 2 and EFF_criteria == 'both'
         if _exit_eff:
             _reason = "EFF"
         elif _exit_bb:
             _reason = "BB (3 iter valides)"
         elif _exit_bs:
             _reason = "BS (3 iter valides)"
+        elif _exit_both:
+            _reason = "both (2 iter valides)"
         else:
             _reason = "?"
         print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}"
               f"  count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}"
-              f"  ({len(xt_eff)} point(s) ajoutes)", flush=True)
+              f"  count_valid_both={count_valid_both}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
