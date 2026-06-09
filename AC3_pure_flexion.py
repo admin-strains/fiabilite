@@ -132,7 +132,7 @@ if __name__ == '__main__':
     tol_EFF = 8e-3                                            # critere d'arret EFF
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.005        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'BS'         # critere d'arret EFF : 'BB' | 'BS' | 'both'
+    EFF_criteria = 'both'       # critere d'arret EFF : 'BB' | 'BS' | 'both'
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
     n_max_EFF = 1000
@@ -1354,6 +1354,8 @@ if __name__ == '__main__':
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
         list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
+        list_ratio_BB = []
+        list_ratio_BS = []
 
         while _cond():
             _sigG = sigma_func(u_opt)
@@ -1380,6 +1382,7 @@ if __name__ == '__main__':
                     count_valid_BB += 1
                 else:
                     count_valid_BB = 0
+                list_ratio_BB.append(_ratio)
 
             # --- Suivi convergence beta_IS ---
             _b_mid = _form_is_iter(g_ot, f"N={len(xt)} μ conv")
@@ -1391,8 +1394,10 @@ if __name__ == '__main__':
                         count_valid_BS += 1
                     else:
                         count_valid_BS = 0
+                    list_ratio_BS.append(_ratio_conv)
                 else:
                     count_valid_BS = 0
+                    list_ratio_BS.append(None)
             # --- Critere both : BB et BS simultanement ---
             if EFF_criteria == 'both':
                 iter_count += 1
@@ -1407,6 +1412,8 @@ if __name__ == '__main__':
                     count_valid_both += 1
                 else:
                     count_valid_both = 0
+                list_ratio_BB.append(_ratio_bb)
+                list_ratio_BS.append(_ratio_bs)
 
             if _b_mid is not None:
                 list_beta_IS.append(_b_mid)
@@ -1465,6 +1472,11 @@ if __name__ == '__main__':
         print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}"
               f"  count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}"
               f"  count_valid_both={count_valid_both}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
+        _fmt = lambda lst: [round(r, 4) if r is not None else None for r in lst]
+        if list_ratio_BB:
+            print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
+        if list_ratio_BS:
+            print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
