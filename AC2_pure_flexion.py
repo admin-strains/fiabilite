@@ -28,10 +28,6 @@ catalogDimensions = getFile("C:\\workspace\\front\\STRAINS\\common\\Catalog\\Cat
 catalogBolt = getFile("C:\\workspace\\front\\STRAINS\\common\\Catalog\\CatalogBolts.json")
 INITCATALOG(catalogTopo, catalogDimensions, catalogBolt)
 
-
-
-
-
 import openturns as ot
 import numpy as np
 import autograd.numpy as anp
@@ -52,7 +48,6 @@ from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 
 def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
-
 
 if __name__ == '__main__':
     modelname = "test_pure_flexion"
@@ -138,7 +133,7 @@ if __name__ == '__main__':
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
     n_max_EFF = 1000
-    print_EFF_progres = False                  # True = prints debug EFF a chaque iter
+    print_EFF_progres = True                  # True = prints debug EFF a chaque iter
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
@@ -1369,6 +1364,9 @@ if __name__ == '__main__':
             xt_eff_arr = np.array(xt_eff)
             ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
+            for i, pt in enumerate(xt_eff_arr):
+                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
         ax.set_xlabel('u1')
         ax.set_ylabel('u2')
@@ -1421,6 +1419,9 @@ if __name__ == '__main__':
             xt_eff_arr = np.array(xt_eff)
             ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
+            for i, pt in enumerate(xt_eff_arr):
+                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
         ax.set_xlabel('u1')
         ax.set_ylabel('u2')
