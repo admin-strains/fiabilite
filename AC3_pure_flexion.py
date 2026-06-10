@@ -126,7 +126,7 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
+    max_of_maxdegree = 1                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     EFF_criteria = 'both'       # critere d'arret EFF : 'BB' | 'BS' | 'both'
     u1_eff_min, u1_eff_max = -10.0, 10.0
     u2_eff_min, u2_eff_max = -10.0, 10.0
-    n_max_EFF = 1000
+    n_max_EFF = 40
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
 
     # --------------------------------------------------------------------------- #
@@ -159,6 +159,9 @@ if __name__ == '__main__':
     print_grad_sp = False
     print_ana_hf_error = False
     print_pts = False
+
+    # --- Label PCE GEPCK (mis a jour par init_g_ot, lu par print_planche_EFF) ---
+    _gepck_pce_label = ""
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -1123,6 +1126,8 @@ if __name__ == '__main__':
                 _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
                 _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
             print(f"  GEPCK PCE termes : {' '.join(_terms)}", flush=True)
+            global _gepck_pce_label
+            _gepck_pce_label = ' '.join(_terms)
             gepck_impl = GEPCKFunction(_fm)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
@@ -1534,7 +1539,8 @@ if __name__ == '__main__':
 
         # --- Figure ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-        fig.suptitle(f'{modele} — N={len(xt)} pts DOE  ({n_added} ajoutes par EFF)', fontsize=12)
+        _pce_line = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
+        fig.suptitle(f'{modele} — N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_pce_line}', fontsize=10)
 
         def _decorate(ax):
             if Z_g is not None:
