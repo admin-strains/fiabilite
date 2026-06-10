@@ -1115,6 +1115,14 @@ if __name__ == '__main__':
                 warnings.simplefilter('ignore')
                 _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
             print(f"  LOO={_fm['Error'][0]['LOO']:.4e}  n_poly={_fm['NumberOfPoly']}  theta={_fm['Kriging'][0]['theta']}", flush=True)
+            _final_idx   = _fm['idxranking'][0][:_fm['NumberOfPoly']]
+            _sel_indices = _fm['AllIndices'][0][np.array(_final_idx), :]
+            _beta_pce    = np.array(_fm['Kriging'][0]['beta']).ravel()
+            _terms = []
+            for _mi, _coef in zip(_sel_indices, _beta_pce):
+                _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
+                _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
+            print(f"  GEPCK PCE termes : {' '.join(_terms)}", flush=True)
             gepck_impl = GEPCKFunction(_fm)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
