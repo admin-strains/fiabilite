@@ -43,6 +43,7 @@ from sklearn.cluster import DBSCAN
 from scipy.stats import norm
 from math import comb
 import warnings
+from datetime import datetime
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 
 
@@ -158,6 +159,10 @@ if __name__ == '__main__':
     print_grad_sp = False
     print_ana_hf_error = False
     print_pts = False
+
+    # --- Sortie PNG EFF ---
+    timestamp   = datetime.now().strftime('%d%m_%H%M')
+    out_dir_eff = r'C:\_workingDir\_SF\test flexion\output\png EFF'
 
     # --- Résultats fixés ---
     hf_3d_grid_fixed = {
@@ -1421,9 +1426,7 @@ if __name__ == '__main__':
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
             if print_EFF_progres or degree_upgraded or _about_to_upgrade:
-                print_visu_EFF(g_ot, sigma_func, xt, xt_eff)
-                print_visu_sigma(g_ot, sigma_func, xt, xt_eff)
-                plt.show()
+                print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
@@ -1481,6 +1484,88 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #
+
+    def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
+        """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
+        Sauvegarde en PNG dans out_dir_eff sans afficher de fenetre."""
+        global hf_2d_grid_fixed
+        n_added = len(xt_eff)
+
+        # --- Grille commune (calculee une seule fois) ---
+        u1 = np.linspace(u1_min, u1_max, n_grid)
+        u2 = np.linspace(u2_min, u2_max, n_grid)
+        U1, U2 = np.meshgrid(u1, u2)
+        grid = np.column_stack([U1.ravel(), U2.ravel()])
+
+        # --- Z_eff et Z_sigma ---
+        eff_func = EFFFunction(g_ot, sigma_func)
+        Z_eff   = np.array([eff_func._exec(pt)[0] for pt in grid]).reshape(n_grid, n_grid)
+        Z_sigma = np.array([sigma_func(pt) for pt in grid]).reshape(n_grid, n_grid)
+
+        # --- Contour g=0 surrogate (une seule evaluation sur grille) ---
+        Z_g = None
+        if g_ot is not None:
+            grid_ot = ot.Sample(grid.tolist())
+            Z_g = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+
+        # --- Contour g=0 HF (depuis cache ou calcul, une seule fois) ---
+        Z_true, U1_hf, U2_hf = None, None, None
+        if print_HF:
+            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
+            if hf_2d_grid_fixed is not None:
+                Z_true = np.array(hf_2d_grid_fixed['Z'])
+            else:
+                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
+                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
+                                                'u2_min': u2_min, 'u2_max': u2_max,
+                                                'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
+                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+
+        # --- Figure ---
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        fig.suptitle(f'{modele} — N={len(xt)} pts DOE  ({n_added} ajoutes par EFF)', fontsize=12)
+
+        def _decorate(ax):
+            if Z_g is not None:
+                ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
+            if Z_true is not None:
+                ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
+            if xt is not None:
+                ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
+                           edgecolors='black', linewidths=0.8, label='DOE')
+            if n_added > 0:
+                xt_eff_arr = np.array(xt_eff)
+                ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
+                           marker='^', label=f'EFF ({n_added} pts)')
+                for i, pt in enumerate(xt_eff_arr):
+                    ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                                xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
+            ax.set_xlabel('u1')
+            ax.set_ylabel('u2')
+            ax.set_xlim(u1_min, u1_max)
+            ax.set_ylim(u2_min, u2_max)
+            ax.legend(loc='best', fontsize=9)
+
+        # --- Ax1 : EFF ---
+        cf1 = ax1.contourf(U1, U2, Z_eff, levels=20, cmap='viridis', alpha=0.85)
+        plt.colorbar(cf1, ax=ax1, label='EFF')
+        ax1.set_title('Critere EFF')
+        _decorate(ax1)
+
+        # --- Ax2 : sigma ---
+        cf2 = ax2.contourf(U1, U2, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
+        plt.colorbar(cf2, ax=ax2, label='sigma (ecart-type surrogate)')
+        ax2.set_title('Ecart-type surrogate (sigma)')
+        _decorate(ax2)
+
+        plt.tight_layout()
+        fname = f'EFF_{n_added}points_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [EFF visu] -> {fname}", flush=True)
 
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
@@ -1935,13 +2020,9 @@ if __name__ == '__main__':
 
         g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
         if do_EFF:
-            print_visu_EFF(g_ot, sigma_func, xt, [])
-            print_visu_sigma(g_ot, sigma_func, xt, [])
-            plt.show()
+            print_planche_EFF(g_ot, sigma_func, xt, [])
             g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
-            print_visu_EFF(g_ot, sigma_func, xt, xt_eff)
-            print_visu_sigma(g_ot, sigma_func, xt, xt_eff)
-            plt.show()
+            print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
         event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
         if event is None:
