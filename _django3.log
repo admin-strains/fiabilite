@@ -1,0 +1,28 @@
+Runtime PATH configured successfully.
+
+DLL locations:
+  Main runtime: C:/workspace/front/STRAINS/rupt/core\bin
+  Meshgems:     C:/workspace/front/STRAINS/rupt/core\bin\meshgems
+  Mosek:        C:/workspace/front/STRAINS/rupt/core\bin\mosek
+
+--------------------------------------------------------
+ STRAINS Django runserver --nothreading
+ stderr (DS_PROF, warnings) -> C:\Users\MOHAMA~1.MOU\AppData\Local\Temp\5\strains_django_stderr.log
+ Ouvrir l'app : http://127.0.0.1:8000
+ Stop : Ctrl-C dans cette fenetre
+--------------------------------------------------------
+
+clean_brep_mesh : Ok
+is_subshape_of_solid_mode = one_is_enough : Ok
+compute_bnd_box = false : Ok
+print_timers = true : Ok 
+WARNING : need to reopen file C:/workspace/storage/admin/Moulin_Blanc/Test_Lshape_NORMAL.ds/lshape.stp
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+
+Server stopped.
+Appuyez sur une touche pour continuer... 

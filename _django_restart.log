@@ -1,0 +1,17 @@
+Runtime PATH configured successfully.
+
+DLL locations:
+  Main runtime: C:/workspace/front/STRAINS/rupt/core\bin
+  Meshgems:     C:/workspace/front/STRAINS/rupt/core\bin\meshgems
+  Mosek:        C:/workspace/front/STRAINS/rupt/core\bin\mosek
+
+--------------------------------------------------------
+ STRAINS Django runserver --nothreading
+ stderr (DS_PROF, warnings) -> C:\Users\MOHAMA~1.MOU\AppData\Local\Temp\5\strains_django_stderr.log
+ Ouvrir l'app : http://127.0.0.1:8000
+ Stop : Ctrl-C dans cette fenetre
+--------------------------------------------------------
+
+
+Server stopped.
+Appuyez sur une touche pour continuer... 
