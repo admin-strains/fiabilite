@@ -12,3 +12,92 @@ DLL locations:
  Stop : Ctrl-C dans cette fenetre
 --------------------------------------------------------
 
+clean_brep_mesh : Ok
+is_subshape_of_solid_mode = one_is_enough : Ok
+compute_bnd_box = false : Ok
+print_timers = true : Ok 
+WARNING : need to reopen file C:/workspace/storage/admin/Moulin_Blanc/Test_Lshape_NORMAL.ds/lshape.stp
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+Performing system checks...
+
+[chat] daemon native spawned (pid=57212)
+[chat] brief projet (re)charge : 472 chars (~118 tokens)
+System check identified no issues (3 silenced).
+June 11, 2026 - 21:25:05
+Django version 5.1.6, using settings 'STRAINS.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+entree dans digitalStructures1
+====================================================
+=====         GET FILE LIST(REQUEST)           =====
+====================================================
+====================================================
+=====         GET FILE LIST(REQUEST)           =====
+====================================================
+====================================================
+=====        OPEN RUPT FILE(REQUEST)           =====
+====================================================
+['C:\\workspace\\storage\\admin\\Moulin_Blanc\\Test_Lshape_NORMAL.ds\\$this.dscad', 'C:\\workspace\\storage\\admin\\Moulin_Blanc\\Test_Lshape_NORMAL.ds\\Yield_analysis0.dscad']
+Yield_analysis0 0
+maxIterations <class 'str'>
+resuTree <class 'str'>
+{"cad":"# L-shape test for NORMAL load on non-convex solid.\n# Geometry : base 4x4x1 + pillar 2x4x2 stacked = L in XZ profile.\n#   f4 = bottom Z=0 (Dirichlet)\n#   f6 = step top Z=1 (X 2-4, Y 0-4), normal +Z (re-entrant horizontal)\n#   f7 = pillar top Z=3 (X 0-2, Y 0-4), normal +Z\n#   f8 = inner pillar side X=2, Z 1-3, normal +X (re-entrant vertical)\n#\n# Polygon at Z=4 spans (0,0)->(4,4) = entire XY footprint. Projected orthogonally\n# onto facet planes, only horizontal facets (f6, f7) get clipped (vertical f8 gets\n# degenerate projection). With NORMAL=-0.009 (compression), each horizontal facet\n# gets force (0,0,-0.009) * outward_normal_Z = (0,0,-0.009) pushing down.\n# This validates the topology-aware outward normal on a non-convex (re-entrant) shape.\n\nEXTERNAL_FILE(\"EF_lshape\", \"C:\/workspace\/storage\/admin\/Moulin_Blanc\/Test_Lshape_NORMAL.ds\/lshape.stp\")\n\nIMPORT('Import0', 'EF_lshape', ('idname', ['solid_1']),\n       MATERIAL_TYPE='CONCRETE', COMPRESSIVE_STRENGTH='20', TENSILE_STRENGTH='3',\n       CRITERION='2', COHESION='10', FRICTION_ANGLE='37',\n       YOUNG_MODULUS='35', POISSON_RATIO='0.2', DENSITY='2.5')\n\nBOUNDARIES(\n    BOUNDARY('Bottom', 'Import0:solid_1:f4', POINT('2.0', '2.0', '0.0'),\n             X=VECTOR('1','0','0'), Y=VECTOR('0','1','0'))\n)\n\n# Polygon AJUSTE a la zone effective (suppression des 0.8 m de bord gauche perdu) :\n#   - On retire la bande x in [0, 0.8] dont le shadow tombait hors solide\n#   - Nouveau polygon : (X=0.8, Z=4.6) -> (X=4, Z=3), meme plan\/slope -0.5 Z par X\n# Decomposition X-bandes (3 surfaces, ZERO perte) :\n#   * X in [0.8, 2.4]: shadow sur pillar top (7.16 m^2 polygon -> 8 m^2 sur Z=3)\n#   * X in [2.4, 3.2]: shadow sur inner side X=2 (3.58 m^2 polygon -> 8 m^2 = full inner side)\n#   * X in [3.2, 4]  : shadow sur step top X[2,3] (3.58 m^2 polygon -> 4 m^2 sur Z=1)\n# A_polygon = sqrt(6.4^2 + 12.8^2) = sqrt(204.8) ~= 14.31 m^2\n# F_total attendu = NORMAL * A_polygon * n_p = -0.009 * 14.31 * (0.447, 0, 0.894) = (-0.058, 0, -0.115) N\n# Aucune perte : 100% du polygon couvre 3 faces CAO du solide.\nPOLYGON(NAME='LZ_top',\n        POINTS=[(0.8, 0.0, 4.6),\n                (4.0, 0.0, 3.0),\n                (4.0, 4.0, 3.0),\n                (0.8, 4.0, 4.6)])\n\n# 2026-06-09 : ajout d'une barre d'armature pour tester les champs steel dans l'UI.\n# Bar horizontale en X, fully inside the base solid (X=[0,4], Y=[0,4], Z=[0,1]).\n# Placee a mi-hauteur de la base (Z=0.5) et mi-Y (Y=2.0).\n# Sous la charge LZ_top inclinee, la base flechit autour de l'arete X=2 -> la barre\n# va voir un effort axial (traction\/compression selon la fibre).\n# DIAMETER en mm, GRADE 235 = acier Ac42 (fyk=235 MPa)\npts_Bar_test_1 = []\npts_Bar_test_1.append(POINT(0.3, 2.0, 0.5))\npts_Bar_test_1.append(POINT(3.7, 2.0, 0.5))\nREBAR('Bar_test_1', E=EDGE(PS=pts_Bar_test_1), DIAMETER=16, GRADE=235, DISTANCE=0)\n","load":"# L-shape test : DEAD = gravity \/ LIVE = Z pressure on tilted polygon\n# 2026-06-08 V3.4 : test projection PHYSIQUE le long de -Z (= force_dir) sur polygon incline.\n# Polygon LZ_top normale n_p ~ (0.447, 0, 0.894), pas parallele a Z.\n# Avec proj_dir = -Z et cos_pn = |n_p . Z| = 0.894 :\n#   cos_factor = |n_f . Z| \/ 0.894  (par facette)\n#   SUM(F_z) = Z * A_polygon = -0.009 * 14.31 = -0.1288 MN (= -128.8 kN)\n#   F_x = F_y = 0 (Z load only)\n\nwith LOAD_CASE('LC_poids', VALUE=-9.81, DIR=\"ZAxis\"):\n    pass\n\nwith LOAD_CASE('LC_trafic'):\n    SUPPORT(BOUNDARY='Bottom', X=True, Y=True, Z=True)\n    # 2026-06-08 : test MODE='WIND' avec meme magnitude\/direction que LOAD precedent.\n    # Comportement attendu different :\n    #   LOAD : F_total = -0.009 * A_polygon (= -128.8 kN) selon Z\n    #   WIND : F per facet = -n_f * q * cos_exposure, F_total varie selon geometrie\n    #          Inner side (vertical, n_f=+X) : cos_exp = 0, SKIP\n    #          Pillar top + step top (horizontal, n_f=+Z) : cos_exp = 1, F = -n_f * q = -Z direction\n    #          F_total = -0.009 * A_shadow_horizontal = -0.009 * 12.8 = -115.2 kN\n    LOAD(POLYGON='LZ_top', Z='-0.009', CONSERVE='PRESSURE')   # TEST PRESSURE-conserve LOAD mode\n\nYIELD_ANALYSIS('Yield_analysis0',\n               DEAD_LOAD_CASES=[('LC_poids', '1')],\n               LIVE_LOAD_CASES=[('LC_trafic', '1')],\n               MESH={\"global_physical_size\": \"0.5\"})\n","note":" "}
+====================================================
+=====            RUNSCRIPT - admin
+====================================================
+C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds
+neee cad
+isBeingEdited False
+LOADING MODEL FROM CAD FILE
+LOADED .DSCAD in 0.0069997310638427734
+SUCCESSFULLY MESHED AFTER 0.0
+SUCCESSFULLY SERIALIZED AFTER 0.0
+SAVING C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\dsCad.txt
+RUN SCRIPT IN 0.0
+====================================================
+=====            RUNSCRIPT - admin
+====================================================
+C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds
+neee load
+This is the loaaads:  
+LOADING MODEL IN GLOBAL VARIABLE
+FINISHED LOADING .DSLOAD
+SAVING C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\dsLoad.txt
+RUN SCRIPT IN 0.0
+====================================================
+=====            RUNSCRIPT - admin
+====================================================
+C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds
+neee note
+LOADING MODEL IN GLOBAL VARIABLE
+Model after loading: []
+FINISHED LOADING .DSNOTE
+SAVING C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\dsNote.txt
+RUN SCRIPT IN 0.0
+====================================================
+=====     REQUEST RESULTS STATE - admin
+====================================================
+====================================================
+=====         SAVE RESULTS - admin
+====================================================
+====================================================
+=====           GETVISU - admin
+====================================================
+Opening file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_mesh.dsviewres
+entree dans digitalStructures1
+====================================================
+=====         GET FILE LIST(REQUEST)           =====
+====================================================
+====================================================
+=====         GET FILE LIST(REQUEST)           =====
+====================================================
+====================================================
+=====        OPEN RUPT FILE(REQUEST)           =====
+====================================================
+['C:\\workspace\\storage\\admin\\Moulin_Blanc\\Test_Lshape_NORMAL.ds\\$this.dscad', 'C:\\workspace\\storage\\admin\\Moulin_Blanc\\Test_Lshape_NORMAL.ds\\Yield_analysis0.dscad']
