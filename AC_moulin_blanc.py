@@ -64,13 +64,13 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    # ★ 1er RUN ULTRA-MINIMALISTE : juste verifier que la chaine tourne (~15-30 min)
-    #   Une fois valide, repasser modele='GEPCK' + do_EFF=True + do_IS=True + n0=5
-    modele = 'HF'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
-    do_EFF = False                             #si on veut enrichir progressivement
-    do_IS   = False                           #si on veut calculer la proba globale
+    # 2026-06-11 : 1er run HF valide (pObj=3.92 converge). Bascule sur config complete
+    # comme AC3_pure_flexion d'origine : GEPCK + EFF + IS + n0=5.
+    modele = 'GEPCK'                 #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    do_EFF = True                              #si on veut enrichir progressivement
+    do_IS   = True                            #si on veut calculer la proba globale
 
-    n0 = 2                      # minimum 2 (LHS OpenTURNS exige >=2). En do_HF + do_multistart=False, le DOE n'est PAS utilise.
+    n0 = 5                      # nombre de points du plan d'experience initial (DOE)
     params_names = ['fc','fy']
     n_var = len(params_names)
 
@@ -91,9 +91,9 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
-    # ★ 1er RUN MINIMALISTE : 10 iter max et single-start (~10 appels STRAINS)
-    n_max_FORM = 10
-    do_multistart = False #multistart : FORM depuis n0 points + [0,0]
+    # 2026-06-11 : config complete (mirror AC3_pure_flexion)
+    n_max_FORM = 50
+    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
     tol_FORM = 1.0                 # précision acceptée par FORM pour l'état limite
@@ -145,7 +145,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = False    # ★ 1er run : PAS de courbe rouge HF (= economise 49 appels STRAINS)
+    print_HF = True     # courbe rouge HF de reference (config complete)
     print_DOE = True
     print_3D = False
     
