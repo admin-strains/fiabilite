@@ -64,18 +64,13 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'
-    do_EFF = True
-    n0 = 5
+    modele = 'GEPCK'                 #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    do_EFF = True                              #si on veut enrichir progressivement 
+    do_IS   = True                            #si on veut calculer la proba globale 
+
+    n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     params_names = ['fc','fy']
     n_var = len(params_names)
-
-    do_KRG = True if modele == 'KRG' else False
-    do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
-    do_HF = True if modele == 'HF' else False # penser à jouer avec des bornes différentes
-    do_PCKRG = True if modele == 'PCKRG' else False
-    do_old_GEPCK = True if modele == 'old_GEPCK' else False
-    do_GEPCK     = True if modele == 'GEPCK'     else False
 
     # --------------------------------------------------------------------------- #G
     # CARACTERISTIQUES DU MODELE                                                  #
@@ -85,12 +80,7 @@ if __name__ == '__main__':
     cov_fc, cov_fy = 0.12, None
     fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
     
-    # --- Paramètres fixes ---
-    Es = 200000
-    ecu = 0.0035
-    eud = 0.045
-    gamma_c_fic = _parse(_cad_txt, 'gamma_c') # fixé à 1.0
-    gamma_s_fic = _parse(_cad_txt, 'gamma_s') # fixé à 1.0
+    
     n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
     rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
 
@@ -98,16 +88,15 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
     n_max_FORM = 50
-    do_multistart = True
-    do_warmstart = False
+    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
+    do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
-    tol_FORM = 1.0                                    # précision acceptée par FORM
-    tol_all_modes = 2.0                               #comparaison entre deux modes
-    tol_warmstart = 0.2                          # nécessité de faire le warm_start
+    tol_FORM = 1.0                 # précision acceptée par FORM pour l'état limite
+    tol_all_modes = 2.0                           #distance DBSCAN entre deux modes
+    tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES IS                                                               #
-    do_IS   = True
     n_IS    = 10000                                       # taille échantillon IS
     cov_IS  = 0.05                                             # critère d'arrêt COV
 
@@ -126,7 +115,7 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 1                                # (fixe) degre max autorisé
+    max_of_maxdegree = 2                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
@@ -151,21 +140,16 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_ana = True
     print_HF = True
     print_DOE = True
     print_3D = False
     
-    print_grad_sp = False
-    print_ana_hf_error = False
-    print_pts = False
+    # --- Print facultatifs, par défaut à False ---
+    print_ana = True    #True que pour pure_flexion (flexion_claude que dans ce cas) 
+    print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
-    # --- Label PCE GEPCK (mis a jour par init_g_ot, lu par print_planche_EFF) ---
-    _gepck_pce_label = ""
 
-    # --- Sortie PNG EFF ---
-    timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = r'C:\_workingDir\_SF\test flexion\output\png EFF'
+    
 
     # --- Résultats fixés ---
     hf_3d_grid_fixed = {
@@ -180,136 +164,158 @@ if __name__ == '__main__':
             [-0.112244,  0.204017,  0.672091,  1.150387,  1.477693,  1.691754,  1.840008],
         ]
     }
-    hf_2d_grid_fixed = {'params': {'u1_min':-10.0,'u1_max':10.0,'u2_min':-10.0,'u2_max':10.0,'n_grid_hf':7}, 'Z':[[-0.35987397002878807, -0.2669967363774981, -0.20535573020711573, -0.1629405668993904, -0.1332743271859559, -0.11852860036358548, -0.11076112318802811], [-0.25975747046282116, -0.08030213317916757, 0.04143746766061329, 0.12373557540792612, 0.18037582744039926, 0.21842464629970904, 0.23757988854578782], [-0.2249654139385301, 0.04841011473603918, 0.24779511664467302, 0.38202490257144284, 0.47582561090667097, 0.5414471308620206, 0.5780528850246671], [-0.19675328364698386, 0.11599332588276412, 0.4138665193031785, 0.6174288511497759, 0.7523619015524756, 0.8447865997026027, 0.91001418635111], [-0.1684019331521559, 0.14718304332768306, 0.5410080650758031, 0.8210242484756942, 1.009376895847256, 1.1395757360046685, 1.2323790279345541], [-0.1404367138757393, 0.17570029864525294, 0.6248628650465244, 0.9984931859001764, 1.2494627601162334, 1.4211157981633327, 1.5404671177896931], [-0.11224374227096778, 0.20401650921121672, 0.6720914036748573, 1.1503870059250554, 1.477692628590619, 1.6917535476874397, 1.8400075254424433]]}
+    hf_2d_grid_fixed = None
+    # guide pour hardcoder:  {'params': {'u1_min':-10.0,'u1_max':10.0,'u2_min':-10.0,'u2_max':10.0,'n_grid_hf':7}, 'Z':[[-0.35987397002878807, -0.2669967363774981, -0.20535573020711573, -0.1629405668993904, -0.1332743271859559, -0.11852860036358548, -0.11076112318802811], [-0.25975747046282116, -0.08030213317916757, 0.04143746766061329, 0.12373557540792612, 0.18037582744039926, 0.21842464629970904, 0.23757988854578782], [-0.2249654139385301, 0.04841011473603918, 0.24779511664467302, 0.38202490257144284, 0.47582561090667097, 0.5414471308620206, 0.5780528850246671], [-0.19675328364698386, 0.11599332588276412, 0.4138665193031785, 0.6174288511497759, 0.7523619015524756, 0.8447865997026027, 0.91001418635111], [-0.1684019331521559, 0.14718304332768306, 0.5410080650758031, 0.8210242484756942, 1.009376895847256, 1.1395757360046685, 1.2323790279345541], [-0.1404367138757393, 0.17570029864525294, 0.6248628650465244, 0.9984931859001764, 1.2494627601162334, 1.4211157981633327, 1.5404671177896931], [-0.11224374227096778, 0.20401650921121672, 0.6720914036748573, 1.1503870059250554, 1.477692628590619, 1.6917535476874397, 1.8400075254424433]]}
 
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
     if modele == None:
-        sol_modes_fixed = {
-            # (sp_u1, sp_u2): (u*_u1, u*_u2)
-            (-0.002,  1.332): (-5.306, -6.200),
-            ( 0.610, -0.310): (-3.117, -7.349),
-            (-0.571, -1.705): (-3.131, -7.347),
-            ( 0.258,  0.306): (-4.655, -6.643),
-            ( 0.121, -1.010): (-3.117, -7.345),
-            ( 1.624, -0.531): (-3.046, -7.352),
-            (-0.087, -0.172): (-4.721, -6.603),
-            (-0.419,  0.597): (-5.290, -6.212),
-            (-0.843, -0.005): (-5.341, -6.152),
-            ( 0.868, -1.460): (-3.014, -7.363),
-            (-1.681,  0.710): (-6.475, -4.986),
-            ( 1.479,  0.239): (-3.098, -7.354),
-            (-1.117, -0.696): (-5.200, -6.275),
-            ( 0.745,  1.043): (-4.740, -6.571),
-            (-0.694,  2.114): (-6.504, -4.966),
-            ( 0.000,  0.000): (-4.776, -6.571),
-        }
-        best_sol_modes_fixed = {
-            'A': {'sp': ( 0.868, -1.460), 'u*': (-3.014, -7.363)},
-            'B': {'sp': ( 0.745,  1.043), 'u*': (-4.740, -6.571)},
-            'C': {'sp': (-0.843, -0.005), 'u*': (-5.341, -6.152)},
-            'D': {'sp': (-0.694,  2.114), 'u*': (-6.504, -4.966)},
-        }
+        sol_modes_fixed = None
+        # guide pour hardcoder {
+        #     # (sp_u1, sp_u2): (u*_u1, u*_u2)
+        #     (-0.002,  1.332): (-5.306, -6.200),
+        #     ( 0.610, -0.310): (-3.117, -7.349),
+        #     (-0.571, -1.705): (-3.131, -7.347),
+        #     ( 0.258,  0.306): (-4.655, -6.643),
+        #     ( 0.121, -1.010): (-3.117, -7.345),
+        #     ( 1.624, -0.531): (-3.046, -7.352),
+        #     (-0.087, -0.172): (-4.721, -6.603),
+        #     (-0.419,  0.597): (-5.290, -6.212),
+        #     (-0.843, -0.005): (-5.341, -6.152),
+        #     ( 0.868, -1.460): (-3.014, -7.363),
+        #     (-1.681,  0.710): (-6.475, -4.986),
+        #     ( 1.479,  0.239): (-3.098, -7.354),
+        #     (-1.117, -0.696): (-5.200, -6.275),
+        #     ( 0.745,  1.043): (-4.740, -6.571),
+        #     (-0.694,  2.114): (-6.504, -4.966),
+        #     ( 0.000,  0.000): (-4.776, -6.571),
+        # }
+        best_sol_modes_fixed = None
+        # guide pour hardcoder {
+        #     'A': {'sp': ( 0.868, -1.460), 'u*': (-3.014, -7.363)},
+        #     'B': {'sp': ( 0.745,  1.043), 'u*': (-4.740, -6.571)},
+        #     'C': {'sp': (-0.843, -0.005), 'u*': (-5.341, -6.152)},
+        #     'D': {'sp': (-0.694,  2.114), 'u*': (-6.504, -4.966)},
+        # }
         # Gradients HF aux sp (run 1305_0937, 4 appels STRAINS)
-        grad_sp_fixed = {
-            'A': {'g': 0.550023, 'grad': [ 0.039500,  0.072312], 'neg_grad': [-0.039500, -0.072312]},
-            'B': {'g': 0.722565, 'grad': [ 0.046148,  0.068963], 'neg_grad': [-0.046148, -0.068963]},
-            'C': {'g': 0.573155, 'grad': [ 0.058216,  0.059250], 'neg_grad': [-0.058216, -0.059250]},
-            'D': {'g': 0.704360, 'grad': [ 0.068462,  0.055309], 'neg_grad': [-0.068462, -0.055309]},
-        }
+        grad_sp_fixed = None
+        # guide pour hardcoder {
+        #     'A': {'g': 0.550023, 'grad': [ 0.039500,  0.072312], 'neg_grad': [-0.039500, -0.072312]},
+        #     'B': {'g': 0.722565, 'grad': [ 0.046148,  0.068963], 'neg_grad': [-0.046148, -0.068963]},
+        #     'C': {'g': 0.573155, 'grad': [ 0.058216,  0.059250], 'neg_grad': [-0.058216, -0.059250]},
+        #     'D': {'g': 0.704360, 'grad': [ 0.068462,  0.055309], 'neg_grad': [-0.068462, -0.055309]},
+        # }
         # Trajectoires FORM hardcodees (run 1805_1957, do_HF=True, n0=7)
         # Une trajectoire representative par mode : points et gradients successifs AbdoRackwitz
-        traj_runs_fixed = {
-                'A': {  # u* ~ [-3.12, -7.35]  (26 pts, sp=[0.61,-0.31])
-                    'points': [
-                        [ 0.6102, -0.3098], [-3.8707, -6.4583], [-1.6303, -3.3841], [-0.5101, -1.8470],
-                        [ 0.0501, -1.0784], [-3.8803, -6.5921], [-1.9151, -3.8353], [-0.9325, -2.4568],
-                        [-0.4412, -1.7676], [-3.8389, -6.7200], [-2.1401, -4.2438], [-1.2907, -3.0057],
-                        [-0.8659, -2.3867], [-3.7616, -6.8474], [-2.3138, -4.6171], [-1.5899, -3.5019],
-                        [-1.2279, -2.9443], [-3.6819, -6.9516], [-2.4549, -4.9479], [-1.8414, -3.9461],
-                        [-3.5392, -7.1070], [-2.6903, -5.5265], [-2.2659, -4.7363], [-3.3755, -7.2150],
-                        [-2.8207, -5.9757], [-3.1170, -7.3495],
-                    ],
-                    'grads': [
-                        [0.042205, 0.070421], [0.031332, 0.065618], [0.035786, 0.068399], [0.039346, 0.069164],
-                        [0.041015, 0.069679], [0.029800, 0.066665], [0.034813, 0.068268], [0.037701, 0.069006],
-                        [0.039546, 0.069225], [0.028110, 0.067965], [0.033785, 0.068334], [0.036434, 0.068843],
-                        [0.037930, 0.069045], [0.027391, 0.068676], [0.032755, 0.068537], [0.035300, 0.068765],
-                        [0.036516, 0.068944], [0.027059, 0.069116], [0.031878, 0.068754], [0.034250, 0.068777],
-                        [0.026583, 0.069808], [0.030447, 0.069107], [0.032261, 0.068955], [0.025926, 0.070694],
-                        [0.029462, 0.069467], [0.025199, 0.071834],
-                    ],
-                },
-                'B': {  # u* ~ [-4.66, -6.64]  (50 pts, sp=[0.26,0.31])
-                    'points': [
-                        [ 0.2576,  0.3059], [-4.1149, -6.3330], [-1.9286, -3.0135], [-0.8355, -1.3538],
-                        [-0.2890, -0.5239], [-4.1318, -6.4693], [-2.2104, -3.4966], [-1.2497, -2.0103],
-                        [-0.7693, -1.2671], [-0.5291, -0.8955], [-0.4091, -0.7097], [-4.1355, -6.4913],
-                        [-2.2723, -3.6005], [-1.3407, -2.1551], [-0.8749, -1.4324], [-0.6420, -1.0711],
-                        [-0.5255, -0.8904], [-4.1495, -6.5088], [-2.3375, -3.6996], [-1.4315, -2.2950],
-                        [-0.9785, -1.5927], [-0.7520, -1.2416], [-0.6388, -1.0660], [-4.1748, -6.5169],
-                        [-2.4068, -3.7914], [-1.5228, -2.4287], [-1.0808, -1.7473], [-0.8598, -1.4067],
-                        [-4.2403, -6.5157], [-2.5501, -3.9612], [-1.7049, -2.6839], [-1.2823, -2.0453],
-                        [-1.0710, -1.7260], [-4.3300, -6.4854], [-2.7005, -4.1057], [-1.8858, -2.9158],
-                        [-1.4784, -2.3209], [-4.5085, -6.4242], [-2.9935, -4.3726], [-2.2359, -3.3467],
-                        [-1.8572, -2.8338], [-4.6009, -6.4217], [-3.2291, -4.6278], [-2.5431, -3.7308],
-                        [-4.7317, -6.4391], [-3.6374, -5.0850], [-3.0903, -4.4079], [-4.7438, -6.4980],
-                        [-3.9170, -5.4529], [-4.6552, -6.6434],
-                    ],
-                    'grads': [
-                        [0.044519, 0.068517], [0.035878, 0.061726], [0.044263, 0.062955], [0.043386, 0.066384],
-                        [0.043289, 0.067779], [0.034697, 0.062504], [0.042966, 0.062862], [0.043945, 0.065014],
-                        [0.043028, 0.066722], [0.042947, 0.067351], [0.043059, 0.067588], [0.034527, 0.062612],
-                        [0.042687, 0.062843], [0.043966, 0.064760], [0.043206, 0.066373], [0.042968, 0.067062],
-                        [0.042943, 0.067361], [0.034494, 0.062596], [0.042443, 0.062793], [0.044100, 0.064442],
-                        [0.043438, 0.065989], [0.042999, 0.066778], [0.042969, 0.067074], [0.034637, 0.062421],
-                        [0.042247, 0.062703], [0.044270, 0.064105], [0.043695, 0.065590], [0.043215, 0.066405],
-                        [0.035292, 0.061763], [0.042202, 0.062322], [0.044554, 0.063438], [0.044217, 0.064786],
-                        [0.043780, 0.065573], [0.036382, 0.060718], [0.042725, 0.061569], [0.044644, 0.062870],
-                        [0.044856, 0.063916], [0.037854, 0.059111], [0.043326, 0.060308], [0.044505, 0.061920],
-                        [0.044972, 0.062769], [0.038234, 0.058548], [0.043058, 0.059735], [0.044734, 0.060876],
-                        [0.038627, 0.057857], [0.042160, 0.058993], [0.043652, 0.059794], [0.038325, 0.058030],
-                        [0.041163, 0.058744], [0.037124, 0.059166],
-                    ],
-                },
-                'C': {  # u* ~ [-5.31, -6.20]  (12 pts, sp=[-0.00,1.33])
-                    'points': [
-                        [-0.0017,  1.3325], [-5.0636, -5.2359], [-2.5327, -1.9517], [-5.5307, -5.5909],
-                        [-4.0317, -3.7713], [-3.2822, -2.8615], [-5.5130, -5.8096], [-4.3976, -4.3356],
-                        [-3.8399, -3.5985], [-5.4580, -5.9699], [-4.6489, -4.7842], [-5.3056, -6.1998],
-                    ],
-                    'grads': [
-                        [0.059352, 0.061371], [0.046179, 0.051721], [0.054808, 0.055405], [0.045432, 0.050529],
-                        [0.048982, 0.053557], [0.051740, 0.054524], [0.044423, 0.051269], [0.047496, 0.053207],
-                        [0.049358, 0.053988], [0.042249, 0.052934], [0.045724, 0.053430], [0.040682, 0.054516],
-                    ],
-                },
-                'D': {  # u* ~ [-6.48, -4.99]  (13 pts, sp=[-1.68,0.71])
-                    'points': [
-                        [-1.6808,  0.7104], [-5.7529, -4.8956], [-3.7168, -2.0926], [-2.6988, -0.6911],
-                        [-6.0548, -4.8684], [-4.3768, -2.7798], [-3.5378, -1.7354], [-6.1953, -4.9797],
-                        [-4.8666, -3.3576], [-4.2022, -2.5465], [-6.3582, -4.9252], [-5.2802, -3.7358],
-                        [-6.4751, -4.9861],
-                    ],
-                    'grads': [
-                        [0.063569, 0.054096], [0.052114, 0.045396], [0.059464, 0.048913], [0.063145, 0.050772],
-                        [0.053159, 0.043559], [0.059506, 0.046396], [0.060808, 0.048877], [0.052863, 0.043191],
-                        [0.058439, 0.045099], [0.060250, 0.046670], [0.054448, 0.041540], [0.057304, 0.044126],
-                        [0.054778, 0.040852],
-                    ],
-                },
-            }
+        traj_runs_fixed = None
+        # guide pour hardcoder {
+        #         'A': {  # u* ~ [-3.12, -7.35]  (26 pts, sp=[0.61,-0.31])
+        #             'points': [
+        #                 [ 0.6102, -0.3098], [-3.8707, -6.4583], [-1.6303, -3.3841], [-0.5101, -1.8470],
+        #                 [ 0.0501, -1.0784], [-3.8803, -6.5921], [-1.9151, -3.8353], [-0.9325, -2.4568],
+        #                 [-0.4412, -1.7676], [-3.8389, -6.7200], [-2.1401, -4.2438], [-1.2907, -3.0057],
+        #                 [-0.8659, -2.3867], [-3.7616, -6.8474], [-2.3138, -4.6171], [-1.5899, -3.5019],
+        #                 [-1.2279, -2.9443], [-3.6819, -6.9516], [-2.4549, -4.9479], [-1.8414, -3.9461],
+        #                 [-3.5392, -7.1070], [-2.6903, -5.5265], [-2.2659, -4.7363], [-3.3755, -7.2150],
+        #                 [-2.8207, -5.9757], [-3.1170, -7.3495],
+        #             ],
+        #             'grads': [
+        #                 [0.042205, 0.070421], [0.031332, 0.065618], [0.035786, 0.068399], [0.039346, 0.069164],
+        #                 [0.041015, 0.069679], [0.029800, 0.066665], [0.034813, 0.068268], [0.037701, 0.069006],
+        #                 [0.039546, 0.069225], [0.028110, 0.067965], [0.033785, 0.068334], [0.036434, 0.068843],
+        #                 [0.037930, 0.069045], [0.027391, 0.068676], [0.032755, 0.068537], [0.035300, 0.068765],
+        #                 [0.036516, 0.068944], [0.027059, 0.069116], [0.031878, 0.068754], [0.034250, 0.068777],
+        #                 [0.026583, 0.069808], [0.030447, 0.069107], [0.032261, 0.068955], [0.025926, 0.070694],
+        #                 [0.029462, 0.069467], [0.025199, 0.071834],
+        #             ],
+        #         },
+        #         'B': {  # u* ~ [-4.66, -6.64]  (50 pts, sp=[0.26,0.31])
+        #             'points': [
+        #                 [ 0.2576,  0.3059], [-4.1149, -6.3330], [-1.9286, -3.0135], [-0.8355, -1.3538],
+        #                 [-0.2890, -0.5239], [-4.1318, -6.4693], [-2.2104, -3.4966], [-1.2497, -2.0103],
+        #                 [-0.7693, -1.2671], [-0.5291, -0.8955], [-0.4091, -0.7097], [-4.1355, -6.4913],
+        #                 [-2.2723, -3.6005], [-1.3407, -2.1551], [-0.8749, -1.4324], [-0.6420, -1.0711],
+        #                 [-0.5255, -0.8904], [-4.1495, -6.5088], [-2.3375, -3.6996], [-1.4315, -2.2950],
+        #                 [-0.9785, -1.5927], [-0.7520, -1.2416], [-0.6388, -1.0660], [-4.1748, -6.5169],
+        #                 [-2.4068, -3.7914], [-1.5228, -2.4287], [-1.0808, -1.7473], [-0.8598, -1.4067],
+        #                 [-4.2403, -6.5157], [-2.5501, -3.9612], [-1.7049, -2.6839], [-1.2823, -2.0453],
+        #                 [-1.0710, -1.7260], [-4.3300, -6.4854], [-2.7005, -4.1057], [-1.8858, -2.9158],
+        #                 [-1.4784, -2.3209], [-4.5085, -6.4242], [-2.9935, -4.3726], [-2.2359, -3.3467],
+        #                 [-1.8572, -2.8338], [-4.6009, -6.4217], [-3.2291, -4.6278], [-2.5431, -3.7308],
+        #                 [-4.7317, -6.4391], [-3.6374, -5.0850], [-3.0903, -4.4079], [-4.7438, -6.4980],
+        #                 [-3.9170, -5.4529], [-4.6552, -6.6434],
+        #             ],
+        #             'grads': [
+        #                 [0.044519, 0.068517], [0.035878, 0.061726], [0.044263, 0.062955], [0.043386, 0.066384],
+        #                 [0.043289, 0.067779], [0.034697, 0.062504], [0.042966, 0.062862], [0.043945, 0.065014],
+        #                 [0.043028, 0.066722], [0.042947, 0.067351], [0.043059, 0.067588], [0.034527, 0.062612],
+        #                 [0.042687, 0.062843], [0.043966, 0.064760], [0.043206, 0.066373], [0.042968, 0.067062],
+        #                 [0.042943, 0.067361], [0.034494, 0.062596], [0.042443, 0.062793], [0.044100, 0.064442],
+        #                 [0.043438, 0.065989], [0.042999, 0.066778], [0.042969, 0.067074], [0.034637, 0.062421],
+        #                 [0.042247, 0.062703], [0.044270, 0.064105], [0.043695, 0.065590], [0.043215, 0.066405],
+        #                 [0.035292, 0.061763], [0.042202, 0.062322], [0.044554, 0.063438], [0.044217, 0.064786],
+        #                 [0.043780, 0.065573], [0.036382, 0.060718], [0.042725, 0.061569], [0.044644, 0.062870],
+        #                 [0.044856, 0.063916], [0.037854, 0.059111], [0.043326, 0.060308], [0.044505, 0.061920],
+        #                 [0.044972, 0.062769], [0.038234, 0.058548], [0.043058, 0.059735], [0.044734, 0.060876],
+        #                 [0.038627, 0.057857], [0.042160, 0.058993], [0.043652, 0.059794], [0.038325, 0.058030],
+        #                 [0.041163, 0.058744], [0.037124, 0.059166],
+        #             ],
+        #         },
+        #         'C': {  # u* ~ [-5.31, -6.20]  (12 pts, sp=[-0.00,1.33])
+        #             'points': [
+        #                 [-0.0017,  1.3325], [-5.0636, -5.2359], [-2.5327, -1.9517], [-5.5307, -5.5909],
+        #                 [-4.0317, -3.7713], [-3.2822, -2.8615], [-5.5130, -5.8096], [-4.3976, -4.3356],
+        #                 [-3.8399, -3.5985], [-5.4580, -5.9699], [-4.6489, -4.7842], [-5.3056, -6.1998],
+        #             ],
+        #             'grads': [
+        #                 [0.059352, 0.061371], [0.046179, 0.051721], [0.054808, 0.055405], [0.045432, 0.050529],
+        #                 [0.048982, 0.053557], [0.051740, 0.054524], [0.044423, 0.051269], [0.047496, 0.053207],
+        #                 [0.049358, 0.053988], [0.042249, 0.052934], [0.045724, 0.053430], [0.040682, 0.054516],
+        #             ],
+        #         },
+        #         'D': {  # u* ~ [-6.48, -4.99]  (13 pts, sp=[-1.68,0.71])
+        #             'points': [
+        #                 [-1.6808,  0.7104], [-5.7529, -4.8956], [-3.7168, -2.0926], [-2.6988, -0.6911],
+        #                 [-6.0548, -4.8684], [-4.3768, -2.7798], [-3.5378, -1.7354], [-6.1953, -4.9797],
+        #                 [-4.8666, -3.3576], [-4.2022, -2.5465], [-6.3582, -4.9252], [-5.2802, -3.7358],
+        #                 [-6.4751, -4.9861],
+        #             ],
+        #             'grads': [
+        #                 [0.063569, 0.054096], [0.052114, 0.045396], [0.059464, 0.048913], [0.063145, 0.050772],
+        #                 [0.053159, 0.043559], [0.059506, 0.046396], [0.060808, 0.048877], [0.052863, 0.043191],
+        #                 [0.058439, 0.045099], [0.060250, 0.046670], [0.054448, 0.041540], [0.057304, 0.044126],
+        #                 [0.054778, 0.040852],
+        #             ],
+        #         },
+        #     }
+    
     else:
         sol_modes_fixed = None
         best_sol_modes_fixed = None
         grad_sp_fixed = None
         traj_runs_fixed = None
-     
+    
+
+    # --- Label PCE GEPCK (mis a jour par init_g_ot, lu par print_planche_EFF) ---
+    _gepck_pce_label = ""
+
+    # --- Sortie PNG EFF ---
+    timestamp   = datetime.now().strftime('%d%m_%H%M')
+    out_dir_eff = r'C:\_workingDir\_SF\test flexion\output\png EFF'
+
+    do_KRG = True if modele == 'KRG' else False
+    do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
+    do_HF = True if modele == 'HF' else False # penser à jouer avec des bornes différentes
+    do_PCKRG = True if modele == 'PCKRG' else False
+    do_old_GEPCK = True if modele == 'old_GEPCK' else False
+    do_GEPCK     = True if modele == 'GEPCK'     else False
+    do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
+    do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
+
     # --------------------------------------------------------------------------- #
     # DEFINTION DE FONCTIONS                                                      #
     # --------------------------------------------------------------------------- #
-   
     # --------------------------------------------------------------------------- #
     # FONCTION D'APPEL STRAINS ET DOE                                             #
 
@@ -633,6 +639,14 @@ if __name__ == '__main__':
     # FONCTION ANALYTIQUE DE REFERENCE                                            #
     # --------------------------------------------------------------------------- #
     # FONCTION ANALYTIQUE                                                         #
+    # --- Paramètres du modèle analytique ---
+    Es = 200000
+    ecu = 0.0035
+    eud = 0.045
+    gamma_c_fic = _parse(_cad_txt, 'gamma_c') # fixé à 1.0
+    gamma_s_fic = _parse(_cad_txt, 'gamma_s') # fixé à 1.0
+    
+    # --- Fonction analytique ---
     class flexion_claude:
         def __init__(self):
 
@@ -1894,7 +1908,10 @@ if __name__ == '__main__':
         ax.set_ylim(u2_min, u2_max)
         ax.set_title('FORM et etat limite g=0')
         plt.tight_layout()
-        plt.show()
+        fname = f'visu{modele}_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [visu] -> {fname}", flush=True)
 
     def print_3D_HF():
         if hf_3d_grid_fixed is not None:
@@ -2011,841 +2028,58 @@ if __name__ == '__main__':
     DEBUT DE CODE
     """
     update_degree(n0)
+    event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
+    xt_eff = None
 
-    if modele in {'old_GEPCK', 'KRG', 'GEK', 'PCKRG', 'HF', 'GEPCK'}:
-        event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
-        xt_eff = None
+    if print_3D:
+        print_3D_HF()
+        sys.exit(0)
 
-        if print_3D:
-            print_3D_HF()
+    if print_grad_sp:
+        print("=== -grad(g) aux points de depart sp A/B/C/D ===", flush=True)
+        for lbl, data in best_sol_modes_fixed.items():
+            sp = list(data['sp'])
+            g_sp, grad_sp, _ = run_HF(sp)
+            neg_grad = [-v for v in grad_sp]
+            print(f"Mode {lbl} : sp={sp}", flush=True)
+            print(f"  g_HF(sp)  = {g_sp:.6f}", flush=True)
+            print(f"  grad(sp)  = [{grad_sp[0]:.6f}, {grad_sp[1]:.6f}]", flush=True)
+            print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
+        sys.exit(0)
+
+    g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
+    if do_EFF:
+        print_planche_EFF(g_ot, sigma_func, xt, [])
+        g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
+        print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+    event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
+
+    if event is None:
+        if best_sol_modes_fixed is not None:
+            print_visu(None, None, None, None, [], None)
             sys.exit(0)
-
-        if print_grad_sp:
-            print("=== -grad(g) aux points de depart sp A/B/C/D ===", flush=True)
-            for lbl, data in best_sol_modes_fixed.items():
-                sp = list(data['sp'])
-                g_sp, grad_sp, _ = run_HF(sp)
-                neg_grad = [-v for v in grad_sp]
-                print(f"Mode {lbl} : sp={sp}", flush=True)
-                print(f"  g_HF(sp)  = {g_sp:.6f}", flush=True)
-                print(f"  grad(sp)  = [{grad_sp[0]:.6f}, {grad_sp[1]:.6f}]", flush=True)
-                print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
-            sys.exit(0)
-
-        g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-        if do_EFF:
-            print_planche_EFF(g_ot, sigma_func, xt, [])
-            g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
-            print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
-        event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
-
-        if event is None:
-            if best_sol_modes_fixed is not None:
-                print_visu(None, None, None, None, [], None)
-                sys.exit(0)
-            print('Aucune branche active', flush=True)
-            sys.exit(1)
-
-        if do_warmstart:
-            starting_points = np.array([[0.0, 0.0]])
-            modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
-            modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
-        else:
-            starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
-            modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
-
-        best_result = modes[0] if modes else None
-        best_sp     = best_sps[0] if best_sps else None
-        if best_result is None:
-            print('Aucun FORM ne marche.', flush=True)
-            sys.exit(1)
-        if len(modes)>1:
-            print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
-            print_results(modes[1], g_ot)
-            print('Les résultats du mode 1 sont : ')
-        print_results(best_result, g_ot)
-        if do_IS and modes:
-            result_IS = run_IS(modes, event)
-            print_results_IS(result_IS)
-        print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
-
-    """
-    DEBUT DANCIEN CODE COMMENTE
-    """
-    # if do_GEPCK:
-    #     xt, yt, all_grad = init_surrogate()
-
-    #     # =========================================================================== #
-    #     # NOTRE MODELE HF GEPCK (pipeline 5 branches)                                 #
-    #     # =========================================================================== #
-    #     _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
-    #                   {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
-    #     _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-    #     _opts      = {'Mode': 'optimal',
-    #                   'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-
-    #     _Y_aug = build_Y_aug(yt, all_grad)
-    #     print(f"=== Notre GEPCK HF (5 branches) N={len(xt)} ===", flush=True)
-    #     print(f"  Y_aug shape = {_Y_aug.shape}  (attendu {len(xt)*(n_var+1)},)", flush=True)
-
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter('ignore')
-    #         _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
-
-    #     _loo   = _fm['Error'][0]['LOO']
-    #     _npoly = _fm['NumberOfPoly']
-    #     _theta = _fm['Kriging'][0]['theta']
-    #     print(f"  LOO={_loo:.4e}  n_poly={_npoly}  theta={_theta}", flush=True)
-
-    #     # Prediction sur grille
-    #     _ng  = 100
-    #     _u1g = np.linspace(u1_min, u1_max, _ng)
-    #     _u2g = np.linspace(u2_min, u2_max, _ng)
-    #     _U1, _U2 = np.meshgrid(_u1g, _u2g)
-    #     _grid    = np.column_stack([_U1.ravel(), _U2.ravel()])
-
-    #     with warnings.catch_warnings():
-    #         warnings.simplefilter('ignore')
-    #         _YMu, _YSig = predict_gepck(_fm, _grid, return_var=True)
-
-    #     _Z_gepck = _YMu[:, 0].reshape(_ng, _ng)
-    #     _Z_sigma = np.sqrt(np.maximum(_YSig[:, 0], 0)).reshape(_ng, _ng)
-
-    #     # Figure 2 panneaux
-    #     _fig, _axes = plt.subplots(1, 2, figsize=(14, 6))
-
-    #     # Panneau gauche : surface GEPCK
-    #     _ax = _axes[0]
-    #     _cf = _ax.contourf(_U1, _U2, _Z_gepck, levels=20, cmap='RdYlGn', alpha=0.65, extend='both')
-    #     plt.colorbar(_cf, ax=_ax, label='g GEPCK HF')
-    #     _ax.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
-
-    #     if print_HF and hf_2d_grid_fixed is not None:
-    #         _u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-    #         _u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-    #         _U1_hf, _U2_hf = np.meshgrid(_u1_hf, _u2_hf)
-    #         _Z_hf  = np.array(hf_2d_grid_fixed['Z'])
-    #         _ax.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
-
-    #     if print_ana:
-    #         _calc_a = flexion_claude()
-    #         _u1_a   = np.linspace(_calc_a.u1_lim_plast, u1_max, n_grid)
-    #         _u2_a   = np.array([_calc_a.u2p_LS(u) for u in _u1_a])
-    #         _ax.plot(_u1_a, _u2_a, color='green', linestyle='-.', linewidth=2)
-    #         _ax.plot([_calc_a.u1_lim_plast]*2,
-    #                  [_calc_a.u2p_LS(_calc_a.u1_lim_plast), u2_max],
-    #                  color='green', linestyle='-.', linewidth=2)
-
-    #     _ax.scatter(xt[:, 0], xt[:, 1], c='black', s=40, zorder=6, label=f'DOE (N={len(xt)})')
-    #     _scale_q = np.percentile(np.linalg.norm(all_grad, axis=1), 75) + 1e-12
-    #     _ax.quiver(xt[:, 0], xt[:, 1], all_grad[:, 0], all_grad[:, 1],
-    #                color='red', alpha=0.6, scale=_scale_q * 10, width=0.004, label='dg/du')
-
-    #     _legend_els = [Line2D([0],[0], color='blue', lw=2, label='g=0 GEPCK HF')]
-    #     if print_HF and hf_2d_grid_fixed is not None:
-    #         _legend_els.append(Line2D([0],[0], color='red', lw=2, ls='--', label='g=0 HF ref'))
-    #     if print_ana:
-    #         _legend_els.append(Line2D([0],[0], color='green', lw=2, ls='-.', label='g=0 ana'))
-    #     _handles, _ = _ax.get_legend_handles_labels()
-    #     _ax.legend(handles=_handles + _legend_els, fontsize=8, loc='upper right')
-    #     _ax.set_xlabel('u1 (fc)')
-    #     _ax.set_ylabel('u2 (fy)')
-    #     _ax.set_xlim(u1_min, u1_max)
-    #     _ax.set_ylim(u2_min, u2_max)
-    #     _ax.set_title(f'Notre GEPCK HF\nN={len(xt)}, LOO={_loo:.2e}, n_poly={_npoly}')
-    #     _ax.grid(True, alpha=0.25)
-
-    #     # Panneau droit : incertitude
-    #     _ax2 = _axes[1]
-    #     _cf2 = _ax2.contourf(_U1, _U2, _Z_sigma, levels=20, cmap='Blues')
-    #     plt.colorbar(_cf2, ax=_ax2, label='sigma GEPCK HF')
-    #     _ax2.contour(_U1, _U2, _Z_gepck, levels=[0], colors='blue', linewidths=2)
-    #     if print_HF and hf_2d_grid_fixed is not None:
-    #         _ax2.contour(_U1_hf, _U2_hf, _Z_hf, levels=[0], colors='red', linewidths=2, linestyles='--')
-    #     _ax2.scatter(xt[:, 0], xt[:, 1], c='red', s=40, zorder=6, label=f'DOE (N={len(xt)})')
-    #     _ax2.set_xlabel('u1')
-    #     _ax2.set_ylabel('u2')
-    #     _ax2.set_xlim(u1_min, u1_max)
-    #     _ax2.set_ylim(u2_min, u2_max)
-    #     _ax2.set_title('Incertitude GEPCK HF (sigma)')
-    #     _ax2.grid(True, alpha=0.25)
-
-    #     plt.tight_layout()
-    #     plt.savefig(r'C:\_workingDir\_SF\test flexion\notre_gepck_hf.png', dpi=150)
-    #     print(f"Figure sauvee : notre_gepck_hf.png", flush=True)
-    #     plt.show()
-    
-    # --------------------------------------------------------------------------- #
-    # DEBUT DE CODE                                                               #
-    # --------------------------------------------------------------------------- #
-    # if do_GP and try_pce and not do_GEK:
-    # # --------------------------------------------------------------------------- #
-    # # MODELE HYBRIDE PC-KRG                                                       #
-    # # --------------------------------------------------------------------------- #
-    # # 1. METAMODELE                                                               #
-    #     xt, y_hf, all_grad_hf, all_sensib_hf = init_GP(modelname, params_names, n0, U_doe_fixed)
-    #     # ici manquant : validation du PCE puis changement de do_pce si on ne veut pas faire GP hybride  
-    #     if do_pce:
-    #         metamodel_PCE = build_metamodel_PCE(modelname, params_names, xt, y_hf)
-    #     y_PCE, all_grad_PCE, all_sensib_PCE = fill_PCE(modelname, params_names, xt, metamodel_PCE)
-    #     yt, all_grad, all_sensib = fill_inputGP(y_hf, all_grad_hf, all_sensib_hf, y_PCE, all_grad_PCE, all_sensib_PCE, do_pce)
-    #     metamodel_KRG = build_metamodel_KRG(xt, yt)
-    #     if do_pce:
-    #         metamodel = metamodel_KRG + metamodel_PCE
-    #     else:
-    #         metamodel = metamodel_KRG
-    # # --------------------------------------------------------------------------- #
-    # # 2. FORM                                                                     
-    #     start_point = [0.0]*len(params_names)
-    #     result = FORM_KRG(modelname, params_names, metamodel, start_point)                     
-    #     U_warm = result.getPhysicalSpaceDesignPoint()
-    #     if do_warm_start and metamodel(U_warm)[0] > tol_warm_start: 
-    #         U_doe = ot.Sample(xt)
-    #         U_doe.add(U_warm)
-    #         print(f"Warm start lancé avec point de départ U={list(U_warm)}")
-    #         xt_warm = np.array(U_warm)
-    #         y_hf_warm, all_grad_hf_warm, all_sensib_hf_warm = run_HF(modelname, params_names, U_warm)
-    #         xt = np.vstack([xt, xt_warm.reshape(1, -1)])
-    #         y_hf       = np.vstack([y_hf, [[y_hf_warm]]])
-    #         all_grad_hf = np.vstack([all_grad_hf, np.array(all_grad_hf_warm).reshape(1, -1)])
-    #         all_sensib_hf = np.vstack([all_sensib_hf, np.array(all_sensib_hf_warm).reshape(1, -1)])
-    #         # ici manquant : validation du PCE puis changement de do_pce si on ne veut pas faire GP hybride  
-    #         if do_pce:
-    #             metamodel_PCE = build_metamodel_PCE(modelname, params_names, xt, y_hf)
-    #         y_PCE, all_grad_PCE, all_sensib_PCE = fill_PCE(modelname, params_names, xt, metamodel_PCE)
-    #         yt, all_grad, all_sensib = fill_inputGP(y_hf, all_grad_hf, all_sensib_hf, y_PCE, all_grad_PCE, all_sensib_PCE, do_pce)
-    #         metamodel_KRG = build_metamodel_KRG(xt, yt)
-    #         if do_pce:
-    #             metamodel = metamodel_KRG + metamodel_PCE
-    #         else:
-    #             metamodel = metamodel_KRG
-    #         start_point = U_warm
-    #         result = FORM_KRG(modelname, params_names, metamodel, start_point)
-    #     n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM = resultats_GP(modelname, params_names, result, metamodel)
-    # # --------------------------------------------------------------------------- #
-    # # 3. AFFICHAGE                                                                #
-    #     print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM)
-    #     print_GP_tests(modelname, params_names, U_res, g_GP_res, metamodel)
-    #     print_visu_HF_GP(metamodel, U_res, g_GP_res, size_visu, beta, Pf_FORM)
-    
-    # elif do_GP and not try_pce and not do_GEK:
-    # # --------------------------------------------------------------------------- #
-    # # MODELE KRG PUR                                                              #
-    # # --------------------------------------------------------------------------- #
-    # # 1. METAMODELE                                                               #
-    #     xt, yt, all_grad, all_sensib = init_GP(modelname, params_names, n0, U_doe_fixed)
-    #     metamodel = build_metamodel_KRG(xt, yt)
-    # # --------------------------------------------------------------------------- #
-    # # 2. FORM                                                                     #
-    #     start_point = [0.0]*len(params_names)
-    #     result = FORM_KRG(modelname, params_names, metamodel, start_point)
-    #     U_warm = result.getPhysicalSpaceDesignPoint()
-    #     if do_warm_start and metamodel(U_warm)[0] > tol_warm_start:
-    #         U_doe = ot.Sample(xt) 
-    #         U_doe.add(U_warm)
-    #         print(f"Warm start lancé avec point de départ U={list(U_warm)}")
-    #         xt_warm = np.array(U_warm)
-    #         yt_warm, all_grad_warm, all_sensib_warm = run_HF(modelname, params_names, U_warm)
-    #         xt = np.vstack([xt, xt_warm.reshape(1, -1)])
-    #         yt       = np.vstack([yt, [[yt_warm]]])
-    #         all_grad = np.vstack([all_grad, np.array(all_grad_warm).reshape(1, -1)])
-    #         all_sensib = np.vstack([all_sensib, np.array(all_sensib_warm).reshape(1, -1)])
-    #         metamodel = build_metamodel_KRG(xt, yt)
-    #         start_point = U_warm
-    #         result = FORM_KRG(modelname, params_names, metamodel, start_point)
-    #     n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM = resultats_GP(modelname, params_names, result, metamodel)
-    #     # if do_multi_start:
-    #     #     U_doe_multistart = ot.Sample(xt)
-    #     #     result_modes = [result] #revoir si devrait être défini hors de if
-    #     #     while U_doe_multistart.getSize() > 0:
-    #     #         result_modes, U_doe_multistart = FORM_multi_start(result_modes, U_doe_multistart)
-    #     #     if len(result_modes)>1:
-    #     #         print(f'Il y a plusieurs modes de défaillances.')
-    #     #         i = 1
-    #     #         for result in result_modes: 
-    #     #             n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM = resultats_GP(modelname, params_names, result_modes[i], metamodel)
-    #     #             print(f'\nRESULTATS DU MODE {i+1}')
-    #     #             print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM)
-        
-    # # --------------------------------------------------------------------------- #
-    # # 3. AFFICHAGE                                                                #
-    #     print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM)
-    #     print_GP_tests(modelname, params_names, U_res, g_GP_res, metamodel)
-    #     print_visu_HF_GP(metamodel, U_res, g_GP_res, size_visu, beta, Pf_FORM)
-    
-    # elif do_GP and try_pce and do_GEK:
-    # # --------------------------------------------------------------------------- #
-    # # MODELE HYBRIDE GEPCK                                                        #
-    # # --------------------------------------------------------------------------- #
-    # # 1. METAMODELE                                                               #
-    #     xt, y_hf, all_grad_hf, all_sensib_hf = init_GP(modelname, params_names, n0, U_doe_fixed)
-    #     # ici manquant : validation du PCE puis changement de do_pce si on ne veut pas faire GP hybride  
-    #     if do_pce:
-    #         metamodel_PCE = build_metamodel_PCE(modelname, params_names, xt, y_hf)
-    #     y_PCE, all_grad_PCE, all_sensib_PCE = fill_PCE(modelname, params_names, xt, metamodel_PCE)
-    #     yt, all_grad, all_sensib = fill_inputGP(y_hf, all_grad_hf, all_sensib_hf, y_PCE, all_grad_PCE, all_sensib_PCE, do_pce)
-    #     sm = build_metamodel_GEK(xt, yt, all_grad)
-    #     metamodel = build_metamodel_total(sm, metamodel_PCE)
-    # # --------------------------------------------------------------------------- #
-    # # 2. FORM                                                                     # 
-    #     start_point = [0.0]*len(params_names)
-    #     result = FORM_GEK(modelname, params_names, metamodel, start_point)
-    #     U_warm = result.getPhysicalSpaceDesignPoint()
-    #     if do_warm_start and metamodel(U_warm)[0] > tol_warm_start:
-    #         U_doe = ot.Sample(xt)
-    #         U_doe.add(U_warm)
-    #         print(f"Warm start lancé avec point de départ U={list(U_warm)}")
-    #         xt_warm = np.array(U_warm)
-    #         y_hf_warm, all_grad_hf_warm, all_sensib_hf_warm = run_HF(modelname, params_names, U_warm)
-    #         xt = np.vstack([xt, xt_warm.reshape(1, -1)])
-    #         y_hf       = np.vstack([y_hf, [[y_hf_warm]]])
-    #         all_grad_hf = np.vstack([all_grad_hf, np.array(all_grad_hf_warm).reshape(1, -1)])
-    #         all_sensib_hf = np.vstack([all_sensib_hf, np.array(all_sensib_hf_warm).reshape(1, -1)])
-    #         if do_pce:
-    #             metamodel_PCE = build_metamodel_PCE(modelname, params_names, xt, y_hf)
-    #         y_PCE, all_grad_PCE, all_sensib_PCE = fill_PCE(modelname, params_names, xt, metamodel_PCE)
-    #         yt, all_grad, all_sensib = fill_inputGP(y_hf, all_grad_hf, all_sensib_hf, y_PCE, all_grad_PCE, all_sensib_PCE, do_pce)
-    #         sm = build_metamodel_GEK(xt, yt, all_grad)
-    #         metamodel = build_metamodel_total(sm, metamodel_PCE)
-    #         start_point = U_warm
-    #         result = FORM_GEK(modelname, params_names, metamodel, start_point)
-    #     n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM = resultats_GP(modelname, params_names, result, metamodel)
-    # # --------------------------------------------------------------------------- #
-    # # 3. AFFICHAGE                                                                #
-    #     print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM)
-    #     print_GP_tests(modelname, params_names, U_res, g_GP_res, metamodel)
-    #     print_visu_HF_GP(metamodel, U_res, g_GP_res, size_visu, beta, Pf_FORM)
-
-    # # 1. METAMODELE                                                               #
-    #     # xt, yt, all_grad, all_sensib = init_GP(modelname, params_names, n0, U_doe_fixed)
-    #     # sm = build_metamodel_GEK(xt, yt, all_grad)
-    #     # metamodel = build_metamodel_total(sm)
-    # # --------------------------------------------------------------------------- #
-    # # 2. FORM                                                                     #
-    #     # start_point = [0.0]*len(params_names)
-    #     # result = FORM_GEK(modelname, params_names, metamodel, start_point)
-    #     # U_warm = result.getPhysicalSpaceDesignPoint()
-    #     # if do_warm_start and metamodel(U_warm)[0] > tol_warm_start:
-    #     #     U_doe = ot.Sample(xt) 
-    #     #     U_doe.add(U_warm)
-    #     #     print(f"Warm start lancé avec point de départ U={list(U_warm)}")
-    #     #     xt_warm = np.array(U_warm)
-    #     #     yt_warm, all_grad_warm, all_sensib_warm = run_HF(modelname, params_names, U_warm)
-    #     #     xt = np.vstack([xt, xt_warm.reshape(1, -1)])
-    #     #     yt       = np.vstack([yt, [[yt_warm]]])
-    #     #     all_grad = np.vstack([all_grad, np.array(all_grad_warm).reshape(1, -1)])
-    #     #     all_sensib = np.vstack([all_sensib, np.array(all_sensib_warm).reshape(1, -1)])
-    #     #     sm = build_metamodel_GEK(xt, yt, all_grad)
-    #     #     metamodel = build_metamodel_total(sm)
-    #     #     start_point = U_warm
-    #     #     result = FORM_GEK(modelname, params_names, metamodel, start_point)
-    #     # n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM = resultats_GP(modelname, params_names, result, metamodel)
-    # # --------------------------------------------------------------------------- #
-    # # 3. AFFICHAGE                                                                #
-    #     # print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM)
-    #     # print_GP_tests(modelname, params_names, U_res, g_GP_res, metamodel)
-    #     # print_visu_HF_GP(metamodel, U_res, g_GP_res, size_visu, beta, Pf_FORM)
-
-    # else:
-    # # --------------------------------------------------------------------------- #
-    # # MODELE HF                                                                   #
-    # # --------------------------------------------------------------------------- #
-    # # 1. MODELE                                                                   #
-    #     hf_cache = build_hf_cache(modelname, params_names)
-    # # --------------------------------------------------------------------------- #
-    # # 2. FORM                                                                     #
-    #     start_point = [0.0]*len(params_names)
-    #     result = FORM_HF(modelname, params_names, hf_cache, start_point)
-    #     if mode_number_goal>1:
-    #         result_modes = [result]
-
-    """
-    LES ANCIENNES FONCTIONS RESULTATS COMMENTEES
-    """
-        # def resultats_GP(modelname, params_names, result, metamodel):
-    #     n_iter = result.getOptimizationResult().getIterationNumber()
-    #     U_res = result.getPhysicalSpaceDesignPoint()
-    #     dist_X = dist_jointe(modelname, params_names)
-    #     T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-    #     X_res = T_inv(U_res)
-    #     if do_GEK:
-    #         g_GP_res, grad_res = metamodel(U_res)
-    #     else:
-    #         g_GP_res = metamodel(U_res)[0]
-    #         grad_res = metamodel.gradient(U_res) 
-    #     importance = result.getImportanceFactors()
-    #     beta = result.getHasoferReliabilityIndex()
-    #     Pf_FORM = result.getEventProbability()
-    #     return n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM
-    
-    # def print_resultats(n_iter, U_res, X_res, g_GP_res, grad_res, importance, beta, Pf_FORM):
-    #     n_var = U_res.getDimension()
-    #     print(f"Nombre d'itérations FORM : {n_iter}")
-    #     for i in range(n_var):
-    #         print(f"  Design point U : u_{params_names[i]} = {U_res[i]:.4f}")
-    #     for i in range(n_var):
-    #         print(f"  Design point X : {params_names[i]} = {X_res[i]:.4f}")
-    #     print(f"  g_GP_res   = {g_GP_res:.6f}")
-    #     for i in range(n_var):
-    #         print(f"  dg/du_{params_names[i]} en u* = {grad_res[i, 0]:.6f}")
-    #     for i in range(n_var):
-    #         print(f"  Importance factor {params_names[i]}: {importance[i]:.4f}")
-    #     print(f"\nBeta FORM = {beta:.6f}", flush=True)
-    #     print(f"Pf FORM   = {Pf_FORM:.6e}", flush=True)
-    
-    # def GP_linear_test(modelname, params_names, U_res):
-    #     n_var = U_res.getDimension()
-    #     u0 = ot.Point([0.0] * n_var)
-    #     g0, grad_U_0, _ = run_HF(modelname, params_names, u0)
-    #     norm_sq = grad_U_0.norm() ** 2
-    #     u_FOSM = grad_U_0 * (-g0 / norm_sq)
-    #     relative_error_FOSM = (u_FOSM - U_res).norm() / U_res.norm()
-    #     return u_FOSM, relative_error_FOSM
-
-    # def GP_HF_test(modelname, params_names, U_res, g_GP_res, metamodel): #renommer GP_test global une fois que tu sais ce que tu fais pour metamodel(GEK) car U_res doit etre convertit avant il me semble dans leur cas (pas un metamodel type ot pour ce cas)
-    #     g_HF, _, _ = run_HF(modelname, params_names, U_res)
-    #     relative_error_HF = abs(g_HF - g_GP_res) / abs(g_HF)
-    #     return g_GP_res, g_HF, relative_error_HF       
-
-    # def print_GP_tests(modelname, params_names, U_res, g_GP_res, metamodel): #pareil renommer, cest que le deuxieme bloc qu'il faut changer, sinon tu renomme et tu met un if dans cette fonction. ou tu arrive a adapter la précédente et pas de if. 
-    #     if do_GP_linear_test:
-    #         u_FOSM, relative_error_FOSM = GP_linear_test(modelname, params_names, U_res)
-    #         print(f"\nTest linéarisation :")
-    #         print(f"  u* FORM = {U_res}")
-    #         print(f"  u* FOSM = {u_FOSM}")
-    #         print(f"  Erreur relative entre u* FORM et u* FOSM : {relative_error_FOSM:.4f}")
-    #     if do_GP_HF_test:
-    #         g_GP, g_HF, relative_error_HF = GP_HF_test(modelname, params_names, U_res, g_GP_res, metamodel)
-    #         print(f"\nTest GP au point de FORM :")
-    #         print(f"  g* FORM = {g_HF:.6f}")
-    #         print(f"  g* GP   = {g_GP:.6f}")
-    #         print(f"  Erreur relative entre g* FORM et g* GP : {relative_error_HF:.4f}")
-    
-    # def print_visu_HF_GP(metamodel, U_res, g_GP_res, size_visu, beta, Pf_FORM):
-    #     if do_visu:
-    #         u_star = U_res
-    #         n_fc = 8
-    #         n_fy = 8  # 8×8 = 64 appels HF, nombre pair = pas de point central = pas de doublon avec u*
-    #         u_fc_values = np.linspace( U_res[0] - size_visu,  U_res[0] + size_visu, n_fc)
-    #         u_fy_values = np.linspace( U_res[1] - size_visu,  U_res[1] + size_visu, n_fy)
-
-    #         G_HF = np.zeros((n_fy, n_fc))
-    #         G_GP = np.zeros((n_fy, n_fc))
-    #         for i, u_fy in enumerate(u_fy_values):
-    #             for j, u_fc in enumerate(u_fc_values):
-    #                 u_scan = ot.Point([u_fc, u_fy])
-    #                 g_HF, _, _ = run_HF(modelname, params_names, u_scan)
-    #                 G_HF[i, j] = g_HF
-    #                 if do_GEK:
-    #                     g_GP, _ = metamodel(u_scan)
-    #                 else:
-    #                     g_GP = metamodel(u_scan)[0]
-    #                 G_GP[i, j] = g_GP
-
-    #         from matplotlib.lines import Line2D
-    #         plt.figure()
-    #         plt.contour(u_fc_values, u_fy_values, G_HF, levels=[0], colors='r', linestyles='--', linewidths=2)
-    #         plt.contour(u_fc_values, u_fy_values, G_GP, levels=[0], colors='b', linestyles='-',  linewidths=2)
-    #         plt.plot(U_res[0], U_res[1], 'g*', markersize=14)
-    #         plt.plot(0, 0, 'ko', markersize=8)
-    #         legend_elements = [
-    #             Line2D([0], [0], color='r', linestyle='--', linewidth=2, label='g_HF = 0'),
-    #             Line2D([0], [0], color='b', linestyle='-',  linewidth=2, label='g_GP = 0'),
-    #             Line2D([0], [0], color='g', marker='*', linestyle='', markersize=14, label=f'u* ({U_res[0]:.2f}, {U_res[1]:.2f})'),
-    #             Line2D([0], [0], color='k', marker='o', linestyle='', markersize=8,  label='Moyenne (origine)'),
-    #         ]
-    #         plt.legend(handles=legend_elements)
-    #         plt.xlabel('u_fc')
-    #         plt.ylabel('u_fy')
-    #         plt.title(f'Etat limite g=0 autour du point de conception, beta={beta:.3f}, Pf = {Pf_FORM:.3f}')
-    #         plt.grid(True)
-    #         plt.tight_layout()
-    #         plt.savefig(r'C:\_workingDir\_SF\test flexion\etat_limite.png', dpi=150)
-    #         plt.show()
-    #         print("Visu sauvegardée : etat_limite.png")
-
-    # --------------------------------------------------------------------------- #
-    
-    """
-    LES ANCIENNES FONCTIONS FORM COMMENTEES
-    """
-        # A MODIFIER POUR AVOIR FORMAT EVENT
-    # def FORM_HF(modelname, params_names, hf_cache, start_point):
-    #     grad_call_count = [0]
-    #     dist_X = dist_jointe(modelname, params_names)
-    #     dist_U = dist_X.getStandardDistribution()
-    #     n_var = len(params_names)
-    #     def func(u):
-    #         hf_cache.run_if_needed(u)
-    #         return [hf_cache._last_g]
-    #     def grad_func(u):
-    #         grad_call_count[0] += 1
-    #         print(f"[GRAD] appel #{grad_call_count[0]} en u={list(u)}", flush=True)
-    #         hf_cache.run_if_needed(u)
-    #         return [[v for v in hf_cache._last_grad]]
-        
-    #     myFunction = ot.PythonFunction(n_var, 1, func, gradient=grad_func)
-    #     vect   = ot.RandomVector(dist_U)
-    #     output = ot.CompositeRandomVector(myFunction, vect)
-    #     event  = ot.ThresholdEvent(output, ot.Less(), 0.0)
-
-    #     solver = ot.AbdoRackwitz()
-    #     solver.setMaximumIterationNumber(n_max_FORM)
-    #     solver.setCheckStatus(False)
-    #     solver.setStartingPoint(start_point)
-
-    #     algo = ot.FORM(solver, event)
-    #     algo.run()
-    #     result = algo.getResult()
-    #     return result
-        
-    # def FORM_multi_start(result_modes, U_doe_multistart):
-    #     norms = np.array([np.linalg.norm(np.array(u)) for u in U_doe_multistart])
-    #     sorted_idx = np.argsort(norms)[::-1]  # indices ordre décroissant
-    #     U_doe_multistart = ot.Sample([U_doe_multistart[int(i)] for i in sorted_idx])
-    #     for n_FORM in range(n_multistart):
-    #         solver.setStartingPoint(U_doe_multistart[n_FORM])
-    #         algo = ot.FORM(solver, event)
-    #         algo.run()
-    #         u_new  = algo.getResult().getPhysicalSpaceDesignPoint()
-    #         u_prev_list = [result.getPhysicalSpaceDesignPoint() for result in result_modes]
-    #         if all((u_new - u_prev).norm() > tol_all_modes for u_prev in u_prev_list):
-    #             result_modes.append(algo.getResult())
-    #             U_doe_multistart = ot.Sample(np.delete(np.array(U_doe_multistart), n_FORM, axis=0))
-    #             break
-    #     return result_modes, U_doe_multistart
-
-    """
-    Le build total de gek
-    """
-        # ENLEVER TOTAL DU CODE POUR LINSTANT, LE TESTER SUR LAUTRE CODE PUIS LE REMETTRE CORRECTEMENT. 
-    
-    # def build_metamodel_total(sm, metamodel_PCE = None):
-    #     n_var = len(params_names) 
-    #     if metamodel_PCE is not None:
-    #         def metamodel(u):
-    #             u_np = np.array(u).reshape(1, -1)
-    #             y_GEK = float(sm.predict_values(u_np)[0,0])
-    #             grad_GEK = np.array([[float(sm.predict_derivatives(u_np, kx)[0, 0])] for kx in range(n_var)])
-    #             u_sample_ot = ot.Sample(u_np)
-    #             y_PCE = float(np.array(metamodel_PCE(u_sample_ot))[0,0])
-    #             grad_PCE = np.array(metamodel_PCE.gradient(u))
-    #             return y_GEK + y_PCE, grad_GEK + grad_PCE
-    #     else: 
-    #         def metamodel(u):
-    #             u_np = np.array(u).reshape(1, -1)
-    #             y_GEK = float(sm.predict_values(u_np)[0,0])
-    #             grad_GEK = np.array([[float(sm.predict_derivatives(u_np, kx)[0, 0])] for kx in range(n_var)])
-    #             return y_GEK, grad_GEK
-    #     return metamodel
-
-
-
-    """
-    Anciens test (obsolete)
-    """
-    # def print_error_ana_hf(calc, n_scan=100):
-    #     """
-    #     Pour chaque u1, scanne u2 et trouve TOUS les zéros de f_ana = 0
-    #     (détecte toutes les branches par changements de signe successifs).
-    #     On calcule l'erreur relative sur la grille obtenue. 
-    #     Utilise les globales : size_visu, fym, cov_fy, SIGMA.
-    #     n_scan : résolution du scan u2 pour détecter les changements de signe.
-    #     """
-    #     if cov_fy is None:
-    #         u2_min = -(fym / SIGMA + 1.645)
-    #     else:
-    #         u2_min = -1.0 / cov_fy
-    #     u2_low = max(-size_visu, u2_min)
-
-    #     pts = []
-    #     u1_scan = np.linspace(-size_visu, size_visu, n_scan)
-    #     for u2 in np.linspace(size_visu, u2_low, 40):  # u2 decroissant, du haut vers le bas
-    #         g_vals = [calc.f_ana([u1, u2]) for u1 in u1_scan]
-    #         for i in range(len(u1_scan) - 1):
-    #             if g_vals[i] * g_vals[i+1] < 0:
-    #                 u1_star = brentq(
-    #                     lambda u1: calc.f_ana([u1, u2]), u1_scan[i], u1_scan[i+1])
-    #                 if abs(calc.f_ana([u1_star, u2])) < 1e-1:
-    #                     pts.append([u1_star, u2])
-    #     # --- Points HF sur la frontière analytique ---
-    #     frontier_pts = np.array(pts) if pts else np.zeros((0, 2))
-    #     if print_pts:
-    #         print(f"Points sur la frontiere analytique : {len(frontier_pts)}", flush=True)
-    #         for pt in frontier_pts:
-    #             print(f"  u=({pt[0]:.4f}, {pt[1]:.4f})", flush=True)
-    #         return None
-    #     print(f"Points sur la frontière : {len(frontier_pts)}")
-    #     if len(frontier_pts):
-    #         print(f"  u1 : [{frontier_pts[:,0].min():.2f}, {frontier_pts[:,0].max():.2f}]")
-    #         print(f"  u2 : [{frontier_pts[:,1].min():.2f}, {frontier_pts[:,1].max():.2f}]")
-
-    #     # --- Sélection des points HF : sous-échantillonnage uniforme ---
-    #     n_hf_target = 2 * n_grid_hf
-    #     step = max(1, len(frontier_pts) // n_hf_target)
-    #     error_grid = frontier_pts[::step]
-    #     print(f"error_grid : {len(error_grid)} points (1 sur {step})")
-
-    #     # --- Évaluation g_HF sur les points frontière ana ---
-    #     g_HF_vals    = np.array([run_HF(pt)[0]          for pt in error_grid])
-    #     f_ana_vals   = np.array([calc.f_ana(list(pt))   for pt in error_grid])   # ≈ 0 par construction
-
-    #     print("u_grid    :", [list(np.round(pt, 4)) for pt in error_grid])
-    #     print("g_HF_vals :", list(np.round(g_HF_vals, 6)))
-    #     print("f_ana_vals:", list(np.round(f_ana_vals, 6)))
-
-    #     err_abs      = np.abs(g_HF_vals - f_ana_vals)
-
-    #     dist_X = dist_jointe()
-    #     T_inv  = dist_X.getInverseIsoProbabilisticTransformation()
-    #     print("--- Validation g_HF vs f_ana sur frontière ---")
-    #     for i, pt in enumerate(error_grid):
-    #         x = T_inv(ot.Point(list(pt)))
-    #         print(f"  pt {i:2d} u=({pt[0]:6.2f},{pt[1]:6.2f})  "
-    #             f"fc={x[0]:6.2f}  fy={x[1]:6.2f}  "
-    #             f"g_HF={g_HF_vals[i]:+.4f}  f_ana={f_ana_vals[i]:+.4f}  "
-    #             f"err_abs={err_abs[i]:.4f}")
-    #     print(f"  → err_abs_moy = {err_abs.mean():.4f}  (biais moyen g_HF - f_ana sur la frontiere)")
-    """
-    A supprimer
-    """
-    # def condition_pivotA(self, u1):
-    #         x_point = self.T_inv(ot.Point([u1,0.0]))
-    #         x1 = x_point[0]
-    #         return self.A3*self.A2/self.A1 * x1
-        
-    # def condition_plast(self,u1):
-    #     x_point = self.T_inv(ot.Point([u1,0.0]))
-    #     x1 = x_point[0]
-    #     return self.A2 * (-1 + (1 + 4 * x1 / self.A1)**0.5) / 2   
-
-
-    # def g_ana(self,u1):
-    #         x_point = self.T_inv(ot.Point([u1,0.0]))
-    #         x1 = x_point[0]
-    #         limite_pivotA = limite_pivotA(self) 
-    #         if x1 > limite_pivotA:
-    #             return g_pivotA(self)
-    #         elif x1 < limite_pivotA and x1 > gnp_pivotB(self):
-    #             return u2p_LS(self,u1)
-    #         else :
-    #             # a completer
-
-
-
-
-
-    # if print_ana:
-    #     calc  = calc_ana()
-    #     f_ana = calc.f_ana
-    #     if print_ana_hf_error:
-    #         print_error_ana_hf(calc, n_scan=100)
-
-
-    # def print_visu_claude(best_result, best_sp, xt, sm_GEK, g_ot_KRG, g_hf, modes, calc):
-    #     n_grid = 100
-    #     u1 = np.linspace(*u1_bornes, n_grid)
-    #     u2 = np.linspace(*u2_bornes, n_grid)
-    #     U1, U2 = np.meshgrid(u1, u2)
-    #     grid = np.column_stack([U1.ravel(), U2.ravel()])
-
-    #     u_star = np.array(best_result.getStandardSpaceDesignPoint())
-
-    #     fig, ax = plt.subplots(figsize=(10, 10))
-
-    #     # --- Fond coloré : GEKPLS en priorité, sinon KRG ---
-    #     if sm_GEK is not None:
-    #         Z_surr = sm_GEK.predict_values(grid).reshape(n_grid, n_grid)
-    #         cf = ax.contourf(U1, U2, Z_surr, levels=20, cmap='RdYlGn', alpha=0.6)
-    #         plt.colorbar(cf, ax=ax, label='g (surrogate GEKPLS)')
-    #         ax.contour(U1, U2, Z_surr, levels=[0], colors='blue', linewidths=2)
-    #     elif g_ot_KRG is not None:
-    #         grid_ot = ot.Sample(grid.tolist())
-    #         Z_krg = np.array(g_ot_KRG(grid_ot))[:, 0].reshape(n_grid, n_grid)
-    #         cf = ax.contourf(U1, U2, Z_krg, levels=20, cmap='RdYlGn', alpha=0.6)
-    #         plt.colorbar(cf, ax=ax, label='g (KRG)')
-
-    #     if g_ot_KRG is not None:
-    #         grid_ot = ot.Sample(grid.tolist())
-    #         Z_krg = np.array(g_ot_KRG(grid_ot))[:, 0].reshape(n_grid, n_grid)
-    #         ax.contour(U1, U2, Z_krg, levels=[0], colors='purple', linewidths=2, linestyles=':')
-
-    #     # --- Contour HF grossier ---
-    #     if g_hf is not None:
-    #         u1_hf = np.linspace(*u1_bornes, n_grid_hf)
-    #         u2_hf = np.linspace(*u2_bornes, n_grid_hf)
-    #         U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-    #         grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-    #         Z_true = np.array([g_hf(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-    #         ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
-
-    #     # --- Courbe analytique flexion_claude ---
-    #     if calc is not None:
-    #         ax.set_xlim(-30, 30)
-    #         ax.set_ylim(-30, 30)
-    #         calc.print_ana(ax)
-
-    #     # --- Points ---
-    #     ax.scatter(xt[:, 0], xt[:, 1],    c='black',  s=30,  zorder=5, label='DOE')
-    #     ax.scatter(0, 0,                   c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
-    #     ax.scatter(best_sp[0], best_sp[1], c='cyan',   s=100, zorder=7, marker='D', label='point de depart best')
-    #     ax.scatter(u_star[0], u_star[1],   c='gold',   s=200, zorder=8, marker='*',
-    #             label=f'u* mode1 beta={best_result.getHasoferReliabilityIndex():.3f}')
-    #     if len(modes) > 0:
-    #         for k, mode in enumerate(modes[1:], start=2):
-    #             u_m = np.array(mode.getStandardSpaceDesignPoint())
-    #             ax.scatter(u_m[0], u_m[1], c='magenta', s=200, zorder=8, marker='*',
-    #                     label=f'u* mode{k} beta={mode.getHasoferReliabilityIndex():.3f}')
-
-    #     # --- Légende contours ---
-    #     legend_lines = []
-    #     if sm_GEK is not None:
-    #         legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 GEKPLS'))
-    #     if g_ot_KRG is not None:
-    #         legend_lines.append(Line2D([0], [0], color='purple', linestyle=':',  linewidth=2, label='g=0 KRG'))
-    #     if g_hf is not None:
-    #         legend_lines.append(Line2D([0], [0], color='red',    linestyle='--', linewidth=2, label='g=0 HF'))
-    #     if calc is not None:
-    #         legend_lines.append(Line2D([0], [0], color='green',  linestyle='-.', linewidth=2, label='g=0 ana (claude)'))
-
-    #     ax.legend(handles=ax.legend().legend_handles + legend_lines)
-
-    #     ax.set_xlabel('u1')
-    #     ax.set_ylabel('u2')
-    #     ax.set_title('FORM sur GEKPLS — courbe analytique corrigée')
-    #     plt.tight_layout()
-    #     plt.show()
-
-        # def calc_ana_claude():
-    #     path = os.path.join(r'C:\workspace\storage\admin\SF', modelname + '.ds')
-    #     with open(os.path.join(path, 'dsCad.txt'), 'r') as f:
-    #         _cad = f.read()
-    #     with open(os.path.join(path, 'dsLoad.txt'), 'r') as f:
-    #         _load = f.read()
-
-    #     b   = _parse(_cad, 'b')
-    #     h   = _parse(_cad, 'h')
-    #     L   = _parse(_cad, 'L')
-    #     phi = _parse(_cad, 'phi')
-
-    #     n_bars = len(re.findall(r'REBAR\(', _cad))
-    #     As = n_bars * math.pi * (phi / 2e3) ** 2
-
-    #     z_rebar = [float(v) for v in re.findall(
-    #         r'pts\d+\.append\(POINT\([^,]+,\s*[^,]+,\s*([\d.]+)\)', _cad)]
-    #     d = h/2 + sum(z_rebar) / len(z_rebar)
-
-    #     F = abs(float(re.search(r"Z='(-?[\d.]+)'", _load).group(1)))
-    #     Med = F * L
-
-    #     return flexion_claude(Med=Med, As=As, b=b, h=h, d=d,
-    #                           fc_otparams=(fcm, cov_fc), fy_otparams=(fym, cov_fy))
-    
-    # def test_calc_claude(x1):
-    #     calc = calc_ana_claude()
-    #     u1 = calc.T(ot.Point([x1, 0.0]))[0]
-    #     return calc.u2p_LS(u1)
-
-
-    # def FORM_multistart(starting_points):
-    #     best_beta = np.inf
-    #     best_result = None
-    #     best_sp = None
-
-    #     for sp in starting_points:
-    #         try:
-    #             solver = ot.AbdoRackwitz()
-    #             solver.setStartingPoint(sp.tolist())
-    #             solver.setMaximumIterationNumber(n_max_FORM)
-    #             solver.setCheckStatus(False)
-    #             solver.setMaximumConstraintError(tol_FORM)
-    #             form_i = ot.FORM(solver, event)
-    #             form_i.run()
-    #             r_i = form_i.getResult()
-    #             if r_i.getHasoferReliabilityIndex() < best_beta:
-    #                 best_beta = r_i.getHasoferReliabilityIndex()
-    #                 best_result = r_i
-    #                 best_sp = sp
-    #         except Exception as e:
-    #             print(f"FORM exception: {type(e).__name__}: {e}")
-    #     return best_result, best_sp
-
-
-    # def build_residu(xt, y_hf, all_grad_hf, metamodel_PCE): #a appeler que dans le bloc do_pce, donc pas de do_pce en param.
-    #         U_doe = ot.Sample(xt)                               # a modifier pour remettre le calcul de all_sensib_hf dans build_doe puis ici
-    #         y_PCE = np.array(metamodel_PCE(U_doe))
-    #         n_var = U_doe.getDimension()
-    #         n0 = U_doe.getSize()
-    #         dist_X = dist_jointe()
-    #         T = dist_X.getIsoProbabilisticTransformation()
-    #         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-    #         all_grad_PCE = np.zeros((n0, n_var))
-    #         # all_sensib_PCE = np.zeros((n0, n_var))
-    #         for i in range(n0):
-    #             grad_pce_u = metamodel_PCE.gradient(U_doe[i])       
-    #             for j in range(n_var):
-    #                 all_grad_PCE[i, j] = grad_pce_u[j, 0]
-    #             # sensibilités
-    #             x_i = T_inv(ot.Sample([U_doe[i]]))[0]               
-    #             J_T_i = T.gradient(x_i)                             
-    #             grad_u_i = ot.Point(all_grad_PCE[i, :])             
-    #             grad_x_i = J_T_i * grad_u_i                         
-    #             # all_sensib_PCE[i, :] = np.array(grad_x_i)              
-    #         return y_hf-y_PCE, all_grad_hf-all_grad_PCE
-
-
-
-
-    # def init_FORM(sm_GEK, sm_GEPCK, g_ot_KRG, g_ot_GEK, g_ot_PCKRG, g_ot_GEPCK, g_ot_HF, xt, yt, all_grad):
-    #     # --- Événement de défaillance ---
-    #     distribution = ot.JointDistribution([ot.Normal(0, 1)] * n_var)
-    #     X = ot.RandomVector(distribution)
-    #     Y = None
-
-    #     if do_KRG and not try_pce:
-    #         if xt is None: xt, yt, all_grad = build_DOE()
-    #         g_ot_KRG, result_KRG = build_metamodel_KRG(xt, yt)
-    #         Y = ot.CompositeRandomVector(g_ot_KRG, X)
-
-    #     elif do_GEK and not try_pce:
-    #         if xt is None: xt, yt, all_grad = build_DOE()
-    #         sm_GEK = build_metamodel_GEK(xt, yt, all_grad)
-    #         g_ot_GEK = ot.Function(GEKPLSFunction(sm_GEK))
-    #         Y = ot.CompositeRandomVector(g_ot_GEK, X)
-
-    #     elif do_KRG and try_pce:
-    #         if xt is None: xt, y_hf, all_grad_hf = build_DOE()
-    #         g_ot_PCE = build_metamodel_PCE(xt, y_hf)
-    #         y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE)           # on calcule la composante PCE à partir des valeurs hf
-    #         yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE                      # on construit le residu
-    #         gr_ot_KRG, result_KRG = build_metamodel_KRG(xt, yr)                                    # on construit le surrogate sur le residu
-    #         g_ot_PCKRG = ot.Function(PCKRGFunction(g_ot_PCE, gr_ot_KRG))               # on wrappe la somme du surrogate et du PCE
-    #         yt, all_grad = y_hf, all_grad_hf # A REVOIR AVANT DE LANCER WARM START     # on stocke les valeurs hf pour si warmstart
-    #         Y = ot.CompositeRandomVector(g_ot_PCKRG, X)
-
-    #     elif do_GEK and try_pce:
-    #         if xt is None: xt, y_hf, all_grad_hf = build_DOE()
-    #         g_ot_PCE = build_metamodel_PCE(xt, y_hf)
-    #         y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
-    #         yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
-    #         smr_GEK = build_metamodel_GEK(xt, yr, all_grad_r)
-    #         g_ot_GEPCK  = ot.Function(oldGEPCKFunction(g_ot_PCE, smr_GEK))
-    #         yt, all_grad = y_hf, all_grad_hf # A REVOIR AVANT DE LANCER WARM START
-    #         Y = ot.CompositeRandomVector(g_ot_GEPCK, X)
-
-    #     elif do_HF:
-    #         if xt is None: xt = build_DOE()
-    #         g_ot_HF = ot.Function(HFFunction())
-    #         Y = ot.CompositeRandomVector(g_ot_HF, X)
-    #         yt, all_grad = None, None
-        
-    #     event = ot.ThresholdEvent(Y, ot.Less(), 0.0) if Y is not None else None
-    #     return event, sm_GEK, sm_GEPCK, g_ot_KRG, g_ot_GEK, g_ot_PCKRG, g_ot_GEPCK, g_ot_HF, xt, yt, all_grad
-    """
-    options supprimées
-    """
-    # do_visu=True
-    # do_GP_linear_test = True
-    # do_GP_HF_test = True
-    # do_pce_eval = False
-    #  #NPO CHANGER POUR METTRE PARAMETRE
+        print('Aucune branche active', flush=True)
+        sys.exit(1)
+
+    if do_warmstart:
+        starting_points = np.array([[0.0, 0.0]])
+        modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
+        modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
+    else:
+        starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+        modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
+
+    best_result = modes[0] if modes else None
+    best_sp     = best_sps[0] if best_sps else None
+    if best_result is None:
+        print('Aucun FORM ne marche.', flush=True)
+        sys.exit(1)
+    if len(modes)>1:
+        print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
+        print_results(modes[1], g_ot)
+        print('Les résultats du mode 1 sont : ')
+    print_results(best_result, g_ot)
+    if do_IS and modes:
+        result_IS = run_IS(modes, event)
+        print_results_IS(result_IS)
+    print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
