@@ -22,3 +22,6 @@ word de resultat et comparaison/
 # Fichiers output à la racine
 output_*.txt
 C：tmpform_out.txt
+
+# Sessions Claude
+global_resume_session*.md
