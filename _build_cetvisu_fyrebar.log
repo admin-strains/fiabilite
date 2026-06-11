@@ -1,0 +1,18 @@
+=== Build environment ready ===
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.43.34808\bin\Hostx64\x64\cl.exe
+C:\Program Files (x86)\Intel\oneAPI\compiler\latest\bin\ifx.exe
+C:\Program Files\CMake\bin\cmake.exe
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4\bin\nvcc.exe
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin\nvcc.exe
+MKLROOT= (intentionally empty - pixi provides MKL)
+FC=ifx
+Done.
+=== ninja CetVISU ===
+[1/5] Building CXX object front\02_COMMON\15_CmnVISU\CMakeFiles\CmnVISU.dir\CmnVISU_MakeScalarField.cxx.obj
+[2/5] Linking CXX shared library front\02_COMMON\15_CmnVISU\CmnVISU.dll
+[3/5] Building CXX object front\03_CETAUTOMATIX\CetVISU\CMakeFiles\CetVISU.dir\CetVISU_RenderResultRebar.cxx.obj
+[4/5] Building CXX object front\03_CETAUTOMATIX\CetVISU\CMakeFiles\CetVISU.dir\CetVISU_RenderResultVolumic.cxx.obj
+[5/5] Linking CXX shared module front\03_CETAUTOMATIX\CetVISU\CetVISU.pyd
+ninja exit=0

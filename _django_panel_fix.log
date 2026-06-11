@@ -1,0 +1,71 @@
+Runtime PATH configured successfully.
+
+DLL locations:
+  Main runtime: C:/workspace/front/STRAINS/rupt/core\bin
+  Meshgems:     C:/workspace/front/STRAINS/rupt/core\bin\meshgems
+  Mosek:        C:/workspace/front/STRAINS/rupt/core\bin\mosek
+
+--------------------------------------------------------
+ STRAINS Django runserver --nothreading
+ stderr (DS_PROF, warnings) -> C:\Users\MOHAMA~1.MOU\AppData\Local\Temp\5\strains_django_stderr.log
+ Ouvrir l'app : http://127.0.0.1:8000
+ Stop : Ctrl-C dans cette fenetre
+--------------------------------------------------------
+
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+Performing system checks...
+
+[chat] daemon native spawned (pid=69836)
+[chat] brief projet (re)charge : 472 chars (~118 tokens)
+System check identified no issues (3 silenced).
+June 11, 2026 - 19:49:32
+Django version 5.1.6, using settings 'STRAINS.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+Performing system checks...
+
+[chat] daemon native spawned (pid=19092)
+[chat] brief projet (re)charge : 472 chars (~118 tokens)
+System check identified no issues (3 silenced).
+June 11, 2026 - 20:08:03
+Django version 5.1.6, using settings 'STRAINS.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+Performing system checks...
+
+[chat] daemon native spawned (pid=72504)
+[chat] brief projet (re)charge : 472 chars (~118 tokens)
+System check identified no issues (3 silenced).
+June 11, 2026 - 20:08:10
+Django version 5.1.6, using settings 'STRAINS.settings'
+Starting development server at http://127.0.0.1:8000/
+Quit the server with CTRL-BREAK.
+
+APACHESERVER =  False
+MEDIA_ROOT =  C:\workspace\storage
+CAD_LOCAL_STORAGE =  C:\workspace\storage
+DATABASE:  strains
+('C:\\workspace\\front\\STRAINS\\static',)
+STRIPE_LIVE_MODE  =  False
+
+Server stopped.
+Appuyez sur une touche pour continuer... 

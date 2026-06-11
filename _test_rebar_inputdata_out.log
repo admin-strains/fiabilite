@@ -1,0 +1,23 @@
+=== Calling CetVISU.RenderResult to generate _rebar_inputdata ===
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.009000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_stat.dsmed in 0.001000 seconds 
+[CetVISU_RenderResultRebar] kine.HasField(KINESIEF_REBAR)=1, stat.HasField(SIEF_REBAR)=0 -> useKine=1 useStat=0 field=resu____KINESIEF_REBAR
+[CetVISU_RenderResultRebar] entering write block
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.011000 seconds 
+Read field resu____KINESIEF_REBAR in 0.003000 seconds, with spatial discretization ON_CELLS and dimension 1
+[CetVISU_RenderResultRebar] before Writer.Write, aDR.Lines.size=1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres
+[CetVISU_RenderResultRebar] DEP_REBAR present, building _rebar_disp
+Read field resu____DEP_REBAR in 0.002000 seconds, with spatial discretization ON_CELLS and dimension 1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] _rebar_disp Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres
+[CetVISU_RenderResultRebar] input____FY_REBAR present, building _rebar_inputdata
+Read field input____FY_REBAR in 0.002000 seconds, with spatial discretization ON_CELLS and dimension 1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] _rebar_inputdata Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres
+=== SUCCESS ===
+=== Files after call ===
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_rebar.dsviewres (165b)
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_rebar_disp.dsviewres (165b)
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_rebar_inputdata.dsviewres (165b)
