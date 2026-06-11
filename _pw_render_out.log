@@ -1,0 +1,15 @@
+[19:30:19] >>> STEP 1 : Expand Input data
+[19:30:20] >>> STEP 2 : Verify CSS alignment of sub-rows
+[19:30:20]     alignment: [{'name': 'fc vol', 'cbX': 0, 'nameX': 0, 'tagX': 0}, {'name': 'ft vol', 'cbX': 0, 'nameX': 0, 'tagX': 0}, {'name': 'fy rebar', 'cbX': 0, 'nameX': 0, 'tagX': 0}]
+[19:30:20]     ASSERT alignment (cbXs={0}, nameXs={0}, tagXs={0}): PASS
+[19:30:21] >>> STEP 3 : Capture mesh state BEFORE click fc_vol
+[19:30:21]     BEFORE: {'visibleMeshCount': 11, 'visibleMeshNames': ['X_offset', 'Y_offset', 'Z_offset', 'concrete_1:lineSystem:disconnected', 'XAxis', 'XAxis', 'YAxis', 'YAxis', 'ZAxis', 'ZAxis'], 'hasResultMesh': True, 'resultMeshField': 'uniform'}
+[19:30:21] >>> STEP 4 : Click fc vol → verify mesh appears with fc field
+[19:30:29]     AFTER fc vol: {'visibleMeshCount': 11, 'visibleMeshNames': ['X_offset', 'Y_offset', 'Z_offset', 'concrete_1:lineSystem:disconnected', 'XAxis', 'XAxis', 'YAxis', 'YAxis', 'ZAxis', 'ZAxis'], 'hasResultMesh': True, 'resultMeshField': 'InputData - fc', 'colorScaleMin': None, 'colorScaleMax': None}
+[19:30:29]     ASSERT mesh appeared: FAIL
+[19:30:29]     ASSERT field=input____FC: FAIL
+[19:30:29] >>> STEP 5 : Click ft vol → fc deactivated, ft shown
+[19:30:37]     AFTER ft vol: {'activeInputSubFields': {'fc_vol': False, 'ft_vol': True}, 'resultMeshField': 'InputData - ft'}
+[19:30:37]     ASSERT exclusivity (fc=False, ft=True): PASS
+[19:30:37]     ASSERT field=input____FT: FAIL
+[19:30:37] >>> Page errors:

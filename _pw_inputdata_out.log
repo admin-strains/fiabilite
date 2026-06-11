@@ -1,0 +1,8 @@
+[19:26:40] >>> Goto http://127.0.0.1:8000
+[19:26:44] >>> Navigate Moulin_Blanc / Test_Lshape_NORMAL
+[19:27:13] >>> STEP 1 : Verify '+ Input data' group present
+[19:27:13]     Groups: []
+[19:27:13]     ASSERT step1 (Input data row exists): FAIL
+[19:27:13] >>> STEP 2 : Expand Input data
+[19:27:15]     Sub-fields visible: []
+[19:27:15] >>> STEP 3 : Click 'fc vol' sub-field
