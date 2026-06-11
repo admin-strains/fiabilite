@@ -1,6 +1,0 @@
-[ExportRegular] InputData: loading fc/ft/fy
-[ExportRegular] Before MSF construct, Suffix='', Groups.size()=1
-[ExportRegular] After MSF construct
-[ExportRegular] In Suffix=='' branch, Groups.size()=1
-[ExportRegular] Calling RunGroup[0]='InputData'
-[ExportRegular] After RunGroup[0]

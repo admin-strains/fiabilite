@@ -1,7 +1,0 @@
-[21:18:48] >>> Opening URL
-[21:18:55] >>> Open model
-[21:19:12] nav exception: Locator.dblclick: Timeout 15000ms exceeded.
-Call log:
-  - waiting for locator("text=/Test_Lshape_NORMAL/").first
-
-[21:19:17] CANNOT load model — aborting
