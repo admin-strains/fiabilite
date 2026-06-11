@@ -1,0 +1,35 @@
+{
+  "T1_fc": {
+    "label": "fc_vol",
+    "cls": "SkinMesh",
+    "field": "InputData - fc",
+    "min": 20,
+    "max": 20,
+    "rmVis": true,
+    "meshVis": true,
+    "panels": []
+  },
+  "T2_ft": {
+    "label": "ft_vol",
+    "cls": "SkinMesh",
+    "field": "InputData - ft",
+    "min": 3,
+    "max": 3,
+    "rmVis": true,
+    "meshVis": true,
+    "panels": []
+  },
+  "T3_fy": {
+    "label": "fy_rebar",
+    "cls": "RebarStresses",
+    "field": null,
+    "min": null,
+    "max": null,
+    "rmVis": true,
+    "meshVis": null,
+    "panels": []
+  },
+  "edit": "no_fy_panel",
+  "filter": "no_fy_panel",
+  "all_errors": []
+}

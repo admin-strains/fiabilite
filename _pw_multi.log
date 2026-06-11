@@ -1,0 +1,5 @@
+[21:30:05] loaded
+[21:30:07] Click fy rebar
+[21:30:13] Click ft vol (with fy rebar still on)
+[21:30:21]    {'cls': 'SkinMesh', 'field': 'InputData - ft', 'min': 3, 'max': 3, 'fieldsKeys': ['mesh', 'InputData - fc', 'InputData - ft', 'InputData - fy'], 'allPanelEls': ['panel panel-default', 'panel panel-default ng-scope ng-hide', 'rupt-col panel panel-default ng-scope', 'dsFieldsPanel ng-hide', 'panel panel-default ng-scope', 'rupt-col panel panel-default', 'result-panel-card ng-scope', 'result-panel-card ng-scope', 'djDebugPanelButton', 'HistoryPanel', 'djDebugPanelButton', 'VersionsPanel', 'djDebugPanelButton', 'djDebugPanelButton', 'SettingsPanel'], 'sceneMeshes': ['X_offset', 'Y_offset', 'Z_offset', 'concrete_1:lineSystem:disconnected', 'XAxis', 'XAxis', 'YAxis', 'YAxis', 'ZAxis', 'ZAxis', 'rebar_inputdata_mesh', 'colorMesh']}
+[21:30:21]    errs_in_this_step: 0

@@ -1,0 +1,18 @@
+[21:26:45] >>> Goto + Moulin_Blanc + smartClick Test_Lshape
+[21:27:12] opened=True
+[21:27:15] >>> T1: fc vol
+[21:27:20]    {'label': 'fc_vol', 'cls': 'SkinMesh', 'field': 'InputData - fc', 'min': 20, 'max': 20, 'rmVis': True, 'meshVis': True, 'panels': []}
+[21:27:20]    errs+=0
+[21:27:20] >>> T2: ft vol (switch)
+[21:27:25]    {'label': 'ft_vol', 'cls': 'SkinMesh', 'field': 'InputData - ft', 'min': 3, 'max': 3, 'rmVis': True, 'meshVis': True, 'panels': []}
+[21:27:25]    errs+=0
+[21:27:25] >>> T3: uncheck ft, check fy rebar
+[21:27:37]    {'label': 'fy_rebar', 'cls': 'RebarStresses', 'field': None, 'min': None, 'max': None, 'rmVis': True, 'meshVis': None, 'panels': []}
+[21:27:37]    errs+=0
+[21:27:37] >>> T4: also check ft vol, then edit fy rebar Max
+[21:27:45]    edit_result: no_fy_panel
+[21:27:45]    errs+=0
+[21:27:47] >>> T5: enable filtering on fy rebar
+[21:27:47]    filter_result: no_fy_panel
+[21:27:47]    errs+=0
+[21:27:50] >>> TOTAL ERRORS: 0
