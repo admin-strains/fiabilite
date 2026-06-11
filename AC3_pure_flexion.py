@@ -300,6 +300,12 @@ if __name__ == '__main__':
     # --- Label PCE GEPCK (mis a jour par init_g_ot, lu par print_planche_EFF) ---
     _gepck_pce_label = ""
 
+    # --- Historiques EFF (mis a jour par run_EFF et init_g_ot, lus par print_EFF_graphs) ---
+    _eff_history_EFF   = []   # EFF(u_opt) avant ajout de chaque point (incl. initial)
+    _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
+    _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
+    _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
+
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
     out_dir_eff = r'C:\_workingDir\_SF\test flexion\output\png EFF'
@@ -1140,8 +1146,9 @@ if __name__ == '__main__':
                 _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
                 _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
             print(f"  GEPCK PCE termes : {' '.join(_terms)}", flush=True)
-            global _gepck_pce_label
+            global _gepck_pce_label, _eff_history_theta
             _gepck_pce_label = ' '.join(_terms)
+            _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
             gepck_impl = GEPCKFunction(_fm)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
@@ -1386,13 +1393,18 @@ if __name__ == '__main__':
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
         list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
-        list_ratio_BB = []
-        list_ratio_BS = []
+        global _eff_history_EFF, _eff_history_BB, _eff_history_BS
+        _eff_history_BB = []
+        _eff_history_BS = []
+        list_ratio_BB = _eff_history_BB   # alias — même objet
+        list_ratio_BS = _eff_history_BS
+        _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         while _cond():
             _sigG = sigma_func(u_opt)
             _muG  = g_ot(ot.Point(u_opt))[0]
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
+            _eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
             xt_eff.append(np.array(u_opt))
             # --- On reconstruit le modèle ---
             g_val, grad_U, _ = run_HF(np.array(u_opt))
@@ -1511,6 +1523,67 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #
+
+    def print_EFF_graphs():
+        """Planche 3 subplots : historique EFF, criteres BB/BS, theta Kriging.
+        Lit les globaux _eff_history_*. Sauvegarde en PNG dans out_dir_eff."""
+        if not (_eff_history_EFF or _eff_history_BB or _eff_history_theta):
+            return
+
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        _clip = 1e-12   # evite log(0)
+
+        # --- Subplot 1 : EFF vs iterations ---
+        ax = axes[0]
+        x_eff = list(range(len(_eff_history_EFF)))
+        vals_eff = [max(abs(v), _clip) for v in _eff_history_EFF]
+        ax.semilogy(x_eff, vals_eff, 'b-o', ms=4, lw=1.2, label='EFF(u_opt)')
+        ax.axhline(tol_EFF, color='orange', ls='--', lw=1, label=f'tol_EFF={tol_EFF:.1e}')
+        ax.set_xlabel('Iteration EFF')
+        ax.set_ylabel('EFF (echelle log)')
+        ax.set_title('Convergence EFF')
+        ax.legend(fontsize=8)
+        ax.grid(True, which='both', alpha=0.4)
+
+        # --- Subplot 2 : BB / BS vs iterations ---
+        ax = axes[1]
+        if _eff_history_BB:
+            x_bb = list(range(1, len(_eff_history_BB) + 1))
+            vals_bb = [max(v, _clip) if v is not None else np.nan for v in _eff_history_BB]
+            ax.semilogy(x_bb, vals_bb, 'g-o', ms=4, lw=1.2, label='BB')
+            ax.axhline(tol_BB, color='g', ls='--', lw=0.8, label=f'tol_BB={tol_BB:.1e}')
+        if _eff_history_BS:
+            x_bs = list(range(1, len(_eff_history_BS) + 1))
+            vals_bs = [max(v, _clip) if v is not None else np.nan for v in _eff_history_BS]
+            ax.semilogy(x_bs, vals_bs, 'r-s', ms=4, lw=1.2, label='BS')
+            ax.axhline(tol_BS, color='r', ls='--', lw=0.8, label=f'tol_BS={tol_BS:.1e}')
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('Ratio (echelle log)')
+        ax.set_title('Criteres BB / BS')
+        ax.legend(fontsize=8)
+        ax.grid(True, which='both', alpha=0.4)
+
+        # --- Subplot 3 : theta Kriging vs iterations ---
+        ax = axes[2]
+        if _eff_history_theta:
+            thetas = np.array(_eff_history_theta)   # shape (n_fits, n_var)
+            x_th = list(range(len(_eff_history_theta)))
+            for k in range(thetas.shape[1]):
+                lbl = params_names[k] if k < len(params_names) else f'dim{k}'
+                ax.semilogy(x_th, np.maximum(thetas[:, k], _clip), '-o', ms=4, lw=1.2, label=f'theta_{lbl}')
+            norms_th = np.maximum(np.linalg.norm(thetas, axis=1), _clip)
+            ax.semilogy(x_th, norms_th, 'k--', ms=3, lw=1, label='||theta||')
+        ax.set_xlabel('Iteration (fit)')
+        ax.set_ylabel('theta (echelle log)')
+        ax.set_title('Evolution theta Kriging')
+        ax.legend(fontsize=8)
+        ax.grid(True, which='both', alpha=0.4)
+
+        fig.tight_layout()
+        fname = f'EFF_graphs_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [EFF_graphs] -> {fname}", flush=True)
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
@@ -2052,6 +2125,7 @@ if __name__ == '__main__':
         print_planche_EFF(g_ot, sigma_func, xt, [])
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
         print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+        print_EFF_graphs()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
     if event is None:
