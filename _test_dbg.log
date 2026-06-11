@@ -1,0 +1,28 @@
+=== Calling CetVISU.RenderResult with GROUPS=['InputData'] ===
+[ExportRegular] InputData: loading fc/ft/fy
+[ExportRegular] Before MSF construct, Suffix='', Groups.size()=1
+[ExportRegular] After MSF construct
+[ExportRegular] In Suffix=='' branch, Groups.size()=1
+[ExportRegular] Calling RunGroup[0]='InputData'
+**********************************************************************
+	Setting parameters for VISU
+**********************************************************************
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.012000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+Read field input____FC in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read meshes (without families and groups) C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.002000 seconds 
+Read field input____FT in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read field input____FY in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+[RunGroup] called with group='InputData'
+[ProcessInputData] called
+[ProcessInputData] aFC=00000192031E6920 aFT=00000192031E69C0 aFY=00000192031E5CA0
+[ProcessInputData] IsQuadratic=1
+[ProcessInputData] aFC tuples=199 nbComp=1
+[ExportRegular] After RunGroup[0]
+=== RenderResult SUCCESS ===
+=== Files in .ds after call ===
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_InputData.dsviewres
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_rebar_inputdata.dsviewres
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\auto_test_inputdata_dsviewres.py
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.000000 s)
+Closing model 

@@ -12,3 +12,68 @@ DLL locations:
  Stop : Ctrl-C dans cette fenetre
 --------------------------------------------------------
 
+clean_brep_mesh : Ok
+is_subshape_of_solid_mode = one_is_enough : Ok
+compute_bnd_box = false : Ok
+print_timers = true : Ok 
+WARNING : need to reopen file C:/workspace/storage/admin/Moulin_Blanc/Test_Lshape_NORMAL.ds/lshape.stp
+Process Process CetCADData_ExternalFile in 00.025 seconds 
+Process ProcessModel in 00.027 seconds 
+Size of file 00.000 Mega Octets 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.008000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_stat.dsmed in 0.001000 seconds 
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_stat.dsmed in 0.006000 seconds 
+**********************************************************************
+	Setting parameters for VISU
+force_process false OK
+**********************************************************************
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.009000 seconds 
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_mesh.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_mesh.dsviewres in 0.000000 s)
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+[RunGroup] called with group='mesh'
+Closing model 
+**********************************************************************
+	Setting parameters for VISU
+view_optimization false OK
+force_process false OK
+**********************************************************************
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.008000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.006000 seconds 
+Read field resu____DEPL in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read meshes (without families and groups) C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.002000 seconds 
+[RunGroup] called with group='Displacement'
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_Displacement.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_Displacement.dsviewres in 0.000000 s)
+Closing model 
+**********************************************************************
+	Setting parameters for VISU
+view_optimization false OK
+force_process false OK
+**********************************************************************
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.009000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+Read field input____FC in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read meshes (without families and groups) C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.002000 seconds 
+Read field input____FT in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read field input____FY in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+[RunGroup] called with group='InputData'
+[ProcessInputData] called
+[ProcessInputData] aFC=0000018D311BBC60 aFT=0000018D311BBF80 aFY=0000018D311BBEE0
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.000000 s)
+Closing model 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.006000 seconds 
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_stat.dsmed in 0.001000 seconds 
+[CetVISU_RenderResultRebar] kine.HasField(KINESIEF_REBAR)=1, stat.HasField(SIEF_REBAR)=0 -> useKine=1 useStat=0 field=resu____KINESIEF_REBAR
+[CetVISU_RenderResultRebar] entering write block
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.010000 seconds 
+Read field resu____KINESIEF_REBAR in 0.002000 seconds, with spatial discretization ON_CELLS and dimension 1
+[CetVISU_RenderResultRebar] before Writer.Write, aDR.Lines.size=1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar.dsviewres
+[CetVISU_RenderResultRebar] DEP_REBAR present, building _rebar_disp
+Read field resu____DEP_REBAR in 0.002000 seconds, with spatial discretization ON_CELLS and dimension 1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] _rebar_disp Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_disp.dsviewres
+[CetVISU_RenderResultRebar] input____FY_REBAR present, building _rebar_inputdata
+Read field input____FY_REBAR in 0.002000 seconds, with spatial discretization ON_CELLS and dimension 1
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres in 0.000000 s)
+[CetVISU_RenderResultRebar] _rebar_inputdata Write returned: C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_rebar_inputdata.dsviewres

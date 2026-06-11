@@ -1,0 +1,16 @@
+'vswhere.exe' n'est pas reconnu en tant que commande interne
+ou externe, un programme ex‚cutable ou un fichier de commandes.
+=== Build environment ready ===
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.43.34808\bin\Hostx64\x64\cl.exe
+C:\Program Files (x86)\Intel\oneAPI\compiler\latest\bin\ifx.exe
+C:\Program Files\CMake\bin\cmake.exe
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4\bin\nvcc.exe
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin\nvcc.exe
+MKLROOT= (intentionally empty - pixi provides MKL)
+FC=ifx
+Done.
+=== ninja CetVISU ===
+ninja: no work to do.
+ninja exit=0
