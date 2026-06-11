@@ -1,0 +1,20 @@
+=== Calling CetVISU.RenderResult with GROUPS=['InputData'] ===
+**********************************************************************
+	Setting parameters for VISU
+**********************************************************************
+Read meshes C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.012000 seconds 
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_mesh.dsviewres in 0.000000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_mesh.dsviewres in 0.000000 s)
+Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.007000 seconds 
+Read field input____FC in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read meshes (without families and groups) C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.003000 seconds 
+Read field input____FT in 0.005000 seconds, with spatial discretization ON_CELLS and dimension 3
+Read field input____FY in 0.004000 seconds, with spatial discretization ON_CELLS and dimension 3
+[RunGroup] called with group='InputData'
+[ProcessInputData] called
+[ProcessInputData] aFC=00000245169A30B0 aFT=00000245169A36F0 aFY=00000245169A3330
+=== RenderResult SUCCESS ===
+=== Files in .ds after call ===
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\Yield_analysis0_0_InputData.dsviewres
+  C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds\auto_test_inputdata_dsviewres.py
+Wrote file C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.001000 s (copied from C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_InputData.dsviewres in 0.000000 s)
+Closing model 

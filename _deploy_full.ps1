@@ -1,8 +1,13 @@
 $TS = Get-Date -Format "HHmmss"
 Write-Host "=== Deploy CmnVISU.dll + CetVISU.pyd ==="
+# IMPORTANT: set_runtime_path.bat met STRAINS/rupt/core en tete du PATH, donc le
+# loader Windows prend la copie LA-BAS en priorite sur common/Dll. Toujours copier
+# CmnVISU.dll dans common/Dll ET dans rupt/core (sinon un vieux fichier eclipse le nouveau).
 foreach ($pair in @(
     @("C:\workspace\build-sln-mohamad\front\02_COMMON\15_CmnVISU\CmnVISU.dll", "C:\workspace\front\STRAINS\common\Dll\CmnVISU.dll"),
     @("C:\workspace\build-sln-mohamad\front\02_COMMON\15_CmnVISU\CmnVISU.dll", "C:\workspace\front_mohamad\STRAINS\common\Dll\CmnVISU.dll"),
+    @("C:\workspace\build-sln-mohamad\front\02_COMMON\15_CmnVISU\CmnVISU.dll", "C:\workspace\front\STRAINS\rupt\core\CmnVISU.dll"),
+    @("C:\workspace\build-sln-mohamad\front\02_COMMON\15_CmnVISU\CmnVISU.dll", "C:\workspace\front_mohamad\STRAINS\rupt\core\CmnVISU.dll"),
     @("C:\workspace\build-sln-mohamad\front\03_CETAUTOMATIX\CetVISU\CetVISU.pyd", "C:\workspace\front\STRAINS\rupt\core\CetVISU.pyd"),
     @("C:\workspace\build-sln-mohamad\front\03_CETAUTOMATIX\CetVISU\CetVISU.pyd", "C:\workspace\front_mohamad\STRAINS\rupt\core\CetVISU.pyd")
 )) {
