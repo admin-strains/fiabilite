@@ -1,0 +1,65 @@
+[21:42:35] >>> Click Displacement
+[21:42:41] >>> Click ft vol
+[21:42:47] >>> Click fy rebar
+[21:42:54] [
+  {
+    "title": "Displacement",
+    "scopeMode": "SkinMesh",
+    "scopeAuto": true,
+    "scopeMax": "1.000e+0",
+    "scopeMin": "0.000e+0",
+    "bbCount": 2,
+    "bbVisible": [
+      {
+        "display": "none",
+        "ngHide": true,
+        "op": "1"
+      },
+      {
+        "display": "none",
+        "ngHide": true,
+        "op": "1"
+      }
+    ]
+  },
+  {
+    "title": "Input data - InputData - ft",
+    "scopeMode": "SkinMesh",
+    "scopeAuto": false,
+    "scopeMax": "3.000e+0",
+    "scopeMin": "3.000e+0",
+    "bbCount": 2,
+    "bbVisible": [
+      {
+        "display": "flex",
+        "ngHide": false,
+        "op": "1"
+      },
+      {
+        "display": "flex",
+        "ngHide": false,
+        "op": "1"
+      }
+    ]
+  },
+  {
+    "title": "Input data - fy rebar",
+    "scopeMode": "RebarStresses",
+    "scopeAuto": false,
+    "scopeMax": "2.350e+2",
+    "scopeMin": "2.350e+2",
+    "bbCount": 2,
+    "bbVisible": [
+      {
+        "display": "flex",
+        "ngHide": false,
+        "op": "1"
+      },
+      {
+        "display": "flex",
+        "ngHide": false,
+        "op": "1"
+      }
+    ]
+  }
+]
