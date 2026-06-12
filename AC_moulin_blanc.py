@@ -97,7 +97,7 @@ if __name__ == '__main__':
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
     tol_FORM = 1.0                 # précision acceptée par FORM pour l'état limite
-    tol_all_modes = 2.0                           #distance DBSCAN entre deux modes
+    tol_all_modes = 0.9                           #distance DBSCAN entre deux modes (Semia flexion: 0.9)
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
     # --------------------------------------------------------------------------- #
@@ -120,27 +120,27 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
+    max_of_maxdegree = 1                                # (fixe) degre max autorisé (Semia flexion: 1, stabilite PCE)
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = 8e-3                                            # critere d'arret EFF
+    tol_EFF = 1e-3                                            # critere d'arret EFF (Semia flexion: 8e-3 -> 1e-3, 8x plus strict)
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
-    tol_BS       = 0.005        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'both'       # critere d'arret EFF : 'BB' | 'BS' | 'both'
-    u1_eff_min, u1_eff_max = -10.0, 10.0
-    u2_eff_min, u2_eff_max = -10.0, 10.0
-    n_max_EFF = 40
+    tol_BS       = 0.01         # critere BS : |beta_IS - beta_IS_prec| / beta_IS (Semia flexion: 0.005 -> 0.01)
+    EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' (Semia flexion: nouveau, OR au lieu de AND)
+    u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
+    u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
+    n_max_EFF = 30      # Semia flexion: 40 -> 30
     print_EFF_progres = False                 # ★ 1er run : pas de PNG par iter EFF (inactif si do_EFF=False)
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
     
     # Paramètres de print ---
-    u1_max=10.0
-    u2_max=10.0
-    u1_min = -10.0
-    u2_min=-10.0
+    u1_max = 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (bornes visu coherentes avec EFF)
+    u2_max = 7.5
+    u1_min = -7.5
+    u2_min = -7.5
     n_grid = 300
     n_grid_hf = 7
 
@@ -313,7 +313,7 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = r'C:\workspace\fiabilite\output\png_EFF_moulin_blanc'
+    out_dir_eff = os.path.join(r'C:\workspace\fiabilite\output\png_EFF_moulin_blanc', f'png_EFF_{timestamp}')
     os.makedirs(out_dir_eff, exist_ok=True)
 
     do_KRG = True if modele == 'KRG' else False
@@ -1366,11 +1366,6 @@ if __name__ == '__main__':
         count_valid_BB   = 0
         count_valid_BS   = 0
         count_valid_both = 0
-        if EFF_criteria == 'BB':
-            _ratio_init = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
-            if _ratio_init is not None and _ratio_init < tol_BB:
-                count_valid_BB = 1
-
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
         bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
@@ -1394,6 +1389,8 @@ if __name__ == '__main__':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
         elif EFF_criteria == 'both':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
+        elif EFF_criteria == 'at_least_one':
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
 
@@ -1405,6 +1402,13 @@ if __name__ == '__main__':
         list_ratio_BB = _eff_history_BB   # alias — même objet
         list_ratio_BS = _eff_history_BS
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
+
+        # --- Ratio BB initial (avant tout enrichissement, pour criteres qui tracent BB) ---
+        if EFF_criteria in ('BB', 'both', 'at_least_one'):
+            _ratio_init_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
+            list_ratio_BB.append(_ratio_init_bb)
+            if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
+                count_valid_BB = 1
 
         while _cond():
             _sigG = sigma_func(u_opt)
@@ -1464,6 +1468,30 @@ if __name__ == '__main__':
                     count_valid_both = 0
                 list_ratio_BB.append(_ratio_bb)
                 list_ratio_BS.append(_ratio_bs)
+            # --- Critere at_least_one : BB, BS ou both, le premier atteint gagne ---
+            if EFF_criteria == 'at_least_one':
+                iter_count += 1
+                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}")
+                if _b_mid is not None and list_beta_IS and _b_mid != 0:
+                    _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
+                    print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
+                else:
+                    _ratio_bs = None
+                if _ratio_bb is not None and _ratio_bb < tol_BB:
+                    count_valid_BB += 1
+                else:
+                    count_valid_BB = 0
+                if _ratio_bs is not None and _ratio_bs < tol_BS:
+                    count_valid_BS += 1
+                else:
+                    count_valid_BS = 0
+                if (_ratio_bb is not None and _ratio_bb < tol_BB and
+                        _ratio_bs is not None and _ratio_bs < tol_BS):
+                    count_valid_both += 1
+                else:
+                    count_valid_both = 0
+                list_ratio_BB.append(_ratio_bb)
+                list_ratio_BS.append(_ratio_bs)
 
             if _b_mid is not None:
                 list_beta_IS.append(_b_mid)
@@ -1504,9 +1532,9 @@ if __name__ == '__main__':
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
         _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria == 'BB'
-        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria == 'BS'
-        _exit_both = count_valid_both >= 2 and EFF_criteria == 'both'
+        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria in ('BB', 'at_least_one')
+        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria in ('BS', 'at_least_one')
+        _exit_both = count_valid_both >= 2 and EFF_criteria in ('both', 'at_least_one')
         if _exit_eff:
             _reason = "EFF"
         elif _exit_bb:
