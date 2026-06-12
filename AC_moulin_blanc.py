@@ -145,7 +145,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = True     # courbe rouge HF de reference (config complete)
+    print_HF = False    # 2026-06-12 : skip courbe rouge HF (eviterait 49 appels STRAINS pour grille 2D ref)
     print_DOE = True
     print_3D = False
     
