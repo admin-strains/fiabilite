@@ -394,12 +394,13 @@ if __name__ == '__main__':
             print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
             loadfile = open(path + '\\dsLoad.txt', 'r')
-            model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-            loadscript = loadfile.read() 
-            with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
+            # OPTIM 2026-06-12 : SKIP model.Load(fileName) (~274s redondant sur dscad lourd)
+            # Le model est deja construit en memoire par exec(cadscript) ci-dessus.
+            loadscript = loadfile.read()
+            with CetLOAD.LOAD_MODEL(model, path):
                 exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
 
-            Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
+            Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié.
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
                 "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
                 "global_physical_size": global_size,
@@ -501,9 +502,9 @@ if __name__ == '__main__':
         print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
         loadfile = open(path + '\\dsLoad.txt', 'r')
-        model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-        loadscript = loadfile.read() 
-        with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
+        # OPTIM 2026-06-12 : SKIP model.Load(fileName) (~274s redondant sur dscad lourd)
+        loadscript = loadfile.read()
+        with CetLOAD.LOAD_MODEL(model, path):
             exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
 
         Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 

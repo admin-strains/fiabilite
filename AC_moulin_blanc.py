@@ -432,14 +432,15 @@ if __name__ == '__main__':
 
             _t0 = time.perf_counter()
             loadfile = open(path + '\\dsLoad.txt', 'r')
-            model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas.
-            _t_log(f"  model.Load(.dscad) - deserialise OCC binaire (bottleneck connu sur dscad lourd)", _t0)
-
-            _t0 = time.perf_counter()
+            # OPTIM 2026-06-12 : SKIP model.Load(fileName) (~274s redondant sur dscad 144MB)
+            # Le model est deja construit en memoire par exec(cadscript) ci-dessus avec
+            # les NEW fc/fy de cette iteration. Le Save() a ecrit le .dscad sur disque
+            # pour les autres outils. Re-Load() serait juste deserialiser ce qu'on
+            # vient de serialiser -> redondant. LOAD_MODEL accepte le model in-memory.
             loadscript = loadfile.read()
-            with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
+            with CetLOAD.LOAD_MODEL(model, path):
                 exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
-            _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL", _t0)
+            _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL (model deja en memoire, skip Load 274s)", _t0)
 
             Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
@@ -562,14 +563,12 @@ if __name__ == '__main__':
 
         _t0 = time.perf_counter()
         loadfile = open(path + '\\dsLoad.txt', 'r')
-        model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas.
-        _t_log(f"  model.Load(.dscad) - deserialise OCC binaire (bottleneck connu sur dscad lourd)", _t0)
-
-        _t0 = time.perf_counter()
+        # OPTIM 2026-06-12 : SKIP model.Load(fileName) (~274s redondant sur dscad 144MB)
+        # idem run_one_SOL : model deja en memoire apres exec(cadscript)
         loadscript = loadfile.read()
-        with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
+        with CetLOAD.LOAD_MODEL(model, path):
             exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
-        _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL", _t0)
+        _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL (model deja en memoire, skip Load 274s)", _t0)
 
         Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
             "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
