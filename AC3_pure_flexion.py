@@ -115,17 +115,17 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
+    max_of_maxdegree = 1                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 1e-3                                            # critere d'arret EFF
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
-    tol_BS       = 0.005        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'both'       # critere d'arret EFF : 'BB' | 'BS' | 'both'
+    tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
+    EFF_criteria = 'at_least_one'   # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     u1_eff_min, u1_eff_max = -7.5, 7.5
     u2_eff_min, u2_eff_max = -7.5, 7.5
-    n_max_EFF = 40
+    n_max_EFF = 30
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
 
     # --------------------------------------------------------------------------- #
@@ -165,8 +165,6 @@ if __name__ == '__main__':
         ]
     }
     hf_2d_grid_fixed = {'params': {'u1_min': -7.5, 'u1_max': 7.5, 'u2_min': -7.5, 'u2_max': 7.5, 'n_grid_hf': 7}, 'Z': [[-0.3048427695030216, -0.22891590973411535, -0.17506898503051704, -0.13244927109611004, -0.10129543042397982, -0.0765360998544049, -0.062249235714368245], [-0.2257816162078632, -0.11365958979528101, -0.028997372818430844, 0.03332663340911579, 0.08064234781595059, 0.11726736695066453, 0.14310361369809366], [-0.17805651290624536, -0.018910316459999188, 0.09918786130374846, 0.1858251917575513, 0.2531158870931547, 0.3021885029686284, 0.34268145767558456], [-0.1549148648029084, 0.05269494738730307, 0.20998061097485365, 0.3299189462908805, 0.41580441863004003, 0.4826545516122871, 0.5336960785866443], [-0.13729312621600687, 0.10035424842020402, 0.3052273682406095, 0.4578253209378169, 0.5686256147041158, 0.6553285879729309, 0.7187290068785122], [-0.11968311744349758, 0.12831008336264493, 0.3838387509925443, 0.5728516899364615, 0.7147663269643572, 0.8209517903183503, 0.9004409022006188], [-0.10240227164036131, 0.14626332604325398, 0.4432055444725922, 0.676394666281652, 0.8535084808020308, 0.9788340488849436, 1.0781099259800206]]}
-    # guide pour hardcoder:  {'params': {'u1_min':-10.0,'u1_max':10.0,'u2_min':-10.0,'u2_max':10.0,'n_grid_hf':7}, 'Z':[[-0.35987397002878807, -0.2669967363774981, -0.20535573020711573, -0.1629405668993904, -0.1332743271859559, -0.11852860036358548, -0.11076112318802811], [-0.25975747046282116, -0.08030213317916757, 0.04143746766061329, 0.12373557540792612, 0.18037582744039926, 0.21842464629970904, 0.23757988854578782], [-0.2249654139385301, 0.04841011473603918, 0.24779511664467302, 0.38202490257144284, 0.47582561090667097, 0.5414471308620206, 0.5780528850246671], [-0.19675328364698386, 0.11599332588276412, 0.4138665193031785, 0.6174288511497759, 0.7523619015524756, 0.8447865997026027, 0.91001418635111], [-0.1684019331521559, 0.14718304332768306, 0.5410080650758031, 0.8210242484756942, 1.009376895847256, 1.1395757360046685, 1.2323790279345541], [-0.1404367138757393, 0.17570029864525294, 0.6248628650465244, 0.9984931859001764, 1.2494627601162334, 1.4211157981633327, 1.5404671177896931], [-0.11224374227096778, 0.20401650921121672, 0.6720914036748573, 1.1503870059250554, 1.477692628590619, 1.6917535476874397, 1.8400075254424433]]}
-
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
@@ -309,7 +307,8 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = r'C:\_workingDir\_SF\test flexion\output\png EFF'
+    out_dir_eff = os.path.join(r'C:\_workingDir\_SF\test flexion\output\png EFF', f'png_EFF_{timestamp}')
+    os.makedirs(out_dir_eff, exist_ok=True)
 
     do_KRG = True if modele == 'KRG' else False
     do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
@@ -1362,11 +1361,6 @@ if __name__ == '__main__':
         count_valid_BB   = 0
         count_valid_BS   = 0
         count_valid_both = 0
-        if EFF_criteria == 'BB':
-            _ratio_init = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial")
-            if _ratio_init is not None and _ratio_init < tol_BB:
-                count_valid_BB = 1
-
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
         bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
@@ -1390,6 +1384,8 @@ if __name__ == '__main__':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
         elif EFF_criteria == 'both':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
+        elif EFF_criteria == 'at_least_one':
+            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
 
@@ -1401,6 +1397,13 @@ if __name__ == '__main__':
         list_ratio_BB = _eff_history_BB   # alias — même objet
         list_ratio_BS = _eff_history_BS
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
+
+        # --- Ratio BB initial (avant tout enrichissement, pour criteres qui tracent BB) ---
+        if EFF_criteria in ('BB', 'both', 'at_least_one'):
+            _ratio_init_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
+            list_ratio_BB.append(_ratio_init_bb)
+            if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
+                count_valid_BB = 1
 
         while _cond():
             _sigG = sigma_func(u_opt)
@@ -1460,6 +1463,30 @@ if __name__ == '__main__':
                     count_valid_both = 0
                 list_ratio_BB.append(_ratio_bb)
                 list_ratio_BS.append(_ratio_bs)
+            # --- Critere at_least_one : BB, BS ou both, le premier atteint gagne ---
+            if EFF_criteria == 'at_least_one':
+                iter_count += 1
+                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}")
+                if _b_mid is not None and list_beta_IS and _b_mid != 0:
+                    _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
+                    print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
+                else:
+                    _ratio_bs = None
+                if _ratio_bb is not None and _ratio_bb < tol_BB:
+                    count_valid_BB += 1
+                else:
+                    count_valid_BB = 0
+                if _ratio_bs is not None and _ratio_bs < tol_BS:
+                    count_valid_BS += 1
+                else:
+                    count_valid_BS = 0
+                if (_ratio_bb is not None and _ratio_bb < tol_BB and
+                        _ratio_bs is not None and _ratio_bs < tol_BS):
+                    count_valid_both += 1
+                else:
+                    count_valid_both = 0
+                list_ratio_BB.append(_ratio_bb)
+                list_ratio_BS.append(_ratio_bs)
 
             if _b_mid is not None:
                 list_beta_IS.append(_b_mid)
@@ -1500,9 +1527,9 @@ if __name__ == '__main__':
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
         _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria == 'BB'
-        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria == 'BS'
-        _exit_both = count_valid_both >= 2 and EFF_criteria == 'both'
+        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria in ('BB', 'at_least_one')
+        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria in ('BS', 'at_least_one')
+        _exit_both = count_valid_both >= 2 and EFF_criteria in ('both', 'at_least_one')
         if _exit_eff:
             _reason = "EFF"
         elif _exit_bb:
