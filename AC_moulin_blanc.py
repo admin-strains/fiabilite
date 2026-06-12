@@ -5,6 +5,26 @@ import os
 import json
 import shutil
 import re
+import time
+
+# ============================================================================
+# TIMING HELPERS (instrumentation detaillee pour identifier bottlenecks)
+# ============================================================================
+_T_START = time.perf_counter()
+
+def _t_now():
+    return time.perf_counter()
+
+def _t_log(label, t0=None):
+    """Log un timing. Si t0 fourni: affiche le delta. Sinon: marqueur de temps absolu."""
+    total = time.perf_counter() - _T_START
+    if t0 is not None:
+        dt = time.perf_counter() - t0
+        print(f"[TIMING t={total:7.1f}s dt={dt:7.2f}s] {label}", flush=True)
+    else:
+        print(f"[TIMING t={total:7.1f}s          ] {label}", flush=True)
+    return time.perf_counter()
+# ============================================================================
 
 from STRAINS.rupt.APIs.CetCAD_API import *
 from STRAINS.rupt.APIs import CetLOAD
@@ -131,7 +151,7 @@ if __name__ == '__main__':
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
     n_max_EFF = 30      # Semia flexion: 40 -> 30
-    print_EFF_progres = False                 # ★ 1er run : pas de PNG par iter EFF (inactif si do_EFF=False)
+    print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
@@ -387,23 +407,39 @@ if __name__ == '__main__':
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         #MODIF 1 10/04 - on doit tout mettre dans params in SOL. TOUT.
-        for i in range (len(SOL)): 
+        for i in range (len(SOL)):
+            _t_iter = _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} START params={SOL[i]} ===")
+            _t0 = time.perf_counter()
             patch_params(path, **SOL[i]) #à cette étape SOL ne contient que 'fc': ,'fy':
+            _t_log(f"  patch_params (dsCad.txt write)", _t0)
+
+            _t0 = time.perf_counter()
             model = MODEL() #ici model n'est pas encore rempli
             SET_CONTEXT(model, path)
             fileName = os.path.join(path, AnalysisName + ".dscad") #on crée le chemin du fichier disque .dscad lisible par C. C va tout faire et on renverra les info plus tard (.load)
+            _t_log(f"  MODEL() + SET_CONTEXT", _t0)
 
+            _t0 = time.perf_counter()
             cadfile = open(path + '\\dsCad.txt', 'r')
             cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
             exec(cadscript, globals()) # ici on modifie le modèle (C, cython) et donc les variables (on exécute le script de dsCad.txt ce qui modifie les variables - rien dans .dscad, tout dans var. en mémoire)
+            _t_log(f"  exec(dsCad.txt) - lit dsCad + remplit model OCC", _t0)
+
+            _t0 = time.perf_counter()
             model.Save(fileName) # ici on créé dscad et on enregistre les modifs des variables dans .dscad
+            _t_log(f"  model.Save(.dscad) - serialise OCC binaire", _t0)
             print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
+            _t0 = time.perf_counter()
             loadfile = open(path + '\\dsLoad.txt', 'r')
-            model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-            loadscript = loadfile.read() 
+            model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas.
+            _t_log(f"  model.Load(.dscad) - deserialise OCC binaire (bottleneck connu sur dscad lourd)", _t0)
+
+            _t0 = time.perf_counter()
+            loadscript = loadfile.read()
             with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
                 exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
+            _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL", _t0)
 
             Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
@@ -430,7 +466,9 @@ if __name__ == '__main__':
             }
             # OPTIM 2026-05-29 (be9c7e485+630d96ccf) : skip ~270s relecture .dscad par CetMESH
             Meshkwargs["model_handle"] = model.GETHANDLEPTR()
+            _t0 = time.perf_counter()
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
+            _t_log(f"  CetMESH.ANISO_MESH (avec model_handle: skip ~270s relecture)", _t0)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
             exec(open(r"C:\workspace\fiabilite\InitSolver.py").read(), globals())
@@ -461,9 +499,12 @@ if __name__ == '__main__':
 
             # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
             kwargs["model_handle"] = model.GETHANDLEPTR()
+            _t0 = time.perf_counter()
             CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
+            _t_log(f"  CetSOLV.SOLV (avec model_handle: skip ~240s relecture)", _t0)
 
             # Lire le resultat
+            _t0 = time.perf_counter()
             metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares") #on extrait l'addresse du fichier pour définir f
             with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
                 d = json.load(f) #chargement du fichier .dsmetares
@@ -475,42 +516,60 @@ if __name__ == '__main__':
                 for k, v in d['info']['Sensitivity'].items():
                     #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
                     #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                    #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. 
-                    if 'COMPRESSIVE_STRENGTH' in k: 
+                    #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad.
+                    if 'COMPRESSIVE_STRENGTH' in k:
                         SOL[i]['dg_fc']= v
-                    if 'YIELD_STRENGTH' in k: 
+                    if 'YIELD_STRENGTH' in k:
                         SOL[i]['dg_fy']= v
                     if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
-                        break    
+                        break
+            _t_log(f"  read .dsmetares + sensibilites (g={SOL[i]['g']:.4f})", _t0)
+            _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} END (g={SOL[i]['g']:.4f}) ===", _t_iter)
         return SOL
 
     def run_HF(u):
+        _t_hf = _t_log(f"=== run_HF START u={list(np.round(np.array(u),4))} ===")
         sensitivity = True
         n_var = len(u)
         dist_X = dist_jointe()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation() 
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
         u_point = ot.Point(u)
         x_point = T_inv(u_point)
         path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         params={params_names[i]: x_point[i] for i in range(n_var)}
+        _t0 = time.perf_counter()
         patch_params(path, **params) #à cette étape SOL ne contient que 'fc': ,'fy':
+        _t_log(f"  patch_params (dsCad.txt write) params={params}", _t0)
+
+        _t0 = time.perf_counter()
         model = MODEL() #ici model n'est pas encore rempli
         SET_CONTEXT(model, path)
         fileName = os.path.join(path, AnalysisName + ".dscad") #on crée le chemin du fichier disque .dscad lisible par C. C va tout faire et on renverra les info plus tard (.load)
+        _t_log(f"  MODEL() + SET_CONTEXT", _t0)
 
+        _t0 = time.perf_counter()
         cadfile = open(path + '\\dsCad.txt', 'r')
         cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
         exec(cadscript, globals()) # ici on modifie le modèle (C, cython) et donc les variables (on exécute le script de dsCad.txt ce qui modifie les variables - rien dans .dscad, tout dans var. en mémoire)
+        _t_log(f"  exec(dsCad.txt) - lit dsCad + remplit model OCC", _t0)
+
+        _t0 = time.perf_counter()
         model.Save(fileName) # ici on créé dscad et on enregistre les modifs des variables dans .dscad
+        _t_log(f"  model.Save(.dscad) - serialise OCC binaire", _t0)
         print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
+        _t0 = time.perf_counter()
         loadfile = open(path + '\\dsLoad.txt', 'r')
-        model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-        loadscript = loadfile.read() 
+        model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas.
+        _t_log(f"  model.Load(.dscad) - deserialise OCC binaire (bottleneck connu sur dscad lourd)", _t0)
+
+        _t0 = time.perf_counter()
+        loadscript = loadfile.read()
         with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
             exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
+        _t_log(f"  exec(dsLoad.txt) - lit dsLoad + LOAD_MODEL", _t0)
 
         Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
             "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
@@ -537,7 +596,9 @@ if __name__ == '__main__':
         }
         # OPTIM 2026-05-29 (630d96ccf) : skip ~270s relecture .dscad par CetMESH
         Meshkwargs["model_handle"] = model.GETHANDLEPTR()
+        _t0 = time.perf_counter()
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
+        _t_log(f"  CetMESH.ANISO_MESH (avec model_handle: skip ~270s relecture)", _t0)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
         exec(open(r"C:\workspace\fiabilite\InitSolver.py").read(), globals())
@@ -568,9 +629,12 @@ if __name__ == '__main__':
 
         # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
         kwargs["model_handle"] = model.GETHANDLEPTR()
+        _t0 = time.perf_counter()
         CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
+        _t_log(f"  CetSOLV.SOLV (avec model_handle: skip ~240s relecture)", _t0)
 
         # Lire le resultat
+        _t0 = time.perf_counter()
         metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares") #on extrait l'addresse du fichier pour définir f
         with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
             d = json.load(f) #chargement du fichier .dsmetares
@@ -582,10 +646,10 @@ if __name__ == '__main__':
             for k, v in d['info']['Sensitivity'].items():
                 #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
                 #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. #faudrait un truc avec des clés et des asocciations officielels entre fc et compressive strength.... 
-                if 'COMPRESSIVE_STRENGTH' in k: 
+                #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. #faudrait un truc avec des clés et des asocciations officielels entre fc et compressive strength....
+                if 'COMPRESSIVE_STRENGTH' in k:
                     grad_HF_X[params_names.index('fc')] = v
-                if 'YIELD_STRENGTH' in k: 
+                if 'YIELD_STRENGTH' in k:
                     grad_HF_X[params_names.index('fy')] = v
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
                     break
@@ -594,6 +658,8 @@ if __name__ == '__main__':
             grad_HF_U = J_Tinv_T * ot.Point(grad_HF_X)
         if sensitivity and any(v is None for v in grad_HF_U):
             raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
+        _t_log(f"  read .dsmetares + sensibilites (g_HF={g_HF:.4f})", _t0)
+        _t_log(f"=== run_HF END (g_HF={g_HF:.4f}) ===", _t_hf)
         return g_HF, grad_HF_U, grad_HF_X
 
     # --- DOE ---
@@ -2162,13 +2228,35 @@ if __name__ == '__main__':
             print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
         sys.exit(0)
 
+    _t_log("##### PHASE: init_g_ot (DOE + GEPCK fit) START #####")
+    _t0_phase = time.perf_counter()
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
+    _t_log("##### PHASE: init_g_ot END #####", _t0_phase)
     if do_EFF:
+        _t_log("##### PHASE: print_planche_EFF (avant EFF) START #####")
+        _t0_phase = time.perf_counter()
         print_planche_EFF(g_ot, sigma_func, xt, [])
+        _t_log("##### PHASE: print_planche_EFF (avant EFF) END #####", _t0_phase)
+
+        _t_log("##### PHASE: run_EFF (enrichissement adaptatif) START #####")
+        _t0_phase = time.perf_counter()
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
+        _t_log(f"##### PHASE: run_EFF END (n_added={len(xt_eff)}) #####", _t0_phase)
+
+        _t_log("##### PHASE: print_planche_EFF (apres EFF) START #####")
+        _t0_phase = time.perf_counter()
         print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+        _t_log("##### PHASE: print_planche_EFF (apres EFF) END #####", _t0_phase)
+
+        _t_log("##### PHASE: print_EFF_graphs START #####")
+        _t0_phase = time.perf_counter()
         print_EFF_graphs()
+        _t_log("##### PHASE: print_EFF_graphs END #####", _t0_phase)
+
+    _t_log("##### PHASE: init_FORM START #####")
+    _t0_phase = time.perf_counter()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
+    _t_log("##### PHASE: init_FORM END #####", _t0_phase)
 
     if event is None:
         if best_sol_modes_fixed is not None:
@@ -2177,6 +2265,8 @@ if __name__ == '__main__':
         print('Aucune branche active', flush=True)
         sys.exit(1)
 
+    _t_log("##### PHASE: FORM_all_modes (multistart) START #####")
+    _t0_phase = time.perf_counter()
     if do_warmstart:
         starting_points = np.array([[0.0, 0.0]])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
@@ -2184,6 +2274,7 @@ if __name__ == '__main__':
     else:
         starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
+    _t_log(f"##### PHASE: FORM_all_modes END (n_modes={len(modes)}, n_starts={len(starting_points)}) #####", _t0_phase)
 
     best_result = modes[0] if modes else None
     best_sp     = best_sps[0] if best_sps else None
@@ -2194,8 +2285,20 @@ if __name__ == '__main__':
         print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
         print_results(modes[1], g_ot)
         print('Les résultats du mode 1 sont : ')
+    _t_log("##### PHASE: print_results (HF gradient au u*) START #####")
+    _t0_phase = time.perf_counter()
     print_results(best_result, g_ot)
+    _t_log("##### PHASE: print_results END #####", _t0_phase)
+
     if do_IS and modes:
+        _t_log("##### PHASE: run_IS START #####")
+        _t0_phase = time.perf_counter()
         result_IS = run_IS(modes, event)
+        _t_log("##### PHASE: run_IS END #####", _t0_phase)
         print_results_IS(result_IS)
+
+    _t_log("##### PHASE: print_visu (final PNG) START #####")
+    _t0_phase = time.perf_counter()
     print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
+    _t_log("##### PHASE: print_visu END #####", _t0_phase)
+    _t_log("########## TOTAL CALC TIME ##########")
