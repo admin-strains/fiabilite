@@ -125,7 +125,7 @@ if __name__ == '__main__':
     EFF_criteria = 'at_least_one'   # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     u1_eff_min, u1_eff_max = -7.5, 7.5
     u2_eff_min, u2_eff_max = -7.5, 7.5
-    n_max_EFF = 30
+    n_max_EFF = 200     # 2026-06-12 : 30 -> 200 (NLopt GN_DIRECT a manque pic EFF sur grille fine avec 30 iter)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
 
     # --------------------------------------------------------------------------- #
@@ -1562,6 +1562,39 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #
 
+    # ============================================================================
+    # HELPERS VECTORISES (batch eval surrogate sur grille - parallelise via BLAS)
+    # ============================================================================
+    def _batch_mu_sigma(g_ot, sigma_func, grid):
+        """Calcule (mu, sigma) en batch sur une grille de points.
+        - GEPCK : 1 appel predict_gepck(return_var=True) -> mu + var en 1 fois (BLAS multi-thread)
+        - Autres modeles : batch via ot.Sample pour mu, loop fallback pour sigma
+        """
+        impl = g_ot.getImplementation()
+        impl_name = type(impl).__name__
+        if hasattr(impl, 'fm') and 'GEPCK' in impl_name:
+            mu_arr, sig2_arr = predict_gepck(impl.fm, grid, return_var=True)
+            mu = mu_arr[:, 0]
+            sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
+            return mu, sigma
+        else:
+            grid_ot = ot.Sample(grid.tolist())
+            mu = np.array(g_ot(grid_ot))[:, 0]
+            sigma = np.array([sigma_func(pt) for pt in grid])
+            return mu, sigma
+
+    def _eff_vectorized(mu, sigma, eps_factor):
+        """Calcul vectorise du critere EFF (Expected Feasibility Function)."""
+        eps = eps_factor * sigma
+        safe_sigma = np.where(sigma > 0, sigma, 1.0)
+        t1 = -mu / safe_sigma
+        t2 = (eps + mu) / safe_sigma
+        t3 = (eps - mu) / safe_sigma
+        eff_vals = (2*mu*norm.cdf(t1) - (eps+mu)*norm.cdf(-t2) + (eps-mu)*norm.cdf(t3)
+                    + sigma*(-2*norm.pdf(t1) + norm.pdf(t2) + norm.pdf(t3)))
+        return np.where(sigma > 0, eff_vals, 0.0)
+    # ============================================================================
+
     def print_EFF_graphs():
         """Planche 3 subplots : historique EFF, criteres BB/BS, theta Kriging.
         Lit les globaux _eff_history_*. Sauvegarde en PNG dans out_dir_eff."""
@@ -1635,16 +1668,12 @@ if __name__ == '__main__':
         U1, U2 = np.meshgrid(u1, u2)
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
-        # --- Z_eff et Z_sigma ---
-        eff_func = EFFFunction(g_ot, sigma_func)
-        Z_eff   = np.array([eff_func._exec(pt)[0] for pt in grid]).reshape(n_grid, n_grid)
-        Z_sigma = np.array([sigma_func(pt) for pt in grid]).reshape(n_grid, n_grid)
-
-        # --- Contour g=0 surrogate (une seule evaluation sur grille) ---
-        Z_g = None
-        if g_ot is not None:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_g = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+        # --- Z_eff, Z_sigma, Z_g (batch vectorise via BLAS multi-thread) ---
+        # OPTIM 2026-06-12 : 1 appel batch GEPCK vs 90000 appels sequentiels (gain ~50-200x)
+        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
+        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
+        Z_sigma = sigma_grid.reshape(n_grid, n_grid)
+        Z_g = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
         # --- Contour g=0 HF (depuis cache ou calcul, une seule fois) ---
         Z_true, U1_hf, U2_hf = None, None, None
@@ -1724,17 +1753,17 @@ if __name__ == '__main__':
         U1, U2 = np.meshgrid(u1, u2)
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
-        eff_func = EFFFunction(g_ot, sigma_func)
-        Z_eff = np.array([eff_func._exec(pt)[0] for pt in grid]).reshape(n_grid, n_grid)
+        # OPTIM 2026-06-12 : batch vectorise (BLAS multi-thread)
+        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
+        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
 
         fig, ax = plt.subplots(figsize=(7, 6))
         cf = ax.contourf(U1, U2, Z_eff, levels=20, cmap='viridis', alpha=0.85)
         plt.colorbar(cf, ax=ax, label='EFF')
 
-        # --- Contour g=0 du surrogate ---
+        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
         if g_ot is not None:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_g = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+            Z_g = mu_grid.reshape(n_grid, n_grid)
             ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
 
         # --- Contour g=0 HF ---
@@ -1782,16 +1811,17 @@ if __name__ == '__main__':
         U1, U2 = np.meshgrid(u1, u2)
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
-        Z_sigma = np.array([sigma_func(pt) for pt in grid]).reshape(n_grid, n_grid)
+        # OPTIM 2026-06-12 : batch vectorise (BLAS multi-thread)
+        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
+        Z_sigma = sigma_grid.reshape(n_grid, n_grid)
 
         fig, ax = plt.subplots(figsize=(7, 6))
         cf = ax.contourf(U1, U2, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
         plt.colorbar(cf, ax=ax, label='sigma (ecart-type surrogate)')
 
-        # --- Contour g=0 du surrogate ---
+        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
         if g_ot is not None:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_g = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+            Z_g = mu_grid.reshape(n_grid, n_grid)
             ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
 
         # --- Contour g=0 HF ---
@@ -2175,7 +2205,9 @@ if __name__ == '__main__':
     if do_EFF:
         print_planche_EFF(g_ot, sigma_func, xt, [])
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
-        print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+        # OPTIM 2026-06-12 : skip redondant si print_EFF_progres=True (deja sauve par run_EFF)
+        if not print_EFF_progres:
+            print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
         print_EFF_graphs()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 

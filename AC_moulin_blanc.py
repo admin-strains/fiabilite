@@ -150,7 +150,7 @@ if __name__ == '__main__':
     EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' (Semia flexion: nouveau, OR au lieu de AND)
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
-    n_max_EFF = 30      # Semia flexion: 40 -> 30
+    n_max_EFF = 200     # 2026-06-12 : 30 -> 200 (NLopt GN_DIRECT a manque pic EFF=0.03 sur grille 300x300 avec 30 iter)
     print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
 
     # --------------------------------------------------------------------------- #
