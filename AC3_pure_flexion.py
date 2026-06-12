@@ -115,7 +115,7 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 1                                # (fixe) degre max autorisé
+    max_of_maxdegree = 2                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
@@ -422,6 +422,8 @@ if __name__ == '__main__':
                 "remesh_type": 1,
                 "old_size_factor": 0.0,
             }
+            # OPTIM 2026-05-29 (630d96ccf) : skip ~270s relecture .dscad par CetMESH
+            Meshkwargs["model_handle"] = model.GETHANDLEPTR()
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
@@ -451,6 +453,8 @@ if __name__ == '__main__':
                     {"param": "YIELD_STRENGTH", "rebars": rebar_names},
                 ]) #transformée en texte json (liste de caractères) pour être lisible par C++
 
+            # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
+            kwargs["model_handle"] = model.GETHANDLEPTR()
             CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
 
             # Lire le resultat
@@ -525,6 +529,8 @@ if __name__ == '__main__':
             "remesh_type": 1,
             "old_size_factor": 0.0,
         }
+        # OPTIM 2026-05-29 (630d96ccf) : skip ~270s relecture .dscad par CetMESH
+        Meshkwargs["model_handle"] = model.GETHANDLEPTR()
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
@@ -554,6 +560,8 @@ if __name__ == '__main__':
                 {"param": "YIELD_STRENGTH", "rebars": rebar_names},
             ]) #transformée en texte json (liste de caractères) pour être lisible par C++
 
+        # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
+        kwargs["model_handle"] = model.GETHANDLEPTR()
         CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
 
         # Lire le resultat
