@@ -115,7 +115,7 @@ if __name__ == '__main__':
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
-    max_of_maxdegree = 1                                # (fixe) degre max autorisé
+    max_of_maxdegree = 2                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
@@ -940,10 +940,16 @@ if __name__ == '__main__':
         def __init__(self, fm):
             super().__init__(n_var, 1)
             self.fm = fm
+            self.n_eval_calls = 0
+            self.n_grad_calls = 0
 
         def _exec(self, u):
-            u_np = np.array(u).reshape(1, -1)
-            return [float(predict_gepck(self.fm, u_np)[0, 0])]
+            u_np  = np.array(u).reshape(1, -1)
+            g_val = float(predict_gepck(self.fm, u_np)[0, 0])
+            self.n_eval_calls += 1
+            print(f"[GEPCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
+                  f"  g={g_val:+.6f}", flush=True)
+            return [g_val]
 
         def _exec_sample(self, U):
             U_np = np.array(U)
@@ -955,9 +961,14 @@ if __name__ == '__main__':
             return float(np.sqrt(max(0.0, float(YSig2[0, 0]))))
 
         def _gradient(self, u):
-            u_np = np.array(u).reshape(1, -1)
-            G = predict_gradient_gepck(self.fm, u_np)   # (1, Mred)
-            return [[float(G[0, i])] for i in range(self.fm['Mred'])]
+            u_np  = np.array(u).reshape(1, -1)
+            G     = predict_gradient_gepck(self.fm, u_np)   # (1, Mred)
+            grad  = [float(G[0, i]) for i in range(self.fm['Mred'])]
+            g_val = float(predict_gepck(self.fm, u_np)[0, 0])
+            self.n_grad_calls += 1
+            print(f"[GEPCK grad #{self.n_grad_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
+                  f"  g={g_val:+.6f}  grad=[{grad[0]:+.6f}, {grad[1]:+.6f}]", flush=True)
+            return [[v] for v in grad]
 
     # --------------------------------------------------------------------------- #
     # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
