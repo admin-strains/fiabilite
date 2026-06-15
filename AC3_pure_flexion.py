@@ -91,7 +91,7 @@ if __name__ == '__main__':
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
-    tol_FORM = 1.0                 # précision acceptée par FORM pour l'état limite
+    tol_FORM = 0.05                # précision acceptée par FORM pour l'état limite
     tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
@@ -999,8 +999,6 @@ if __name__ == '__main__':
     #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
     #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
 
-    # def eval_PCE():
-    #     return do_pce
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU KRG                                                      #
 
@@ -1949,15 +1947,17 @@ if __name__ == '__main__':
             ax.scatter(best_sp[0], best_sp[1], c='cyan', s=100, zorder=7, marker='D',
                     label='point de depart best')
 
+        mode_colors = plt.cm.tab10(np.linspace(0, 0.9, max(len(modes), 1)))
+
         if best_result is not None:
             u_star = np.array(best_result.getStandardSpaceDesignPoint())
-            ax.scatter(u_star[0], u_star[1], c='gold', s=200, zorder=8, marker='*',
+            ax.scatter(u_star[0], u_star[1], color=mode_colors[0], s=200, zorder=8, marker='*',
                     label=f'u*1 [{u_star[0]:.2f},{u_star[1]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
 
         if len(modes) > 0:
             for k, mode in enumerate(modes[1:], start=2):
                 u_m = np.array(mode.getStandardSpaceDesignPoint())
-                ax.scatter(u_m[0], u_m[1], c='magenta', s=200, zorder=8, marker='*',
+                ax.scatter(u_m[0], u_m[1], color=mode_colors[k-1], s=200, zorder=8, marker='*',
                         label=f'u*{k} [{u_m[0]:.2f},{u_m[1]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
 
         # --- Points fixes (run HF précédent) ---
