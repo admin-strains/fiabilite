@@ -71,13 +71,13 @@ def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
-    modelname = "Calcul_fiabilite_35K_test"
+    modelname = "Calcul_fiabilite_LM1_PRESSURE"
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
     print("=" * 70)
-    print("CALCUL DE FIABILITE -- PONT DU MOULIN BLANC (35K)")
+    print("CALCUL DE FIABILITE -- PONT DU MOULIN BLANC -- LM1 TRAFIC (PRESSURE)")
     print("=" * 70)
     # --------------------------------------------------------------------------- #
     # OPTIONS UTILISATEUR                                                         #
@@ -189,8 +189,9 @@ if __name__ == '__main__':
             [-0.112244,  0.204017,  0.672091,  1.150387,  1.477693,  1.691754,  1.840008],
         ]
     }
-    # 2026-06-12 weekend : cache grille HF 49 points calcule en 190 min (gain reuse instant)
-    hf_2d_grid_fixed = {'params': {'u1_min': -7.5, 'u1_max': 7.5, 'u2_min': -7.5, 'u2_max': 7.5, 'n_grid_hf': 7}, 'Z': [[-0.713061275383958, -0.7131507985840437, -0.7120863134467801, -0.7120032672857448, -0.7132113869090015, -0.7132105554814036, -0.7127358839940932], [0.898391455494782, 0.9232873152605132, 0.9469924079704819, 0.9654061284890985, 0.9758029468956788, 0.9827371967433429, 0.9855927512735261], [2.162537651159611, 2.43996205983155, 2.4964011473566434, 2.5474008704710824, 2.590307508837055, 2.624676007317116, 2.6438447756839065], [2.5666652135147143, 3.3620081158314425, 3.9827378029563816, 4.069746631099116, 4.144080762537296, 4.2106480910746535, 4.26419855473562], [2.85326812387239, 3.76822774641976, 4.838500696539623, 5.548739237858452, 5.661296955958588, 5.758836354318659, 5.84177257963942], [3.0348507642546574, 4.095553986085984, 5.244026382850605, 6.685630851904372, 7.143220435176412, 7.277536209899058, 7.393514561786921], [3.1925419671451705, 4.285260052135597, 5.639210097018621, 7.095284686622268, 8.565399989010539, 8.767318708530386, 8.919041344556]]}
+    # 2026-06-15 : cache LM1 PRESSURE pas encore calcule. Sera calcule en weekend (~3h).
+    # Une fois calcule, le hardcoder ici pour reuse instant.
+    hf_2d_grid_fixed = None  # LM1 : pas de cache (gravity cache invalide)
     # guide pour hardcoder (exemple): {'params':{'u1_min':-7.5,'u1_max':7.5,'u2_min':-7.5,'u2_max':7.5,'n_grid_hf':7}, 'Z':[[...]]}
 
 
