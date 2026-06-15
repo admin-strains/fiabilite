@@ -80,10 +80,8 @@ if __name__ == '__main__':
     cov_fc, cov_fy = 0.12, None
     fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
     
-    
     n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
     rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
-
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
@@ -91,7 +89,7 @@ if __name__ == '__main__':
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
-    tol_FORM = 0.05                # précision acceptée par FORM pour l'état limite
+    tol_FORM = 0.002                # précision acceptée par FORM pour l'état limite
     tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
@@ -148,8 +146,6 @@ if __name__ == '__main__':
     print_ana = True    #True que pour pure_flexion (flexion_claude que dans ce cas) 
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
-
-    
 
     # --- Résultats fixés ---
     hf_3d_grid_fixed = {
@@ -293,7 +289,6 @@ if __name__ == '__main__':
         best_sol_modes_fixed = None
         grad_sp_fixed = None
         traj_runs_fixed = None
-    
 
     # --- Label PCE GEPCK et LOO (mis a jour par init_g_ot, lus par print_planche_EFF) ---
     _gepck_pce_label = ""
@@ -341,7 +336,7 @@ if __name__ == '__main__':
     
     SIGMA_11, SIGMA_12, SIGMA_13 =  19.0, 22.0, 8.0 
     SIGMA = np.sqrt(SIGMA_11**2 + SIGMA_12**2 + SIGMA_13**2)  # ~30 MPa
-    
+
     def loi_fy(fym, cov=None):
         if cov is not None:
             sig_ec = cov * fym
@@ -627,6 +622,10 @@ if __name__ == '__main__':
                 print("yt_doe = [")
                 for i in range(n0):
                     print(f"    {yt[i][0]:.16f},")
+                print("]", flush=True)
+                print("all_grad_doe = [")
+                for i in range(n0):
+                    print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
                 print("]", flush=True)
             return xt, yt, all_grad
         return xt
@@ -1422,6 +1421,7 @@ if __name__ == '__main__':
             xt_eff.append(np.array(u_opt))
             # --- On reconstruit le modèle ---
             g_val, grad_U, _ = run_HF(np.array(u_opt))
+            print(f"[EFF HF] u={[round(float(u_opt[i]),10) for i in range(n_var)]}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]),10) for i in range(n_var)]}", flush=True)
             xt = np.vstack([xt, [np.array(u_opt)]])
             yt = np.vstack([yt, [[g_val]]])
             grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
