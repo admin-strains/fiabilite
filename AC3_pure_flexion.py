@@ -1857,7 +1857,7 @@ if __name__ == '__main__':
             print(f"Erreur FOSM  = {(u_FOSM - u_star).norm() / u_star.norm():.4f}", flush=True)
 
 
-    def print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff):
+    def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff):
         global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
@@ -1935,19 +1935,20 @@ if __name__ == '__main__':
 
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=60, zorder=6,
+            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='royalblue', s=60, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
             for i, pt in enumerate(xt_eff_arr):  # supprimer ces 2 lignes pour masquer la numerotation
                 ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
+                            xytext=(0, 8), ha='center', fontsize=8, color='royalblue', zorder=7)
 
         ax.scatter(0, 0, c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
 
-        if best_sp is not None:
-            ax.scatter(best_sp[0], best_sp[1], c='cyan', s=100, zorder=7, marker='D',
-                    label='point de depart best')
-
         mode_colors = plt.cm.tab10(np.linspace(0, 0.9, max(len(modes), 1)))
+
+        if best_sps:
+            for i, sp in enumerate(best_sps):
+                ax.scatter(sp[0], sp[1], color=mode_colors[i], s=100, zorder=7, marker='D',
+                        label=f'sp mode {i+1}')
 
         if best_result is not None:
             u_star = np.array(best_result.getStandardSpaceDesignPoint())
@@ -2183,7 +2184,7 @@ if __name__ == '__main__':
 
     if event is None:
         if best_sol_modes_fixed is not None:
-            print_visu(None, None, None, None, [], None)
+            print_visu(None, [], None, None, [], None)
             sys.exit(0)
         print('Aucune branche active', flush=True)
         sys.exit(1)
@@ -2197,7 +2198,6 @@ if __name__ == '__main__':
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
 
     best_result = modes[0] if modes else None
-    best_sp     = best_sps[0] if best_sps else None
     if best_result is None:
         print('Aucun FORM ne marche.', flush=True)
         sys.exit(1)
@@ -2209,4 +2209,4 @@ if __name__ == '__main__':
     if do_IS and modes:
         result_IS = run_IS(modes, event)
         print_results_IS(result_IS)
-    print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
+    print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
