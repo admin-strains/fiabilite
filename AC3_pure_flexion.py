@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'HF'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     n_max_FORM = 50
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
-    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
+    start_from_LHS = True #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
     n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
 
     tol_FORM = 0.002                # précision acceptée par FORM pour l'état limite
@@ -631,6 +631,12 @@ if __name__ == '__main__':
                 print("]", flush=True)
             return xt, yt, all_grad
         return xt
+
+    def build_starting_points():
+        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
+        lhs = ot.LHSExperiment(dist_U, n_sp)
+        sa = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
+        return np.array(sa.generate())  # shape (n_sp, n_var)
 
     def build_Y_aug(yt, all_grad):
         """
@@ -2197,7 +2203,7 @@ if __name__ == '__main__':
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
         if start_from_LHS:
-            starting_points = build_DOE(n_sp, eval_hf=False)
+            starting_points = build_starting_points()
         else:
             starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
