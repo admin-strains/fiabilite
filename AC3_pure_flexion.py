@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                 #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'HF'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
@@ -88,6 +88,8 @@ if __name__ == '__main__':
     n_max_FORM = 50
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
+    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
+    n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
 
     tol_FORM = 0.002                # précision acceptée par FORM pour l'état limite
     tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
@@ -578,17 +580,17 @@ if __name__ == '__main__':
         return g_HF, grad_HF_U, grad_HF_X
 
     # --- DOE ---
-    def build_DOE():
+    def build_DOE(n_doe=n0, eval_hf=True):
         dist = []
         if 'fc' in params_names:
             dist.append(loi_fc(fcm, cov_fc))
         if 'fy' in params_names:
             dist.append(loi_fy(fym, cov_fy))
-        dist_X   = ot.JointDistribution(dist) 
-        T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n�cessaire puis l'applique ici
+        dist_X   = ot.JointDistribution(dist)
+        T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n﻿cessaire puis l'applique ici
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
         dist_U = dist_X.getStandardDistribution()
-        lhs    = ot.LHSExperiment(dist_U, n0)
+        lhs    = ot.LHSExperiment(dist_U, n_doe)
         sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         U_doe  = sa.generate()
         if print_DOE:
@@ -602,15 +604,15 @@ if __name__ == '__main__':
                 print("])", flush=True)
         X_doe  = T_inv(U_doe)
         xt = np.array(U_doe)
-        if not do_HF:
-            SOL = [{} for _ in range(n0)] 
-            for i in range(n0):
+        if not do_HF and eval_hf:
+            SOL = [{} for _ in range(n_doe)]
+            for i in range(n_doe):
                 for j in range(n_var):
                     SOL[i][params_names[j]] = X_doe[i][j]
             SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
-            yt = np.array([SOL[i]['g'] for i in range(n0)]).reshape(-1, 1)
-            all_grad = np.zeros((n0, n_var))
-            for i in range (n0):
+            yt = np.array([SOL[i]['g'] for i in range(n_doe)]).reshape(-1, 1)
+            all_grad = np.zeros((n_doe, n_var))
+            for i in range (n_doe):
                 J_Tinv = T_inv.gradient(U_doe[i])
                 J_Tinv_T = J_Tinv.transpose()
                 grad_X_g = ot.Point([SOL[i][f'dg_{p}'] for p in params_names])
@@ -620,11 +622,11 @@ if __name__ == '__main__':
                     SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
             if print_DOE:
                 print("yt_doe = [")
-                for i in range(n0):
+                for i in range(n_doe):
                     print(f"    {yt[i][0]:.16f},")
                 print("]", flush=True)
                 print("all_grad_doe = [")
-                for i in range(n0):
+                for i in range(n_doe):
                     print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
                 print("]", flush=True)
             return xt, yt, all_grad
@@ -2194,7 +2196,10 @@ if __name__ == '__main__':
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
-        starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+        if start_from_LHS:
+            starting_points = build_DOE(n_sp, eval_hf=False)
+        else:
+            starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
 
     best_result = modes[0] if modes else None
