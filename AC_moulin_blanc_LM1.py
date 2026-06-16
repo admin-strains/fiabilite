@@ -1758,27 +1758,222 @@ if __name__ == '__main__':
         _t_start = _time_local.perf_counter()
         print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context}) #####", flush=True)
         print(f"##### Estimation : ~{n_total * 3:.0f} min total #####", flush=True)
-        print(f"##### Convention lambda=0 si |g|>{GARBAGE_THRESHOLD} -> g={LAMBDA_NULL_VALUE} #####\n", flush=True)
+        print(f"##### Convention lambda=0 si |g|>{GARBAGE_THRESHOLD} -> g=NaN (filtre downstream) #####\n", flush=True)
+        garbage_log = []  # liste detaillee des points divergents (u1, u2, g_raw, fy, fc)
         for i, pt in enumerate(grid_hf):
             _t_pt0 = _time_local.perf_counter()
             g_val = run_HF(pt)[0]
             g_raw = g_val
             if abs(g_val) > GARBAGE_THRESHOLD:
                 n_garbage_clean += 1
-                g_val = LAMBDA_NULL_VALUE
-                print(f"  [WARN GARBAGE] u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g_raw={g_raw:+.3e}  "
-                      f"-> clip a g={LAMBDA_NULL_VALUE} (convention lambda=0)", flush=True)
+                # Log enrichi : ajoute fc/fy physiques pour comprendre quel cas materiau diverge
+                try:
+                    dist_X_tmp = dist_jointe()
+                    T_inv_tmp = dist_X_tmp.getInverseIsoProbabilisticTransformation()
+                    x_phys = T_inv_tmp(ot.Point(list(pt)))
+                    fc_phys = float(x_phys[0]) if n_var >= 1 else None
+                    fy_phys = float(x_phys[1]) if n_var >= 2 else None
+                except Exception:
+                    fc_phys = fy_phys = None
+                garbage_log.append({
+                    'i': i+1, 'u1': float(pt[0]), 'u2': float(pt[1]),
+                    'g_raw': float(g_raw), 'fc_MPa': fc_phys, 'fy_MPa': fy_phys
+                })
+                phys_str = (f"  (fc={fc_phys:.2f} MPa, fy={fy_phys:.2f} MPa)"
+                            if fc_phys is not None else "")
+                g_val = np.nan  # convention NaN, filtre par _is_valid_g_vec downstream
+                print(f"  [WARN GARBAGE] HF #{i+1}/{n_total}  "
+                      f"u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g_raw={g_raw:+.4e}  "
+                      f"-> g=NaN{phys_str}", flush=True)
+                print(f"    Cause probable : SOCP infeasible "
+                      f"(materiaux trop faibles ou queue extreme distrib)", flush=True)
             Z_flat.append(g_val)
             _t_pt = _time_local.perf_counter() - _t_pt0
             _t_elapsed = _time_local.perf_counter() - _t_start
             _t_avg = _t_elapsed / (i + 1)
             _t_eta = _t_avg * (n_total - i - 1)
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
-                  f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
+            status = "DIVERGENT" if np.isnan(g_val) else f"g={g_val:+.4f}"
+            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  {status:>15s}  "
+                  f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  "
+                  f"ETA={_t_eta/60:.1f}min  ({n_garbage_clean} divergents jusqu'ici)",
+                  flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
         print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) "
-              f"-- {n_garbage_clean}/{n_total} points clipes par convention lambda=0 #####\n", flush=True)
+              f"-- {n_garbage_clean}/{n_total} divergents (g=NaN) #####", flush=True)
+        # Rapport detaille des divergents
+        if garbage_log:
+            print(f"##### Tableau recapitulatif des {n_garbage_clean} points divergents : #####",
+                  flush=True)
+            print(f"  {'#':>3s}  {'u1':>8s}  {'u2':>8s}  {'g_raw':>12s}  "
+                  f"{'fc(MPa)':>10s}  {'fy(MPa)':>10s}", flush=True)
+            for g in garbage_log:
+                fc_s = f"{g['fc_MPa']:10.2f}" if g['fc_MPa'] is not None else f"{'?':>10s}"
+                fy_s = f"{g['fy_MPa']:10.2f}" if g['fy_MPa'] is not None else f"{'?':>10s}"
+                print(f"  {g['i']:>3d}  {g['u1']:>+8.3f}  {g['u2']:>+8.3f}  "
+                      f"{g['g_raw']:>+12.3e}  {fc_s}  {fy_s}", flush=True)
+        print(f"##### Convention finale : g=NaN sur divergents (filtre par "
+              f"_is_valid_g_vec downstream) #####\n", flush=True)
         return np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+
+    # ------------------------------------------------------------------
+    # Robust HF grid filtering + RBF refit (2026-06-16)
+    # ------------------------------------------------------------------
+    # Sentinelle conventionnelle indiquant lambda=0 (non-convergence detectee en amont)
+    LAMBDA_NULL_VALUE = -1.0
+    # Tolerance pour distinguer la sentinelle EXACTE d'une valeur physique proche de -1.0
+    EPSILON_SENTINEL = 1e-12
+    # Bornes physiques pour g_HF : ALIGNEES sur GARBAGE_THRESHOLD du clip upstream
+    # (cf _compute_hf_grid_with_progress : tout |g|>10 est clipe a NaN avant cache).
+    # Coherence totale clip <-> filtre : impossible qu'un garbage sneake dans le RBF.
+    _GARBAGE_THRESHOLD = 10.0
+    G_PHYSICAL_MIN = -_GARBAGE_THRESHOLD
+    G_PHYSICAL_MAX = +_GARBAGE_THRESHOLD
+
+    def _is_valid_g_vec(Z):
+        """Masque booleen identifiant les points convergents valides.
+
+        Filtre :
+          (1) NaN                    -> np.isfinite ecarte
+          (2) +/-Inf                 -> np.isfinite ecarte
+          (3) Sentinelle LAMBDA_NULL -> ecart absolu < EPSILON_SENTINEL
+          (4) Garbage non clipe      -> hors [G_PHYSICAL_MIN, G_PHYSICAL_MAX]
+          (5) Valeurs physiques      -> conservees (y compris g proche mais != -1.0)
+        """
+        Z = np.asarray(Z, dtype=float)
+        finite_mask   = np.isfinite(Z)
+        not_sentinel  = np.abs(Z - LAMBDA_NULL_VALUE) > EPSILON_SENTINEL
+        in_phys_range = (Z >= G_PHYSICAL_MIN) & (Z <= G_PHYSICAL_MAX)
+        return finite_mask & not_sentinel & in_phys_range
+
+    def _compute_red_curve_robust(u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_cache,
+                                   n_grid_fine=100):
+        """Refit RBF anisotrope de la grille HF (filtree des sentinelles / NaN / garbage).
+
+        Retourne (U1_fine, U2_fine, Z_fine) pour ax.contour, ou (None, None, None)
+        si moins de 6 points convergents (insuffisant pour un fit RBF stable).
+
+        Logs detailles a chaque etape : filtrage, fit RBF, validation u*.
+        """
+        print(f"\n  ===== [RED CURVE RBF] DEBUT =====", flush=True)
+        if hf_cache is None or 'Z' not in hf_cache:
+            print(f"  [RED CURVE] hf_cache is None or missing 'Z' -> skip", flush=True)
+            return None, None, None
+        Z_raw = np.asarray(hf_cache['Z'], dtype=float)
+        if Z_raw.ndim == 2:
+            Z_flat = Z_raw.ravel()
+        else:
+            Z_flat = Z_raw
+        u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+        u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+        U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
+        pts = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+        # ---------- ETAPE 1 : Filtrage detaille ----------
+        n_total = len(Z_flat)
+        mask = _is_valid_g_vec(Z_flat)
+        n_valid = int(mask.sum())
+        n_rejected = n_total - n_valid
+        # Decomposition des rejets
+        n_nan_inf = int((~np.isfinite(Z_flat)).sum())
+        n_sentinel = int((np.isfinite(Z_flat) &
+                          (np.abs(Z_flat - LAMBDA_NULL_VALUE) <= EPSILON_SENTINEL)).sum())
+        n_garbage_pos = int((np.isfinite(Z_flat) & (Z_flat > G_PHYSICAL_MAX)).sum())
+        n_garbage_neg = int((np.isfinite(Z_flat) & (Z_flat < G_PHYSICAL_MIN) &
+                            (np.abs(Z_flat - LAMBDA_NULL_VALUE) > EPSILON_SENTINEL)).sum())
+        print(f"  [RED CURVE] Grille {n_grid_hf}x{n_grid_hf} = {n_total} points HF analyses :",
+              flush=True)
+        print(f"    Valides             : {n_valid:3d}/{n_total} ({100*n_valid/n_total:.1f}%)",
+              flush=True)
+        print(f"    Rejetes total       : {n_rejected:3d}/{n_total}", flush=True)
+        print(f"      - NaN/Inf         : {n_nan_inf:3d}  (convention divergence)", flush=True)
+        print(f"      - Sentinelle -1.0 : {n_sentinel:3d}  (clip lambda=0 ancienne convention)",
+              flush=True)
+        print(f"      - Garbage |g|>10  : {n_garbage_neg + n_garbage_pos:3d} "
+              f"(neg={n_garbage_neg}, pos={n_garbage_pos})", flush=True)
+        # Liste des points rejetes (pour debug)
+        if n_rejected > 0:
+            print(f"    Coordonnees points rejetes :", flush=True)
+            for i, (pt, z) in enumerate(zip(pts[~mask], Z_flat[~mask])):
+                reason = "NaN/Inf" if not np.isfinite(z) else \
+                         "sentinel" if abs(z - LAMBDA_NULL_VALUE) <= EPSILON_SENTINEL else \
+                         f"garbage|g|>{G_PHYSICAL_MAX}"
+                print(f"      u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={z:+.3e}  ({reason})",
+                      flush=True)
+        if n_valid < 6:
+            print(f"  [RED CURVE] STOP : n_valid={n_valid} < 6 (insuffisant pour RBF stable)",
+                  flush=True)
+            print(f"  ===== [RED CURVE RBF] FIN (skip) =====\n", flush=True)
+            return None, None, None
+        pts_valid = pts[mask]
+        z_valid = Z_flat[mask]
+        # ---------- ETAPE 2 : Stats sur points valides ----------
+        print(f"    Stats Z valides     : min={z_valid.min():+.4f}  max={z_valid.max():+.4f} "
+              f" mean={z_valid.mean():+.4f}  std={z_valid.std():.4f}", flush=True)
+        n_negative_valid = int((z_valid < 0).sum())
+        n_positive_valid = int((z_valid >= 0).sum())
+        print(f"    Repartition signe   : {n_negative_valid} g<0  |  {n_positive_valid} g>=0",
+              flush=True)
+        if n_negative_valid == 0:
+            print(f"    [WARN] AUCUN point convergent g<0 dans la grille HF !", flush=True)
+            print(f"           La courbe g=0 sera extrapolee depuis les g>0 (peu fiable).",
+                  flush=True)
+        # ---------- ETAPE 3 : Fit RBF anisotrope ----------
+        scale = np.array([10.0, 1.0])
+        pts_scaled = pts_valid * scale
+        print(f"  [RED CURVE] Fit RBF anisotrope :", flush=True)
+        print(f"    Kernel              : thin_plate_spline", flush=True)
+        print(f"    Anisotropie SCALE   : u1*{scale[0]}, u2*{scale[1]} "
+              f"(u1 inerte, importance factor ~ 0)", flush=True)
+        print(f"    N points entrainement : {len(z_valid)}", flush=True)
+        try:
+            from scipy.interpolate import RBFInterpolator
+            import time as _t_rbf
+            _t0 = _t_rbf.perf_counter()
+            rbf = RBFInterpolator(pts_scaled, z_valid, kernel='thin_plate_spline')
+            _dt_fit = _t_rbf.perf_counter() - _t0
+            print(f"    Fit duree           : {_dt_fit*1000:.1f} ms", flush=True)
+        except Exception as e:
+            print(f"  [RED CURVE] RBF refit FAILED ({type(e).__name__}: {e}) -> skip",
+                  flush=True)
+            print(f"  ===== [RED CURVE RBF] FIN (erreur) =====\n", flush=True)
+            return None, None, None
+        # Sanity check : RBF residual sur points d'entrainement
+        z_pred_train = rbf(pts_scaled)
+        residuals = z_pred_train - z_valid
+        rmse_train = float(np.sqrt(np.mean(residuals**2)))
+        max_res = float(np.max(np.abs(residuals)))
+        print(f"    RMSE entrainement   : {rmse_train:.4e}  (RBF interpole = doit etre ~0)",
+              flush=True)
+        print(f"    Max |residu|        : {max_res:.4e}", flush=True)
+        # ---------- ETAPE 4 : Evaluation grille fine ----------
+        u1_fine = np.linspace(u1_min, u1_max, n_grid_fine)
+        u2_fine = np.linspace(u2_min, u2_max, n_grid_fine)
+        U1_fine, U2_fine = np.meshgrid(u1_fine, u2_fine)
+        grid_fine = np.column_stack([U1_fine.ravel(), U2_fine.ravel()]) * scale
+        _t0 = _t_rbf.perf_counter()
+        Z_fine = rbf(grid_fine).reshape(n_grid_fine, n_grid_fine)
+        _dt_eval = _t_rbf.perf_counter() - _t0
+        print(f"  [RED CURVE] Eval grille fine {n_grid_fine}x{n_grid_fine} : "
+              f"{_dt_eval*1000:.1f} ms", flush=True)
+        print(f"    Z_fine range       : [{Z_fine.min():+.4f}, {Z_fine.max():+.4f}]",
+              flush=True)
+        # Verification : la grille fine doit traverser g=0 si on veut une courbe rouge
+        if Z_fine.min() > 0 and Z_fine.max() > 0:
+            print(f"    [WARN] Z_fine tout positif -> courbe rouge ABSENTE du PNG", flush=True)
+        elif Z_fine.min() < 0 and Z_fine.max() < 0:
+            print(f"    [WARN] Z_fine tout negatif -> courbe rouge ABSENTE du PNG", flush=True)
+        else:
+            # Estimation position contour g=0 sur la colonne u1=0 (centre)
+            j_mid = n_grid_fine // 2
+            col_mid = Z_fine[:, j_mid]
+            sign_changes = np.where(np.diff(np.sign(col_mid)))[0]
+            if len(sign_changes) > 0:
+                idx = sign_changes[0]
+                u2_zero = u2_fine[idx] + (u2_fine[idx+1] - u2_fine[idx]) * \
+                          col_mid[idx] / (col_mid[idx] - col_mid[idx+1])
+                print(f"    Courbe rouge a u1=0 : u2 ~ {u2_zero:+.4f} "
+                      f"(beta_red_HF ~ {abs(u2_zero):.4f})", flush=True)
+        print(f"  ===== [RED CURVE RBF] FIN OK =====\n", flush=True)
+        return U1_fine, U2_fine, Z_fine
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
@@ -1824,7 +2019,10 @@ if __name__ == '__main__':
             if Z_g is not None:
                 ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
             if Z_true is not None:
-                ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
+                U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
+                    u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
+                if Z_fine is not None:
+                    ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
             if xt is not None:
                 ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
                            edgecolors='black', linewidths=0.8, label='DOE')
@@ -1892,7 +2090,10 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
+            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
+                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
+            if Z_fine is not None:
+                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
 
         # --- Points DOE ---
         if xt is not None:
@@ -1950,7 +2151,10 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
+            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
+                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
+            if Z_fine is not None:
+                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
 
         if xt is not None:
             ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
@@ -2059,7 +2263,10 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
+            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
+                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
+            if Z_fine is not None:
+                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
         if print_ana:
