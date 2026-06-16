@@ -1847,14 +1847,14 @@ if __name__ == '__main__':
 
     def _compute_red_curve_robust(u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_cache,
                                    n_grid_fine=100):
-        """Refit RBF anisotrope de la grille HF (filtree des sentinelles / NaN / garbage).
+        """Refit polynomial degre 2 de la grille HF (filtree des sentinelles / NaN / garbage).
 
         Retourne (U1_fine, U2_fine, Z_fine) pour ax.contour, ou (None, None, None)
-        si moins de 6 points convergents (insuffisant pour un fit RBF stable).
+        si moins de 6 points convergents (insuffisant pour un fit polynomial deg 2 stable).
 
-        Logs detailles a chaque etape : filtrage, fit RBF, validation u*.
+        Logs detailles a chaque etape : filtrage, fit polynomial deg 2, validation u*.
         """
-        print(f"\n  ===== [RED CURVE RBF] DEBUT =====", flush=True)
+        print(f"\n  ===== [RED CURVE polyfit] DEBUT =====", flush=True)
         if hf_cache is None or 'Z' not in hf_cache:
             print(f"  [RED CURVE] hf_cache is None or missing 'Z' -> skip", flush=True)
             return None, None, None
@@ -1901,7 +1901,7 @@ if __name__ == '__main__':
         if n_valid < 6:
             print(f"  [RED CURVE] STOP : n_valid={n_valid} < 6 (insuffisant pour RBF stable)",
                   flush=True)
-            print(f"  ===== [RED CURVE RBF] FIN (skip) =====\n", flush=True)
+            print(f"  ===== [RED CURVE polyfit] FIN (skip) =====\n", flush=True)
             return None, None, None
         pts_valid = pts[mask]
         z_valid = Z_flat[mask]
@@ -1916,42 +1916,53 @@ if __name__ == '__main__':
             print(f"    [WARN] AUCUN point convergent g<0 dans la grille HF !", flush=True)
             print(f"           La courbe g=0 sera extrapolee depuis les g>0 (peu fiable).",
                   flush=True)
-        # ---------- ETAPE 3 : Fit RBF anisotrope ----------
-        scale = np.array([10.0, 1.0])
-        pts_scaled = pts_valid * scale
-        print(f"  [RED CURVE] Fit RBF anisotrope :", flush=True)
-        print(f"    Kernel              : thin_plate_spline", flush=True)
-        print(f"    Anisotropie SCALE   : u1*{scale[0]}, u2*{scale[1]} "
-              f"(u1 inerte, importance factor ~ 0)", flush=True)
-        print(f"    N points entrainement : {len(z_valid)}", flush=True)
+        # ---------- ETAPE 3 : Fit polynomial degre 2 (lisse par construction) ----------
+        u1_v = pts_valid[:, 0]
+        u2_v = pts_valid[:, 1]
+        print(f"  [RED CURVE] Fit polynomial degre 2 :", flush=True)
+        print(f"    Modele       : g = a0 + a1*u1 + a2*u2 + a3*u1^2 + a4*u2^2 + a5*u1*u2", flush=True)
+        print(f"    N points entr: {len(z_valid)}", flush=True)
+        import time as _t_pf
+        _t0 = _t_pf.perf_counter()
+        # Matrice de design (N x 6)
+        A = np.column_stack([
+            np.ones(len(u1_v)),
+            u1_v, u2_v,
+            u1_v**2, u2_v**2,
+            u1_v * u2_v,
+        ])
         try:
-            from scipy.interpolate import RBFInterpolator
-            import time as _t_rbf
-            _t0 = _t_rbf.perf_counter()
-            rbf = RBFInterpolator(pts_scaled, z_valid, kernel='thin_plate_spline')
-            _dt_fit = _t_rbf.perf_counter() - _t0
-            print(f"    Fit duree           : {_dt_fit*1000:.1f} ms", flush=True)
+            coeffs, _residuals, _rank, _sv = np.linalg.lstsq(A, z_valid, rcond=None)
         except Exception as e:
-            print(f"  [RED CURVE] RBF refit FAILED ({type(e).__name__}: {e}) -> skip",
-                  flush=True)
-            print(f"  ===== [RED CURVE RBF] FIN (erreur) =====\n", flush=True)
+            print(f"  [RED CURVE] polyfit FAILED ({type(e).__name__}: {e}) -> skip", flush=True)
+            print(f"  ===== [RED CURVE polyfit] FIN (erreur) =====\n", flush=True)
             return None, None, None
-        # Sanity check : RBF residual sur points d'entrainement
-        z_pred_train = rbf(pts_scaled)
-        residuals = z_pred_train - z_valid
-        rmse_train = float(np.sqrt(np.mean(residuals**2)))
-        max_res = float(np.max(np.abs(residuals)))
-        print(f"    RMSE entrainement   : {rmse_train:.4e}  (RBF interpole = doit etre ~0)",
-              flush=True)
-        print(f"    Max |residu|        : {max_res:.4e}", flush=True)
+        _dt_fit = _t_pf.perf_counter() - _t0
+        a0, a1, a2, a3, a4, a5 = coeffs
+        print(f"    Fit duree    : {_dt_fit*1000:.2f} ms", flush=True)
+        print(f"    Coefficients :  a0={a0:+.4f}  a1={a1:+.4f}  a2={a2:+.4f}", flush=True)
+        print(f"                    a3={a3:+.4f}  a4={a4:+.4f}  a5={a5:+.4f}", flush=True)
+        # Sanity check : residus sur points entrainement
+        z_pred_train = A @ coeffs
+        residuals_arr = z_pred_train - z_valid
+        rmse_train = float(np.sqrt(np.mean(residuals_arr**2)))
+        max_res = float(np.max(np.abs(residuals_arr)))
+        print(f"    RMSE entr    : {rmse_train:.4e}  (polyfit deg 2 ne passe PAS exactement par tous les pts)", flush=True)
+        print(f"    Max |residu| : {max_res:.4e}", flush=True)
         # ---------- ETAPE 4 : Evaluation grille fine ----------
         u1_fine = np.linspace(u1_min, u1_max, n_grid_fine)
         u2_fine = np.linspace(u2_min, u2_max, n_grid_fine)
         U1_fine, U2_fine = np.meshgrid(u1_fine, u2_fine)
-        grid_fine = np.column_stack([U1_fine.ravel(), U2_fine.ravel()]) * scale
-        _t0 = _t_rbf.perf_counter()
-        Z_fine = rbf(grid_fine).reshape(n_grid_fine, n_grid_fine)
-        _dt_eval = _t_rbf.perf_counter() - _t0
+        grid_fine = np.column_stack([U1_fine.ravel(), U2_fine.ravel()])
+        A_fine = np.column_stack([
+            np.ones(len(grid_fine)),
+            grid_fine[:, 0], grid_fine[:, 1],
+            grid_fine[:, 0]**2, grid_fine[:, 1]**2,
+            grid_fine[:, 0] * grid_fine[:, 1],
+        ])
+        _t0 = _t_pf.perf_counter()
+        Z_fine = (A_fine @ coeffs).reshape(n_grid_fine, n_grid_fine)
+        _dt_eval = _t_pf.perf_counter() - _t0
         print(f"  [RED CURVE] Eval grille fine {n_grid_fine}x{n_grid_fine} : "
               f"{_dt_eval*1000:.1f} ms", flush=True)
         print(f"    Z_fine range       : [{Z_fine.min():+.4f}, {Z_fine.max():+.4f}]",
@@ -1972,7 +1983,7 @@ if __name__ == '__main__':
                           col_mid[idx] / (col_mid[idx] - col_mid[idx+1])
                 print(f"    Courbe rouge a u1=0 : u2 ~ {u2_zero:+.4f} "
                       f"(beta_red_HF ~ {abs(u2_zero):.4f})", flush=True)
-        print(f"  ===== [RED CURVE RBF] FIN OK =====\n", flush=True)
+        print(f"  ===== [RED CURVE polyfit] FIN OK =====\n", flush=True)
         return U1_fine, U2_fine, Z_fine
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
