@@ -127,6 +127,7 @@ if __name__ == '__main__':
     u2_eff_min, u2_eff_max = -7.5, 7.5
     n_max_EFF = 30
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
+    print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     print_3D = False
     
     # --- Print facultatifs, par défaut à False ---
-    print_ana = True    #True que pour pure_flexion (flexion_claude que dans ce cas) 
+    print_ana = False    #True que pour pure_flexion (flexion_claude que dans ce cas) 
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
 
@@ -301,6 +302,7 @@ if __name__ == '__main__':
     _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
+    _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -738,38 +740,6 @@ if __name__ == '__main__':
                 s = (1 + 4*self.Ap*x1)**0.5
                 return -1 - (s-1)/self.Cp + 0.8*(s-1)/(self.Cp*(s+1))
     
-    def print_visu_ana():
-        calc = flexion_claude()
-
-        u1_lim = calc.u1_lim_plast
-        u2_lim = calc.u2p_LS(u1_lim)
-
-        # Branche plastifiée
-        u1_grid = np.linspace(u1_lim, u1_max, n_grid)
-        u2_grid = np.array([calc.u2p_LS(u) for u in u1_grid])
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        ax.plot(u1_grid, u2_grid, 'b-', lw=2,
-                label=r'$u_2 = u_{2p,LS}(u_1)$  (aciers plastifiés)')
-        ax.plot([u1_lim, u1_lim], [u2_lim, u2_max], 'r-', lw=2,
-                label=r'$u_1 = u_{1,lim\,plast}$  (aciers non plastifiés)')
-        ax.plot(u1_lim, u2_lim, 'ko', ms=6, zorder=5,
-                label=f'Raccord ({u1_lim:.3f}, {u2_lim:.3f})')
-        ax.plot(0, 0, 'g+', ms=12, mew=2, label='Origine')
-
-        ax.axhline(0, color='gray', lw=0.4)
-        ax.axvline(0, color='gray', lw=0.4)
-        ax.set_xlabel(r'$u_1$  (espace standard, $f_c$)')
-        ax.set_ylabel(r'$u_2$  (espace standard, $f_y$)')
-        ax.set_title("Surface d'etat-limite - flexion pivot B")
-        ax.legend(loc='best', fontsize=9)
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
-        plt.tight_layout()
-        plt.show()
-        return fig, ax
-
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU MODELE HF                                                #
 
@@ -954,8 +924,9 @@ if __name__ == '__main__':
             u_np  = np.array(u).reshape(1, -1)
             g_val = float(predict_gepck(self.fm, u_np)[0, 0])
             self.n_eval_calls += 1
-            print(f"[GEPCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
-                  f"  g={g_val:+.6f}", flush=True)
+            if print_gepck_calls:
+                print(f"[GEPCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
+                      f"  g={g_val:+.6f}", flush=True)
             return [g_val]
 
         def _exec_sample(self, U):
@@ -1348,7 +1319,7 @@ if __name__ == '__main__':
                 r_i = form_i.getResult()
             except Exception as e:
                 print(f"  [{label}] FORM echoue ({type(e).__name__})", flush=True)
-                return None
+                return None, None
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
             res_IS  = run_IS([r_i], ev_i)
@@ -1357,21 +1328,21 @@ if __name__ == '__main__':
             cov_v   = res_IS.getCoefficientOfVariation()
             print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
                   f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
-            return beta_IS
+            return beta_IS, pf_IS
 
         def _three_form_is(g_ot_i, sigma_func_i, label):
             """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
-            Retourne le ratio si calculable, None sinon."""
+            Retourne (ratio, pf_mid, pf_sup, pf_inf) ou (None, None, None, None)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
-            b_mid = _form_is_iter(g_ot_i, f"{label} μ")
-            b_sup = _form_is_iter(g_sup_i, f"{label} sup")
-            b_inf = _form_is_iter(g_inf_i, f"{label} inf")
+            b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} mu")
+            b_sup, pf_sup = _form_is_iter(g_sup_i, f"{label} sup")
+            b_inf, pf_inf = _form_is_iter(g_inf_i, f"{label} inf")
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
                 ratio = abs(b_sup - b_inf) / abs(b_mid)
                 print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
-                return ratio
-            return None
+                return ratio, pf_mid, pf_sup, pf_inf
+            return None, None, None, None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
         count_valid_BB   = 0
@@ -1405,18 +1376,21 @@ if __name__ == '__main__':
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
 
-        _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
+        _beta_IS_0, _ = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS
+        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf
         _eff_history_BB = []
         _eff_history_BS = []
+        _eff_history_Pf = []
         list_ratio_BB = _eff_history_BB   # alias — même objet
         list_ratio_BS = _eff_history_BS
+        list_Pf = _eff_history_Pf
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
-        # --- Ratio BB initial (avant tout enrichissement, pour criteres qui tracent BB) ---
+        # --- Ratio BB initial (avant tout enrichissement) ---
+        _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
+        list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
         if EFF_criteria in ('BB', 'both', 'at_least_one'):
-            _ratio_init_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
             list_ratio_BB.append(_ratio_init_bb)
             if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
                 count_valid_BB = 1
@@ -1440,18 +1414,23 @@ if __name__ == '__main__':
             degree_upgraded = (max_degree != _degree_avant)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
-            # --- FORM+IS sur le surrogate mis à jour (BB uniquement) ---
+            # --- FORM+IS inconditionnel : mid/sup/inf ---
+            iter_count += 1
+            _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}")
+            list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
+
+            # --- Suivi convergence beta_IS ---
+            _b_mid, _ = _form_is_iter(g_ot, f"N={len(xt)} mu conv")
+
+            # --- Critere BB ---
             if EFF_criteria == 'BB':
-                iter_count += 1
-                _ratio = _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
-                if _ratio is not None and _ratio < tol_BB:
+                if _ratio_bb is not None and _ratio_bb < tol_BB:
                     count_valid_BB += 1
                 else:
                     count_valid_BB = 0
-                list_ratio_BB.append(_ratio)
+                list_ratio_BB.append(_ratio_bb)
 
-            # --- Suivi convergence beta_IS ---
-            _b_mid = _form_is_iter(g_ot, f"N={len(xt)} μ conv")
+            # --- Critere BS ---
             if EFF_criteria == 'BS':
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_conv = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
@@ -1464,10 +1443,9 @@ if __name__ == '__main__':
                 else:
                     count_valid_BS = 0
                     list_ratio_BS.append(None)
-            # --- Critere both : BB et BS simultanement ---
+
+            # --- Critere both ---
             if EFF_criteria == 'both':
-                iter_count += 1
-                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} both iter {iter_count}")
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} both] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1480,10 +1458,9 @@ if __name__ == '__main__':
                     count_valid_both = 0
                 list_ratio_BB.append(_ratio_bb)
                 list_ratio_BS.append(_ratio_bs)
-            # --- Critere at_least_one : BB, BS ou both, le premier atteint gagne ---
+
+            # --- Critere at_least_one ---
             if EFF_criteria == 'at_least_one':
-                iter_count += 1
-                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}")
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1630,6 +1607,55 @@ if __name__ == '__main__':
         fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [EFF_graphs] -> {fname}", flush=True)
+
+    def print_Pf_evolution():
+        """PNG Pf_IS (mu, mu+2sigma, mu-2sigma) au fil des iterations EFF.
+        Lit _eff_history_Pf. Sauvegarde dans out_dir_eff."""
+        if not _eff_history_Pf:
+            return
+        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in _eff_history_Pf]
+        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in _eff_history_Pf]
+        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in _eff_history_Pf]
+        x = list(range(len(_eff_history_Pf)))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.plot(x, pf_mid, 'r-o', ms=5, lw=1.5, label='Pf_IS (mu)')
+        ax.plot(x, pf_sup, 'b--^', ms=4, lw=1.0, label='Pf_IS (mu+2sigma)')
+        ax.plot(x, pf_inf, 'b--v', ms=4, lw=1.0, label='Pf_IS (mu-2sigma)')
+        ax.set_xlabel('Iteration EFF')
+        ax.set_ylabel('Pf_IS')
+        ax.set_title(f'Evolution Pf_IS - {modele} - EFF_criteria={EFF_criteria}')
+        ax.legend(fontsize=9)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fname = f'Pf_evolution_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [Pf_evolution] -> {fname}", flush=True)
+
+    def print_logPf_evolution():
+        """PNG Pf_IS (mu, mu+2sigma, mu-2sigma) en echelle log au fil des iterations EFF.
+        Lit _eff_history_Pf. Sauvegarde dans out_dir_eff."""
+        if not _eff_history_Pf:
+            return
+        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in _eff_history_Pf]
+        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in _eff_history_Pf]
+        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in _eff_history_Pf]
+        x = list(range(len(_eff_history_Pf)))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.semilogy(x, pf_mid, 'r-o', ms=5, lw=1.5, label='Pf_IS (mu)')
+        ax.semilogy(x, pf_sup, 'b--^', ms=4, lw=1.0, label='Pf_IS (mu+2sigma)')
+        ax.semilogy(x, pf_inf, 'b--v', ms=4, lw=1.0, label='Pf_IS (mu-2sigma)')
+        ax.set_ylim(bottom=1e-4)
+        ax.set_xlabel('Iteration EFF')
+        ax.set_ylabel('Pf_IS (echelle log)')
+        ax.set_title(f'Evolution Pf_IS log - {modele} - EFF_criteria={EFF_criteria}')
+        ax.legend(fontsize=9)
+        ax.grid(True, which='both', alpha=0.3)
+        fig.tight_layout()
+        fname = f'logPf_evolution_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [logPf_evolution] -> {fname}", flush=True)
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
@@ -2188,6 +2214,8 @@ if __name__ == '__main__':
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
         print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
         print_EFF_graphs()
+        print_Pf_evolution()
+        print_logPf_evolution()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
     if event is None:
