@@ -8,16 +8,16 @@ Groupe 1 (dans box) = rouge, Groupe 2 (hors box) = gris. Y vertical (remap X,Z,Y
 import os, sys, re
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from step_solid import load_triangles, points_inside
+from step_solid import load_triangles, points_inside, find_box_step
 
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
-STEP = r"C:\workspace\fiabilite\bounding_box_acier_tablier.stp"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
+STEP = find_box_step(OUT_DIR)
 
 
 def parse_rebars_full(path):

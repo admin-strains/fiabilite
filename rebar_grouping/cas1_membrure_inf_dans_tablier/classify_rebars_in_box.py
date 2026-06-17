@@ -17,11 +17,11 @@ import json
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from step_solid import load_triangles, points_inside
+from step_solid import load_triangles, points_inside, find_box_step
 
-DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
-STEP = r"C:\workspace\fiabilite\bounding_box_acier_tablier.stp"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
+STEP = find_box_step(OUT_DIR)   # box .stp du dossier courant (cas1/cas2/...)
 
 
 def parse_rebars(path):

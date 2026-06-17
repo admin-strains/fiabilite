@@ -9,8 +9,20 @@ Approche : on resout la topologie B-rep
 Pour chaque face plane on recupere ses sommets, on les ordonne par angle dans
 le plan de la face (faces convexes -> robuste), puis fan-triangulation.
 """
+import os
 import re
 import numpy as np
+
+
+def find_box_step(base_dir):
+    """Trouve le fichier STEP de la box dans base_dir (le .stp/.step qui n'est PAS
+    une sortie GROUPE*). Fallback : la box au niveau fiabilite. Permet a chaque
+    dossier de cas d'avoir sa propre box sans editer les scripts."""
+    cands = [f for f in os.listdir(base_dir)
+             if f.lower().endswith(('.stp', '.step')) and not f.startswith('GROUPE')]
+    if cands:
+        return os.path.join(base_dir, sorted(cands)[0])
+    return r"C:\workspace\fiabilite\bounding_box_acier_tablier.stp"
 
 
 def _load_entities(path):

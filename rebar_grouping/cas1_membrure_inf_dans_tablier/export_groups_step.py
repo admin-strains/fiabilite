@@ -7,7 +7,7 @@ Coords en mm (x1000) pour se superposer a bounding_box_acier_tablier.stp.
 import os, sys, re
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from step_solid import load_triangles, points_inside
+from step_solid import load_triangles, points_inside, find_box_step
 
 
 def parse_rebars_full(path):
@@ -26,9 +26,9 @@ def parse_rebars_full(path):
             names.append(name); polylines.append(P); centroids.append(P.mean(axis=0))
     return names, polylines, np.array(centroids)
 
-DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
-STEP = r"C:\workspace\fiabilite\bounding_box_acier_tablier.stp"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
+STEP = find_box_step(OUT_DIR)
 SCALE = 1000.0  # m -> mm
 
 

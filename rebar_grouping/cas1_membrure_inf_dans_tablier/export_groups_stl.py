@@ -7,11 +7,11 @@ Coords mm (x1000) pour se superposer a la box. Binary STL (compact).
 import os, sys, re, struct
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from step_solid import load_triangles, points_inside
+from step_solid import load_triangles, points_inside, find_box_step
 
-DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
-STEP = r"C:\workspace\fiabilite\bounding_box_acier_tablier.stp"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+DSCAD = r"C:\workspace\storage\admin\Moulin_Blanc\Calcul_fiabilite_LM1_PRESSURE.ds\dsCad.txt"
+STEP = find_box_step(OUT_DIR)
 SCALE = 1000.0       # m -> mm
 RADIUS_MM = 60.0     # rayon tube gonfle pour visibilite (les vrais sont 2.5-25mm)
 NSIDE = 4            # section carree (compromis taille/lisibilite)
