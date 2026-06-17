@@ -74,7 +74,7 @@ if __name__ == '__main__':
     # 2026-06-17 : fiabilite a 2 variables fy (1 par groupe d'acier), fc fixe.
     # Cas 1 (membrure inf dans tablier) : Calcul_fiabilite_13k_2fy_membrure_inf_tablier
     # Cas 2 (membrure inf dans diagonal) : Calcul_fiabilite_13k_2fy_membrure_inf_diagonal
-    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_tablier"
+    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_diagonal"   # cas : membrure inf DANS le treillis (pas le tablier)
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = True     # 2026-06-12 weekend : activer courbe rouge HF (49 appels STRAINS, ~2h30) pour cache reutilisable
+    print_HF = False    # 2026-06-17 : pas de courbe rouge pour ce 1er run de validation 2-fy (pas de 49 SOCP HF)
     print_DOE = True
     print_3D = False
 
@@ -420,6 +420,31 @@ if __name__ == '__main__':
     def dist_jointe():
         return ot.JointDistribution(_dist_list())
 
+    # ===================== VALIDATION CONFIG 2-FY (logs detailles) =====================
+    print("\n" + "=" * 78, flush=True)
+    print("VALIDATION CONFIG 2-FY  (modele : " + modelname + ")", flush=True)
+    print("=" * 78, flush=True)
+    print(f"  params_names = {params_names}   (n_var = {n_var})", flush=True)
+    _distX_chk = dist_jointe()
+    for _i, _p in enumerate(params_names):
+        _mg = _distX_chk.getMarginal(_i)
+        print(f"  loi {_p} : {_mg.getClassName()}  mean={float(_mg.getMean()[0]):.3f} MPa  "
+              f"std={float(_mg.getStandardDeviation()[0]):.4f} MPa", flush=True)
+    print(f"  SIGMA acier = sqrt(19^2+22^2+8^2) = {SIGMA:.4f} MPa (JCSS)", flush=True)
+    print(f"  fc : FIXE (COMPRESSIVE_STRENGTH='20.0' dans dsCad, plus une variable de fiabilite)", flush=True)
+    print(f"  groupe 1 (fyd1) : {len(group1_names)} aciers  |  groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
+    print(f"  sentinelles match sensibilite : g1='{_g1_sentinel}'  g2='{_g2_sentinel}'", flush=True)
+    try:
+        _dsl = open(os.path.join(_path_ds, 'dsLoad.txt'), encoding='utf-8', errors='replace').read()
+        _dead_vide = 'DEAD_LOAD_CASES=[]' in _dsl
+        _live_2 = "LIVE_LOAD_CASES=[('LC_poids', '1'), ('LC_LM1_trafic', '1')]" in _dsl
+        print(f"  CHARGEMENT : DEAD vide={_dead_vide}  |  LIVE=poids+trafic amplifies={_live_2}", flush=True)
+    except Exception as _e:
+        print(f"  CHARGEMENT : verif dsLoad echouee ({_e})", flush=True)
+    print(f"  print_HF = {print_HF}  (courbe rouge HF {'ON' if print_HF else 'OFF -> pas de 49 SOCP'})", flush=True)
+    print("=" * 78 + "\n", flush=True)
+    # ===================================================================================
+
     # --- APPELS STRAINS ---
     # Counter pour identifier chaque appel SOCP (run_one_SOL + run_HF)
     _socp_call_counter = [0]  # liste pour eviter scope issues
@@ -592,6 +617,8 @@ if __name__ == '__main__':
                         SOL[i][f'dg_{p}'] = v
                     if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
                         break
+                _dgs = "  ".join(f"dg/d{q}={SOL[i].get(f'dg_{q}')}" for q in params_names)
+                print(f"  [SENSIBILITES 2-fy] pObj={SOL[i]['g']+1:.5f}  g={SOL[i]['g']:+.5f}  |  {_dgs}", flush=True)
             _t_log(f"  read .dsmetares + sensibilites (g={SOL[i]['g']:.4f})", _t0)
             _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} END (g={SOL[i]['g']:.4f}) ===", _t_iter)
         return SOL
