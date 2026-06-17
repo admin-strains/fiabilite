@@ -204,21 +204,10 @@ if __name__ == '__main__':
     
 
     # --- Résultats fixés ---
-    hf_3d_grid_fixed = {
-        'params': (-10.0, 10.0, -10.0, 10.0, 7),
-        'Z': [
-            [-0.359874, -0.266997, -0.205356, -0.162941, -0.133274, -0.118529, -0.110761],
-            [-0.259757, -0.080302,  0.041437,  0.123736,  0.180376,  0.218425,  0.237580],
-            [-0.224965,  0.048410,  0.247795,  0.382025,  0.475826,  0.541447,  0.578053],
-            [-0.196753,  0.115993,  0.413867,  0.617429,  0.752362,  0.844787,  0.910014],
-            [-0.168402,  0.147183,  0.541008,  0.821024,  1.009377,  1.139576,  1.232379],
-            [-0.140437,  0.175700,  0.624863,  0.998493,  1.249463,  1.421116,  1.540467],
-            [-0.112244,  0.204017,  0.672091,  1.150387,  1.477693,  1.691754,  1.840008],
-        ]
-    }
-    # 2026-06-17 : cache HF INVALIDE pour 2-fy (l'ancienne grille etait fc x fy).
-    # On le met a None -> _compute_hf_grid_with_progress recalcule la grille fy1 x fy2.
-    hf_2d_grid_fixed = None
+    # 2026-06-17 : caches HF mis a None pour 2-fy (les anciennes grilles etaient fc x fy,
+    # invalides pour fy1 x fy2). Recalcul automatique si besoin (print_HF / print_3D).
+    hf_3d_grid_fixed = None   # utilise seulement par print_3D_HF (print_3D=False)
+    hf_2d_grid_fixed = None   # utilise par la courbe rouge HF (print_HF) -> recalcul fy1 x fy2
 
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
