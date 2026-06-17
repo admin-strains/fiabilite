@@ -100,7 +100,7 @@ if __name__ == '__main__':
     # --- Paramètres variables ---
     # Valeurs caractéristiques du pont du Moulin Blanc (cf dsCad : COMPRESSIVE_STRENGTH=20 MPa, GRADE=235 MPa)
     fcm, fym = 20, 235 #MPa
-    cov_fc, cov_fy = 0.12, None
+    cov_fc, cov_fy = None, None  # cov_fc=None -> COV_TABLE (fcm=20 -> fck=12 -> C15 -> 0.14)
     fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
     
     
@@ -168,6 +168,13 @@ if __name__ == '__main__':
     print_HF = True     # 2026-06-12 weekend : activer courbe rouge HF (49 appels STRAINS, ~2h30) pour cache reutilisable
     print_DOE = True
     print_3D = False
+
+    # --- Mode de trace de la courbe rouge HF (g=0) ---
+    # 'raw'      : ancien comportement (AC_moulin_blanc.py) - contour direct sur la grille HF 7x7 brute
+    #              (marching squares sur les 49 points, fidele mais anguleux, sensible aux divergents)
+    # 'polyfit2' : comportement actuel - filtrage divergents + polyfit degre 2 + grille fine 100x100
+    #              (lisse, robuste aux divergents, mais biais possible loin des points)
+    red_curve_mode = 'polyfit2'   # 'raw' | 'polyfit2'
     
     # --- Print facultatifs, par défaut à False ---
     print_ana = False   # PAS d'analytique pour Moulin Blanc (flexion_claude = uniquement flexion pure)
@@ -2044,6 +2051,38 @@ if __name__ == '__main__':
         print(f"  ===== [RED CURVE polyfit] FIN OK =====\n", flush=True)
         return U1_fine, U2_fine, Z_fine
 
+    def _draw_red_curve(ax, hf_cache, linestyles='-'):
+        """Trace la courbe rouge g=0 HF sur `ax` selon le flag global `red_curve_mode`.
+
+        - 'raw'      : contour direct sur la grille HF 7x7 brute (ancien comportement
+                       AC_moulin_blanc.py). Les points divergents (NaN / sentinelle -1.0)
+                       sont laisses tels quels -> marching squares natif de matplotlib.
+        - 'polyfit2' : passe par _compute_red_curve_robust (filtrage + polyfit deg 2 +
+                       grille fine 100x100), comportement actuel.
+
+        Centralise le branchement pour que les 3 panneaux (EFF, sigma, comparaison
+        surrogates) tracent la courbe rouge de maniere identique.
+        """
+        if hf_cache is None or 'Z' not in hf_cache:
+            return
+        if red_curve_mode == 'raw':
+            # Ancien tracé : contour direct sur la grille HF brute 7x7
+            Z_raw = np.array(hf_cache['Z'], dtype=float)
+            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            U1_hf_loc, U2_hf_loc = np.meshgrid(u1_hf, u2_hf)
+            print(f"  [RED CURVE] mode='raw' : contour direct sur grille HF "
+                  f"{n_grid_hf}x{n_grid_hf} brute (sans lissage)", flush=True)
+            ax.contour(U1_hf_loc, U2_hf_loc, Z_raw, levels=[0],
+                       colors='red', linewidths=2, linestyles=linestyles)
+        else:
+            # mode 'polyfit2' (defaut) : lissage robuste
+            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
+                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_cache)
+            if Z_fine is not None:
+                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0],
+                           colors='red', linewidths=2, linestyles=linestyles)
+
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
         Sauvegarde en PNG dans out_dir_eff sans afficher de fenetre."""
@@ -2088,10 +2127,7 @@ if __name__ == '__main__':
             if Z_g is not None:
                 ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
             if Z_true is not None:
-                U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
-                    u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
-                if Z_fine is not None:
-                    ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
+                _draw_red_curve(ax, hf_2d_grid_fixed)
             if xt is not None:
                 ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
                            edgecolors='black', linewidths=0.8, label='DOE')
@@ -2159,10 +2195,7 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
-                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
-            if Z_fine is not None:
-                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
+            _draw_red_curve(ax, hf_2d_grid_fixed)
 
         # --- Points DOE ---
         if xt is not None:
@@ -2220,10 +2253,7 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
-                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
-            if Z_fine is not None:
-                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2)
+            _draw_red_curve(ax, hf_2d_grid_fixed)
 
         if xt is not None:
             ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
@@ -2332,10 +2362,7 @@ if __name__ == '__main__':
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
-                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_2d_grid_fixed)
-            if Z_fine is not None:
-                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0], colors='red', linewidths=2, linestyles='--')
+            _draw_red_curve(ax, hf_2d_grid_fixed, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
         if print_ana:
