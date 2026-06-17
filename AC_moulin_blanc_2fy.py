@@ -822,8 +822,8 @@ if __name__ == '__main__':
     Es = 200000
     ecu = 0.0035
     eud = 0.045
-    gamma_c_fic = _parse(_cad_txt, 'gamma_c') # fixé à 1.0
-    gamma_s_fic = _parse(_cad_txt, 'gamma_s') # fixé à 1.0
+    gamma_c_fic = 1.0  # 2-fy : gamma_c retire du dsCad (beton fixe COMPRESSIVE_STRENGTH='20.0'), reste 1.0
+    gamma_s_fic = _parse(_cad_txt, 'gamma_s') # toujours dans le dsCad (fyd1/fyd2 = fy/gamma_s)
     
     # --- Fonction analytique ---
     class flexion_claude:
