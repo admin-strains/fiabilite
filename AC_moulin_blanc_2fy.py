@@ -1792,12 +1792,48 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [EFF_graphs] -> {fname}", flush=True)
 
+    # --- Cache sidecar JSON de la grille HF (evite de recalculer les 49 SOCP / ~2h30) ---
+    # Fichier dans le dossier .ds du projet -> 1 cache par projet (tablier / diagonal).
+    _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
+
+    def _hf_cache_sig(n_grid_hf_local):
+        """Signature de validation : bornes + densite grille + variables + tailles groupes.
+        Toute difference (bornes, maillage de grille, grouping) invalide le cache."""
+        return {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max,
+                'n_grid_hf': n_grid_hf_local, 'params': list(params_names),
+                'n_g1': len(group1_names), 'n_g2': len(group2_names)}
+
+    def _load_hf_cache(n_grid_hf_local):
+        import json as _j
+        if not os.path.exists(_HF_CACHE_FILE):
+            return None
+        try:
+            d = _j.load(open(_HF_CACHE_FILE))
+            if d.get('signature') == _hf_cache_sig(n_grid_hf_local):
+                print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (signature OK -> 0 calcul SOCP)", flush=True)
+                return np.array(d['Z'])
+            print(f"[HF CACHE] signature differente du cache existant -> recalcul", flush=True)
+        except Exception as e:
+            print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
+        return None
+
+    def _save_hf_cache(Z, n_grid_hf_local):
+        import json as _j
+        try:
+            _j.dump({'signature': _hf_cache_sig(n_grid_hf_local), 'Z': Z.tolist()},
+                    open(_HF_CACHE_FILE, 'w'), indent=1)
+            print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE} (reutilisable au prochain run)", flush=True)
+        except Exception as e:
+            print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context=""):
         """Calcule la grille HF point par point avec impression progress + ETA.
-        2026-06-12 weekend : pour suivre les 49 appels STRAINS pendant ~2h30.
-        Valeurs g BRUTES (= run_HF), AUCUN traitement de divergence (comme AC3 flexion).
-        Si un solve SOCP diverge, le g garbage est conserve tel quel dans la grille."""
+        Lecture/ecriture AUTOMATIQUE d'un cache sidecar JSON (plus de copier-coller).
+        Valeurs g BRUTES (= run_HF), AUCUN traitement de divergence (comme AC3 flexion)."""
         import time as _time_local
+        cached = _load_hf_cache(n_grid_hf_local)
+        if cached is not None:
+            return cached
         n_total = len(grid_hf)
         Z_flat = []
         _t_start = _time_local.perf_counter()
@@ -1816,7 +1852,9 @@ if __name__ == '__main__':
                   f"ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
         print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
-        return np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+        Z = np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+        _save_hf_cache(Z, n_grid_hf_local)
+        return Z
 
     def _draw_red_curve(ax, hf_cache, linestyles='-'):
         """Trace la courbe rouge g=0 HF : contour direct sur la grille HF 7x7 brute.
