@@ -1802,75 +1802,27 @@ if __name__ == '__main__':
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context=""):
         """Calcule la grille HF point par point avec impression progress + ETA.
         2026-06-12 weekend : pour suivre les 49 appels STRAINS pendant ~2h30.
-        2026-06-15 LM1 : convention lambda=0 sur divergence SOCP.
-            Quand |g_val| > GARBAGE_THRESHOLD (=10), on considere le solveur
-            comme infeasible (cas materiaux trop faibles, ex fy=10 MPa pour LM1).
-            On impose alors lambda=pObj=0 -> g=pObj-1=-1.
-            Sinon le garbage (~ -2.7e8) plaquerait le contour rouge sur la frontiere."""
+        Valeurs g BRUTES (= run_HF), AUCUN traitement de divergence (comme AC3 flexion).
+        Si un solve SOCP diverge, le g garbage est conserve tel quel dans la grille."""
         import time as _time_local
-        GARBAGE_THRESHOLD = 10.0     # |g| > 10 = solveur diverge (g physique typ. dans [-2, +10])
-        LAMBDA_NULL_VALUE = -1.0     # convention lambda=0 -> g=-1
         n_total = len(grid_hf)
         Z_flat = []
-        n_garbage_clean = 0
         _t_start = _time_local.perf_counter()
         print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context}) #####", flush=True)
-        print(f"##### Estimation : ~{n_total * 3:.0f} min total #####", flush=True)
-        print(f"##### Convention lambda=0 si |g|>{GARBAGE_THRESHOLD} -> g=NaN (filtre downstream) #####\n", flush=True)
-        garbage_log = []  # liste detaillee des points divergents (u1, u2, g_raw, fy, fc)
+        print(f"##### Estimation : ~{n_total * 3:.0f} min total #####\n", flush=True)
         for i, pt in enumerate(grid_hf):
             _t_pt0 = _time_local.perf_counter()
             g_val = run_HF(pt)[0]
-            g_raw = g_val
-            if abs(g_val) > GARBAGE_THRESHOLD:
-                n_garbage_clean += 1
-                # Log enrichi : ajoute fc/fy physiques pour comprendre quel cas materiau diverge
-                try:
-                    dist_X_tmp = dist_jointe()
-                    T_inv_tmp = dist_X_tmp.getInverseIsoProbabilisticTransformation()
-                    x_phys = T_inv_tmp(ot.Point(list(pt)))
-                    fc_phys = float(x_phys[0]) if n_var >= 1 else None
-                    fy_phys = float(x_phys[1]) if n_var >= 2 else None
-                except Exception:
-                    fc_phys = fy_phys = None
-                garbage_log.append({
-                    'i': i+1, 'u1': float(pt[0]), 'u2': float(pt[1]),
-                    'g_raw': float(g_raw), 'fc_MPa': fc_phys, 'fy_MPa': fy_phys
-                })
-                phys_str = (f"  (fc={fc_phys:.2f} MPa, fy={fy_phys:.2f} MPa)"
-                            if fc_phys is not None else "")
-                g_val = np.nan  # convention NaN sur divergence (masque par matplotlib au trace)
-                print(f"  [WARN GARBAGE] HF #{i+1}/{n_total}  "
-                      f"u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g_raw={g_raw:+.4e}  "
-                      f"-> g=NaN{phys_str}", flush=True)
-                print(f"    Cause probable : SOCP infeasible "
-                      f"(materiaux trop faibles ou queue extreme distrib)", flush=True)
             Z_flat.append(g_val)
             _t_pt = _time_local.perf_counter() - _t_pt0
             _t_elapsed = _time_local.perf_counter() - _t_start
             _t_avg = _t_elapsed / (i + 1)
             _t_eta = _t_avg * (n_total - i - 1)
-            status = "DIVERGENT" if np.isnan(g_val) else f"g={g_val:+.4f}"
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  {status:>15s}  "
+            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  "
-                  f"ETA={_t_eta/60:.1f}min  ({n_garbage_clean} divergents jusqu'ici)",
-                  flush=True)
+                  f"ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) "
-              f"-- {n_garbage_clean}/{n_total} divergents (g=NaN) #####", flush=True)
-        # Rapport detaille des divergents
-        if garbage_log:
-            print(f"##### Tableau recapitulatif des {n_garbage_clean} points divergents : #####",
-                  flush=True)
-            print(f"  {'#':>3s}  {'u1':>8s}  {'u2':>8s}  {'g_raw':>12s}  "
-                  f"{'fc(MPa)':>10s}  {'fy(MPa)':>10s}", flush=True)
-            for g in garbage_log:
-                fc_s = f"{g['fc_MPa']:10.2f}" if g['fc_MPa'] is not None else f"{'?':>10s}"
-                fy_s = f"{g['fy_MPa']:10.2f}" if g['fy_MPa'] is not None else f"{'?':>10s}"
-                print(f"  {g['i']:>3d}  {g['u1']:>+8.3f}  {g['u2']:>+8.3f}  "
-                      f"{g['g_raw']:>+12.3e}  {fc_s}  {fy_s}", flush=True)
-        print(f"##### Convention finale : g=NaN sur divergents "
-              f"(masques par matplotlib au trace de la courbe rouge) #####\n", flush=True)
+        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
         return np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
 
     def _draw_red_curve(ax, hf_cache, linestyles='-'):
