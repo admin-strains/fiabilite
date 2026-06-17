@@ -169,13 +169,6 @@ if __name__ == '__main__':
     print_DOE = True
     print_3D = False
 
-    # --- Mode de trace de la courbe rouge HF (g=0) ---
-    # 'raw'      : ancien comportement (AC_moulin_blanc.py) - contour direct sur la grille HF 7x7 brute
-    #              (marching squares sur les 49 points, fidele mais anguleux, sensible aux divergents)
-    # 'polyfit2' : comportement actuel - filtrage divergents + polyfit degre 2 + grille fine 100x100
-    #              (lisse, robuste aux divergents, mais biais possible loin des points)
-    red_curve_mode = 'polyfit2'   # 'raw' | 'polyfit2'
-    
     # --- Print facultatifs, par défaut à False ---
     print_ana = False   # PAS d'analytique pour Moulin Blanc (flexion_claude = uniquement flexion pure)
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
@@ -1846,7 +1839,7 @@ if __name__ == '__main__':
                 })
                 phys_str = (f"  (fc={fc_phys:.2f} MPa, fy={fy_phys:.2f} MPa)"
                             if fc_phys is not None else "")
-                g_val = np.nan  # convention NaN, filtre par _is_valid_g_vec downstream
+                g_val = np.nan  # convention NaN sur divergence (masque par matplotlib au trace)
                 print(f"  [WARN GARBAGE] HF #{i+1}/{n_total}  "
                       f"u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g_raw={g_raw:+.4e}  "
                       f"-> g=NaN{phys_str}", flush=True)
@@ -1876,212 +1869,26 @@ if __name__ == '__main__':
                 fy_s = f"{g['fy_MPa']:10.2f}" if g['fy_MPa'] is not None else f"{'?':>10s}"
                 print(f"  {g['i']:>3d}  {g['u1']:>+8.3f}  {g['u2']:>+8.3f}  "
                       f"{g['g_raw']:>+12.3e}  {fc_s}  {fy_s}", flush=True)
-        print(f"##### Convention finale : g=NaN sur divergents (filtre par "
-              f"_is_valid_g_vec downstream) #####\n", flush=True)
+        print(f"##### Convention finale : g=NaN sur divergents "
+              f"(masques par matplotlib au trace de la courbe rouge) #####\n", flush=True)
         return np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
 
-    # ------------------------------------------------------------------
-    # Robust HF grid filtering + RBF refit (2026-06-16)
-    # ------------------------------------------------------------------
-    # Sentinelle conventionnelle indiquant lambda=0 (non-convergence detectee en amont)
-    LAMBDA_NULL_VALUE = -1.0
-    # Tolerance pour distinguer la sentinelle EXACTE d'une valeur physique proche de -1.0
-    EPSILON_SENTINEL = 1e-12
-    # Bornes physiques pour g_HF : ALIGNEES sur GARBAGE_THRESHOLD du clip upstream
-    # (cf _compute_hf_grid_with_progress : tout |g|>10 est clipe a NaN avant cache).
-    # Coherence totale clip <-> filtre : impossible qu'un garbage sneake dans le RBF.
-    _GARBAGE_THRESHOLD = 10.0
-    G_PHYSICAL_MIN = -_GARBAGE_THRESHOLD
-    G_PHYSICAL_MAX = +_GARBAGE_THRESHOLD
-
-    def _is_valid_g_vec(Z):
-        """Masque booleen identifiant les points convergents valides.
-
-        Filtre :
-          (1) NaN                    -> np.isfinite ecarte
-          (2) +/-Inf                 -> np.isfinite ecarte
-          (3) Sentinelle LAMBDA_NULL -> ecart absolu < EPSILON_SENTINEL
-          (4) Garbage non clipe      -> hors [G_PHYSICAL_MIN, G_PHYSICAL_MAX]
-          (5) Valeurs physiques      -> conservees (y compris g proche mais != -1.0)
-        """
-        Z = np.asarray(Z, dtype=float)
-        finite_mask   = np.isfinite(Z)
-        not_sentinel  = np.abs(Z - LAMBDA_NULL_VALUE) > EPSILON_SENTINEL
-        in_phys_range = (Z >= G_PHYSICAL_MIN) & (Z <= G_PHYSICAL_MAX)
-        return finite_mask & not_sentinel & in_phys_range
-
-    def _compute_red_curve_robust(u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_cache,
-                                   n_grid_fine=100):
-        """Refit polynomial degre 2 de la grille HF (filtree des sentinelles / NaN / garbage).
-
-        Retourne (U1_fine, U2_fine, Z_fine) pour ax.contour, ou (None, None, None)
-        si moins de 6 points convergents (insuffisant pour un fit polynomial deg 2 stable).
-
-        Logs detailles a chaque etape : filtrage, fit polynomial deg 2, validation u*.
-        """
-        print(f"\n  ===== [RED CURVE polyfit] DEBUT =====", flush=True)
-        if hf_cache is None or 'Z' not in hf_cache:
-            print(f"  [RED CURVE] hf_cache is None or missing 'Z' -> skip", flush=True)
-            return None, None, None
-        Z_raw = np.asarray(hf_cache['Z'], dtype=float)
-        if Z_raw.ndim == 2:
-            Z_flat = Z_raw.ravel()
-        else:
-            Z_flat = Z_raw
-        u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-        u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-        U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-        pts = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-        # ---------- ETAPE 1 : Filtrage detaille ----------
-        n_total = len(Z_flat)
-        mask = _is_valid_g_vec(Z_flat)
-        n_valid = int(mask.sum())
-        n_rejected = n_total - n_valid
-        # Decomposition des rejets
-        n_nan_inf = int((~np.isfinite(Z_flat)).sum())
-        n_sentinel = int((np.isfinite(Z_flat) &
-                          (np.abs(Z_flat - LAMBDA_NULL_VALUE) <= EPSILON_SENTINEL)).sum())
-        n_garbage_pos = int((np.isfinite(Z_flat) & (Z_flat > G_PHYSICAL_MAX)).sum())
-        n_garbage_neg = int((np.isfinite(Z_flat) & (Z_flat < G_PHYSICAL_MIN) &
-                            (np.abs(Z_flat - LAMBDA_NULL_VALUE) > EPSILON_SENTINEL)).sum())
-        print(f"  [RED CURVE] Grille {n_grid_hf}x{n_grid_hf} = {n_total} points HF analyses :",
-              flush=True)
-        print(f"    Valides             : {n_valid:3d}/{n_total} ({100*n_valid/n_total:.1f}%)",
-              flush=True)
-        print(f"    Rejetes total       : {n_rejected:3d}/{n_total}", flush=True)
-        print(f"      - NaN/Inf         : {n_nan_inf:3d}  (convention divergence)", flush=True)
-        print(f"      - Sentinelle -1.0 : {n_sentinel:3d}  (clip lambda=0 ancienne convention)",
-              flush=True)
-        print(f"      - Garbage |g|>10  : {n_garbage_neg + n_garbage_pos:3d} "
-              f"(neg={n_garbage_neg}, pos={n_garbage_pos})", flush=True)
-        # Liste des points rejetes (pour debug)
-        if n_rejected > 0:
-            print(f"    Coordonnees points rejetes :", flush=True)
-            for i, (pt, z) in enumerate(zip(pts[~mask], Z_flat[~mask])):
-                reason = "NaN/Inf" if not np.isfinite(z) else \
-                         "sentinel" if abs(z - LAMBDA_NULL_VALUE) <= EPSILON_SENTINEL else \
-                         f"garbage|g|>{G_PHYSICAL_MAX}"
-                print(f"      u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={z:+.3e}  ({reason})",
-                      flush=True)
-        if n_valid < 6:
-            print(f"  [RED CURVE] STOP : n_valid={n_valid} < 6 (insuffisant pour RBF stable)",
-                  flush=True)
-            print(f"  ===== [RED CURVE polyfit] FIN (skip) =====\n", flush=True)
-            return None, None, None
-        pts_valid = pts[mask]
-        z_valid = Z_flat[mask]
-        # ---------- ETAPE 2 : Stats sur points valides ----------
-        print(f"    Stats Z valides     : min={z_valid.min():+.4f}  max={z_valid.max():+.4f} "
-              f" mean={z_valid.mean():+.4f}  std={z_valid.std():.4f}", flush=True)
-        n_negative_valid = int((z_valid < 0).sum())
-        n_positive_valid = int((z_valid >= 0).sum())
-        print(f"    Repartition signe   : {n_negative_valid} g<0  |  {n_positive_valid} g>=0",
-              flush=True)
-        if n_negative_valid == 0:
-            print(f"    [WARN] AUCUN point convergent g<0 dans la grille HF !", flush=True)
-            print(f"           La courbe g=0 sera extrapolee depuis les g>0 (peu fiable).",
-                  flush=True)
-        # ---------- ETAPE 3 : Fit polynomial degre 2 (lisse par construction) ----------
-        u1_v = pts_valid[:, 0]
-        u2_v = pts_valid[:, 1]
-        print(f"  [RED CURVE] Fit polynomial degre 2 :", flush=True)
-        print(f"    Modele       : g = a0 + a1*u1 + a2*u2 + a3*u1^2 + a4*u2^2 + a5*u1*u2", flush=True)
-        print(f"    N points entr: {len(z_valid)}", flush=True)
-        import time as _t_pf
-        _t0 = _t_pf.perf_counter()
-        # Matrice de design (N x 6)
-        A = np.column_stack([
-            np.ones(len(u1_v)),
-            u1_v, u2_v,
-            u1_v**2, u2_v**2,
-            u1_v * u2_v,
-        ])
-        try:
-            coeffs, _residuals, _rank, _sv = np.linalg.lstsq(A, z_valid, rcond=None)
-        except Exception as e:
-            print(f"  [RED CURVE] polyfit FAILED ({type(e).__name__}: {e}) -> skip", flush=True)
-            print(f"  ===== [RED CURVE polyfit] FIN (erreur) =====\n", flush=True)
-            return None, None, None
-        _dt_fit = _t_pf.perf_counter() - _t0
-        a0, a1, a2, a3, a4, a5 = coeffs
-        print(f"    Fit duree    : {_dt_fit*1000:.2f} ms", flush=True)
-        print(f"    Coefficients :  a0={a0:+.4f}  a1={a1:+.4f}  a2={a2:+.4f}", flush=True)
-        print(f"                    a3={a3:+.4f}  a4={a4:+.4f}  a5={a5:+.4f}", flush=True)
-        # Sanity check : residus sur points entrainement
-        z_pred_train = A @ coeffs
-        residuals_arr = z_pred_train - z_valid
-        rmse_train = float(np.sqrt(np.mean(residuals_arr**2)))
-        max_res = float(np.max(np.abs(residuals_arr)))
-        print(f"    RMSE entr    : {rmse_train:.4e}  (polyfit deg 2 ne passe PAS exactement par tous les pts)", flush=True)
-        print(f"    Max |residu| : {max_res:.4e}", flush=True)
-        # ---------- ETAPE 4 : Evaluation grille fine ----------
-        u1_fine = np.linspace(u1_min, u1_max, n_grid_fine)
-        u2_fine = np.linspace(u2_min, u2_max, n_grid_fine)
-        U1_fine, U2_fine = np.meshgrid(u1_fine, u2_fine)
-        grid_fine = np.column_stack([U1_fine.ravel(), U2_fine.ravel()])
-        A_fine = np.column_stack([
-            np.ones(len(grid_fine)),
-            grid_fine[:, 0], grid_fine[:, 1],
-            grid_fine[:, 0]**2, grid_fine[:, 1]**2,
-            grid_fine[:, 0] * grid_fine[:, 1],
-        ])
-        _t0 = _t_pf.perf_counter()
-        Z_fine = (A_fine @ coeffs).reshape(n_grid_fine, n_grid_fine)
-        _dt_eval = _t_pf.perf_counter() - _t0
-        print(f"  [RED CURVE] Eval grille fine {n_grid_fine}x{n_grid_fine} : "
-              f"{_dt_eval*1000:.1f} ms", flush=True)
-        print(f"    Z_fine range       : [{Z_fine.min():+.4f}, {Z_fine.max():+.4f}]",
-              flush=True)
-        # Verification : la grille fine doit traverser g=0 si on veut une courbe rouge
-        if Z_fine.min() > 0 and Z_fine.max() > 0:
-            print(f"    [WARN] Z_fine tout positif -> courbe rouge ABSENTE du PNG", flush=True)
-        elif Z_fine.min() < 0 and Z_fine.max() < 0:
-            print(f"    [WARN] Z_fine tout negatif -> courbe rouge ABSENTE du PNG", flush=True)
-        else:
-            # Estimation position contour g=0 sur la colonne u1=0 (centre)
-            j_mid = n_grid_fine // 2
-            col_mid = Z_fine[:, j_mid]
-            sign_changes = np.where(np.diff(np.sign(col_mid)))[0]
-            if len(sign_changes) > 0:
-                idx = sign_changes[0]
-                u2_zero = u2_fine[idx] + (u2_fine[idx+1] - u2_fine[idx]) * \
-                          col_mid[idx] / (col_mid[idx] - col_mid[idx+1])
-                print(f"    Courbe rouge a u1=0 : u2 ~ {u2_zero:+.4f} "
-                      f"(beta_red_HF ~ {abs(u2_zero):.4f})", flush=True)
-        print(f"  ===== [RED CURVE polyfit] FIN OK =====\n", flush=True)
-        return U1_fine, U2_fine, Z_fine
-
     def _draw_red_curve(ax, hf_cache, linestyles='-'):
-        """Trace la courbe rouge g=0 HF sur `ax` selon le flag global `red_curve_mode`.
+        """Trace la courbe rouge g=0 HF : contour direct sur la grille HF 7x7 brute.
 
-        - 'raw'      : contour direct sur la grille HF 7x7 brute (ancien comportement
-                       AC_moulin_blanc.py). Les points divergents (NaN / sentinelle -1.0)
-                       sont laisses tels quels -> marching squares natif de matplotlib.
-        - 'polyfit2' : passe par _compute_red_curve_robust (filtrage + polyfit deg 2 +
-                       grille fine 100x100), comportement actuel.
-
-        Centralise le branchement pour que les 3 panneaux (EFF, sigma, comparaison
-        surrogates) tracent la courbe rouge de maniere identique.
+        Comportement d'origine (AC_moulin_blanc.py) : AUCUN filtrage, AUCUN lissage.
+        Les points divergents du cache (sentinelle -1.0 ou NaN) sont traces tels quels
+        -> marching squares natif de matplotlib (NaN masques automatiquement).
+        Centralise le trace pour les 3 panneaux (EFF, sigma, comparaison surrogates).
         """
         if hf_cache is None or 'Z' not in hf_cache:
             return
-        if red_curve_mode == 'raw':
-            # Ancien tracé : contour direct sur la grille HF brute 7x7
-            Z_raw = np.array(hf_cache['Z'], dtype=float)
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf_loc, U2_hf_loc = np.meshgrid(u1_hf, u2_hf)
-            print(f"  [RED CURVE] mode='raw' : contour direct sur grille HF "
-                  f"{n_grid_hf}x{n_grid_hf} brute (sans lissage)", flush=True)
-            ax.contour(U1_hf_loc, U2_hf_loc, Z_raw, levels=[0],
-                       colors='red', linewidths=2, linestyles=linestyles)
-        else:
-            # mode 'polyfit2' (defaut) : lissage robuste
-            U1_fine, U2_fine, Z_fine = _compute_red_curve_robust(
-                u1_min, u1_max, u2_min, u2_max, n_grid_hf, hf_cache)
-            if Z_fine is not None:
-                ax.contour(U1_fine, U2_fine, Z_fine, levels=[0],
-                           colors='red', linewidths=2, linestyles=linestyles)
+        Z_raw = np.array(hf_cache['Z'], dtype=float)
+        u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+        u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+        U1_hf_loc, U2_hf_loc = np.meshgrid(u1_hf, u2_hf)
+        ax.contour(U1_hf_loc, U2_hf_loc, Z_raw, levels=[0],
+                   colors='red', linewidths=2, linestyles=linestyles)
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
