@@ -171,7 +171,7 @@ if __name__ == '__main__':
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = 1e-5                                            # 2026-06-12 : 1e-3 -> 1e-5 (test critere plus strict pour forcer + iters EFF)
+    tol_EFF = 1e-3                                            # 2026-06-17 : remis a 1e-3 (valeur flexion d'origine ; avait ete teste a 1e-5)
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01         # critere BS : |beta_IS - beta_IS_prec| / beta_IS (Semia flexion: 0.005 -> 0.01)
     EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' (Semia flexion: nouveau, OR au lieu de AND)
