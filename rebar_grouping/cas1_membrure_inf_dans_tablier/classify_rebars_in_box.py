@@ -74,6 +74,17 @@ def main():
 
     # 4) Classification vectorisee de tous les aciers
     inside = points_inside(C, tris)
+    # Override : les HA_8 (Ø8mm) sont des aciers de tablier. ~67 tombent hors box
+    # aux coins/extremites du tablier (Y niveau tablier mais bord non couvert) ->
+    # forces en groupe 1 (tablier). Cf remarque utilisateur 2026-06-17.
+    FORCE_GROUP1_PREFIX = ('HA_8_',)
+    n_forced = 0
+    for i, nm in enumerate(names):
+        if nm.startswith(FORCE_GROUP1_PREFIX) and not inside[i]:
+            inside[i] = True
+            n_forced += 1
+    if n_forced:
+        print(f"\n[OVERRIDE] {n_forced} aciers {FORCE_GROUP1_PREFIX} hors box -> forces groupe 1 (tablier)")
     n_in = int(inside.sum())
     print(f"\n[RESULTAT]")
     print(f"  Groupe 1 (DANS la box)  : {n_in:5d} aciers")
