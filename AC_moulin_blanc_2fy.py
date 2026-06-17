@@ -94,7 +94,8 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale
 
     n0 = 5                      # nombre de points du plan d'experience initial (DOE)
-    params_names = ['fc','fy']
+    # 2026-06-17 : 2 variables fy (1 par groupe d'acier), fc fixe (dans le dsCad).
+    params_names = ['fy1','fy2']
     n_var = len(params_names)
 
     # --------------------------------------------------------------------------- #G
@@ -102,14 +103,37 @@ if __name__ == '__main__':
 
     # --- Paramètres variables ---
     # Valeurs caractéristiques du pont du Moulin Blanc (cf dsCad : COMPRESSIVE_STRENGTH=20 MPa, GRADE=235 MPa)
-    fcm, fym = 20, 235 #MPa
-    cov_fc, cov_fy = None, None  # cov_fc=None -> COV_TABLE (fcm=20 -> fck=12 -> C15 -> 0.14)
+    FY_MEAN = 235.0              # MPa : moyenne acier, identique pour fy1 et fy2
+    fcm, fym = 20, 235           # gardes pour code legacy/analytique (non utilises en 2-fy)
+    cov_fc, cov_fy = None, None
     fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
-    
-    
+
+
     # Moulin Blanc : les noms réels sont HA_5_1, HA_5_2, etc. — on les extrait du dsCad
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
+
+    # 2-fy : groupes d'acier lus DIRECTEMENT du dsCad (GRADE=fyd1 -> groupe 1, fyd2 -> groupe 2).
+    # Auto-adapte au projet (tablier ou diagonal), aucune dependance fichier externe.
+    group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
+    group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
+    group1_set, group2_set = set(group1_names), set(group2_names)
+    print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
+    assert group1_names and group2_names, "dsCad doit contenir GRADE=fyd1 et GRADE=fyd2 (projet 2-fy)"
+    _g1_sentinel, _g2_sentinel = group1_names[0], group2_names[0]
+
+    def _sens_key_to_param(k):
+        """Mappe une cle de sensibilite STRAINS ('YIELD_STRENGTH:nom1,nom2,...')
+        vers le nom de variable 'fy1'/'fy2' selon l'appartenance au groupe.
+        Bornage par virgules pour eviter les faux-positifs de sous-chaine."""
+        if not k.startswith('YIELD_STRENGTH:'):
+            return None
+        namelist = ',' + k.split(':', 1)[1].rstrip(',') + ','
+        if (',' + _g1_sentinel + ',') in namelist:
+            return 'fy1'
+        if (',' + _g2_sentinel + ',') in namelist:
+            return 'fy2'
+        return None
 
 
     # --------------------------------------------------------------------------- #
@@ -192,20 +216,9 @@ if __name__ == '__main__':
             [-0.112244,  0.204017,  0.672091,  1.150387,  1.477693,  1.691754,  1.840008],
         ]
     }
-    # 2026-06-15 : cache LM1 PRESSURE calcule + nettoye (convention lambda=0 sur 7/49 points divergents fy=10 MPa).
-    # Source : _calc_LM1_PRESSURE.log + clean_hf_cache.py
-    hf_2d_grid_fixed = {
-        'params': {'u1_min': -7.5, 'u1_max': 7.5, 'u2_min': -7.5, 'u2_max': 7.5, 'n_grid_hf': 7},
-        'Z': [
-            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
-            [0.48235589007494695, 0.5150719262299481, 0.5224848141182934, 0.5499576551994334, 0.5365503908620253, 0.5403730177012003, 0.5408180697542437],
-            [1.9668587119505792, 2.060879626936598, 2.1121977912800167, 2.148207148771319, 2.1761346263640013, 2.195908849060456, 2.206646867919521],
-            [3.0388189123119016, 3.403647983248815, 3.5539790585679754, 3.639208316889852, 3.698872802312434, 3.7424935932077483, 3.772763979522286],
-            [3.722302438017417, 4.419854832989512, 4.870312707219322, 5.053147205065127, 5.166335517041408, 5.240085059957903, 5.296282022486216],
-            [3.843804898946085, 5.153169995089891, 5.88947740970651, 6.384667730856855, 6.575482733651817, 6.714350673017646, 6.789912298940468],
-            [3.8899555570417315, 5.5339002052940565, 6.4250973199236086, 7.35875740437136, 7.815546619318452, 7.9858582129744295, 8.109580526935156],
-        ]
-    }
+    # 2026-06-17 : cache HF INVALIDE pour 2-fy (l'ancienne grille etait fc x fy).
+    # On le met a None -> _compute_hf_grid_with_progress recalcule la grille fy1 x fy2.
+    hf_2d_grid_fixed = None
 
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
@@ -404,25 +417,29 @@ if __name__ == '__main__':
         dist = ot.LogNormal(mu_ln, sigma_ln, 0.0)
         return dist
 
-    def dist_jointe():
+    def _dist_list():
+        """Liste des lois marginales selon params_names.
+        fy1/fy2/fy -> Normal(FY_MEAN, SIGMA) (acier). fc -> LogNormal (legacy)."""
         dist = []
-        if 'fc' in params_names:
-            dist.append(loi_fc(fcm, cov_fc)) 
-        if 'fy' in params_names:
-            dist.append(loi_fy(fym, cov_fy))
-        #AJOUTER suite pour plus de variable 'if 'load' in params_names' etc.
-        dist_X   = ot.JointDistribution(dist)
-        return dist_X
+        for p in params_names:
+            if p.startswith('fy'):
+                dist.append(loi_fy(FY_MEAN, None))
+            elif p.startswith('fc'):
+                dist.append(loi_fc(fcm, cov_fc))
+        return dist
+
+    def dist_jointe():
+        return ot.JointDistribution(_dist_list())
 
     # --- APPELS STRAINS ---
     # Counter pour identifier chaque appel SOCP (run_one_SOL + run_HF)
     _socp_call_counter = [0]  # liste pour eviter scope issues
 
-    def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, fc=None, fy=None):
+    def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p1=None, p2=None):
         """Copie les fichiers de sortie SOCP avec un prefix pour eviter qu ils soient ecrases.
 
         prefix_tag : ex `SOL_001` ou `HF_006`
-        u1/u2/fc/fy : coords pour incorporer dans le nom
+        u1/u2/p1/p2 : coords (p1=fy1, p2=fy2) pour incorporer dans le nom
 
         Fichiers sauves : PL_cin_out.msh, kine.dsmed, kine.dslog, kine.dsmetares, stat.dsmed.
         """
@@ -439,8 +456,8 @@ if __name__ == '__main__':
         coords_str = ""
         if u1 is not None and u2 is not None:
             coords_str = f"_u1{u1:+.3f}_u2{u2:+.3f}"
-        if fc is not None and fy is not None:
-            coords_str += f"_fc{fc:.1f}_fy{fy:.1f}"
+        if p1 is not None and p2 is not None:
+            coords_str += f"_fy1{p1:.1f}_fy2{p2:.1f}"
         save_dir = os.path.join(path, "SOCP_history")
         os.makedirs(save_dir, exist_ok=True)
         n_saved = 0
@@ -553,9 +570,9 @@ if __name__ == '__main__':
             if sensitivity:
                 kwargs["sensitivity_analysis"] = "true"
                 kwargs["sensitivity_regions"] = json.dumps([
-                    {"param": "COMPRESSIVE_STRENGTH", "solids": ["Import0"]},  # nom du solid IMPORTE (a confirmer si STRAINS ne reconnait pas)
-                    {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-                ]) #transformée en texte json (liste de caractères) pour être lisible par C++
+                    {"param": "YIELD_STRENGTH", "rebars": group1_names},   # dg/dfy1 (groupe 1)
+                    {"param": "YIELD_STRENGTH", "rebars": group2_names},   # dg/dfy2 (groupe 2)
+                ]) # 2-fy : 2 regions acier, pas de beton (fc fixe)
 
             # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
             kwargs["model_handle"] = model.GETHANDLEPTR()
@@ -571,24 +588,20 @@ if __name__ == '__main__':
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
             # 2026-06-16 : sauvegarde des fichiers SOCP avec prefix avant ecrasement par next iter
             _socp_call_counter[0] += 1
-            _fc_val = float(SOL[i].get("fc", None)) if "fc" in SOL[i] else None
-            _fy_val = float(SOL[i].get("fy", None)) if "fy" in SOL[i] else None
+            _fy1_val = float(SOL[i]["fy1"]) if "fy1" in SOL[i] else None
+            _fy2_val = float(SOL[i]["fy2"]) if "fy2" in SOL[i] else None
             _save_socp_outputs(path, AnalysisName,
                                prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
-                               fc=_fc_val, fy=_fy_val)
+                               p1=_fy1_val, p2=_fy2_val)
             for p in params_names:
                 SOL[i][f'dg_{p}'] = None
             if sensitivity and 'Sensitivity' in d['info']:
-                print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
+                print(f"les sensibilités calculées (cles) : {list(d['info']['Sensitivity'].keys())[:2]}...", flush=True)
                 for k, v in d['info']['Sensitivity'].items():
-                    #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
-                    #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                    #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad.
-                    if 'COMPRESSIVE_STRENGTH' in k:
-                        SOL[i]['dg_fc']= v
-                    if 'YIELD_STRENGTH' in k:
-                        SOL[i]['dg_fy']= v
-                    if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
+                    p = _sens_key_to_param(k)   # 'fy1' / 'fy2' / None
+                    if p is not None:
+                        SOL[i][f'dg_{p}'] = v
+                    if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
                         break
             _t_log(f"  read .dsmetares + sensibilites (g={SOL[i]['g']:.4f})", _t0)
             _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} END (g={SOL[i]['g']:.4f}) ===", _t_iter)
@@ -688,9 +701,9 @@ if __name__ == '__main__':
         if sensitivity:
             kwargs["sensitivity_analysis"] = "true"
             kwargs["sensitivity_regions"] = json.dumps([
-                {"param": "COMPRESSIVE_STRENGTH", "solids": ["Import0"]},  # nom du solid IMPORTE (a confirmer si STRAINS ne reconnait pas)
-                {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-            ]) #transformée en texte json (liste de caractères) pour être lisible par C++
+                {"param": "YIELD_STRENGTH", "rebars": group1_names},   # dg/dfy1 (groupe 1)
+                {"param": "YIELD_STRENGTH", "rebars": group2_names},   # dg/dfy2 (groupe 2)
+            ]) # 2-fy : 2 regions acier, pas de beton (fc fixe)
 
         # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
         kwargs["model_handle"] = model.GETHANDLEPTR()
@@ -709,20 +722,16 @@ if __name__ == '__main__':
         _save_socp_outputs(path, AnalysisName,
                            prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
                            u1=float(u[0]), u2=float(u[1]),
-                           fc=float(x_point[0]) if n_var >= 1 else None,
-                           fy=float(x_point[1]) if n_var >= 2 else None)
+                           p1=float(x_point[0]) if n_var >= 1 else None,
+                           p2=float(x_point[1]) if n_var >= 2 else None)
         grad_HF_X=[None]*n_var
         grad_HF_U=[None]*n_var
         if sensitivity and 'Sensitivity' in d['info']:
-            print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
+            print(f"les sensibilités calculées (cles) : {list(d['info']['Sensitivity'].keys())[:2]}...", flush=True)
             for k, v in d['info']['Sensitivity'].items():
-                #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
-                #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. #faudrait un truc avec des clés et des asocciations officielels entre fc et compressive strength....
-                if 'COMPRESSIVE_STRENGTH' in k:
-                    grad_HF_X[params_names.index('fc')] = v
-                if 'YIELD_STRENGTH' in k:
-                    grad_HF_X[params_names.index('fy')] = v
+                p = _sens_key_to_param(k)   # 'fy1' / 'fy2' / None
+                if p is not None:
+                    grad_HF_X[params_names.index(p)] = v
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
                     break
             J_Tinv = T_inv.gradient(u)
@@ -736,12 +745,8 @@ if __name__ == '__main__':
 
     # --- DOE ---
     def build_DOE():
-        dist = []
-        if 'fc' in params_names:
-            dist.append(loi_fc(fcm, cov_fc))
-        if 'fy' in params_names:
-            dist.append(loi_fy(fym, cov_fy))
-        dist_X   = ot.JointDistribution(dist) 
+        dist = _dist_list()
+        dist_X   = ot.JointDistribution(dist)
         T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n�cessaire puis l'applique ici
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
         dist_U = dist_X.getStandardDistribution()
@@ -831,12 +836,8 @@ if __name__ == '__main__':
             Med = F * L
 
             # --- Définition de la transformation isoprobabiliste ---
-            self.fym = fy_otparams[0]
-            dist = []
-            if 'fc' in params_names:
-                dist.append(loi_fc(*fc_otparams))
-            if 'fy' in params_names:
-                dist.append(loi_fy(*fy_otparams))
+            self.fym = FY_MEAN
+            dist = _dist_list()   # 2-fy : lois Normales acier (legacy analytique, non utilise)
             dist_X     = ot.JointDistribution(dist)
             self.T_inv = dist_X.getInverseIsoProbabilisticTransformation()
             self.T     = dist_X.getIsoProbabilisticTransformation()
