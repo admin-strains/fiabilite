@@ -10,10 +10,10 @@ treillis (groupe 2) au lieu du tablier (groupe 1).
 - Les **CADRES** (étriers = boucles fermées, 1ᵉʳ point = dernier point) sont **IGNORÉS** :
   ils restent en groupe 1 (tablier). 1854 cadres dans les boîtes non basculés.
 
-## Résultat
-- **257 barres** basculées (membrure inf longitudinale) : HA_33 (65), HA_35 (8),
+## Résultat (box mise à jour 2026-06-17 18:09, Y[-0.82, 1.16])
+- **224 barres** basculées (membrure inf longitudinale) : HA_33 (32), HA_35 (8),
   HA_40 (120), HA_50 (64) — gros diamètres.
-- **G1 tablier = 13825** | **G2 structure + membrure inf = 1521**.
+- **G1 tablier = 13858** | **G2 structure + membrure inf = 1488**.
 
 ## Fichiers
 - `classify_cas2.py` — script (relancer pour reproduire)
