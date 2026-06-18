@@ -198,7 +198,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = False    # 2026-06-18 : courbe rouge OFF -> on saute les 49 SOCP HF pour atteindre vite l'enrichissement EFF (etude des timings)
+    print_HF = True     # 2026-06-18 : courbe rouge ON pour le run complet tablier (49 SOCP HF) -> dump + validation u*
     print_DOE = True
     print_3D = False
 
@@ -354,6 +354,7 @@ if __name__ == '__main__':
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_beta_IS = [] # historique beta_IS (snapshot de list_beta_IS en fin de run_EFF, pour le dump restart)
+    _point_log_phase = ["?"]  # phase courante pour le log incremental par point (pose par chaque etape : HF/EFF/USTAR ; DOE logue a part)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -767,6 +768,7 @@ if __name__ == '__main__':
         if sensitivity and any(v is None for v in grad_HF_U):
             raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
         _t_log(f"  read .dsmetares + sensibilites (g_HF={g_HF:.4f})", _t0)
+        _append_point_log(_point_log_phase[0], u, x_point, g_HF)   # log incremental (phase HF/EFF/USTAR posee par l'appelant)
         _t_log(f"=== run_HF END (g_HF={g_HF:.4f}) ===", _t_hf)
         return g_HF, grad_HF_U, grad_HF_X
 
@@ -921,6 +923,28 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[RESTART DUMP] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
+    # --- LOG INCREMENTAL PAR POINT (2026-06-18) ---------------------------------
+    # Fichier JSONL enrichi AU FIL du calcul : 1 ligne par point SOCP calcule, avec
+    # (phase, u1, u2, fy1, fy2, g, lambda=pObj). phase in {DOE, HF, EFF, USTAR} -> permet
+    # de separer/filtrer DOE vs courbe rouge HF vs enrichissement EFF vs verif au point u*.
+    # Append-only (pas de reecriture -> robuste), tronque une seule fois en debut de run.
+    _POINT_LOG_FILE = os.path.join(_path_ds, "points_log_2fy.jsonl")
+    def _append_point_log(phase, u, x, g):
+        try:
+            _u = list(u) if u is not None else []
+            _x = list(x) if x is not None else []
+            rec = {"phase": phase,
+                   "u1":  float(_u[0]) if len(_u) > 0 else None,
+                   "u2":  float(_u[1]) if len(_u) > 1 else None,
+                   "fy1": float(_x[0]) if len(_x) > 0 else None,
+                   "fy2": float(_x[1]) if len(_x) > 1 else None,
+                   "g":      None if g is None else float(g),
+                   "lambda": None if g is None else float(g) + 1.0}  # lambda = pObj = g+1
+            with open(_POINT_LOG_FILE, "a") as _pf:
+                _pf.write(json.dumps(rec) + "\n")
+        except Exception as e:
+            print(f"[POINT LOG] append echoue ({type(e).__name__}: {e})", flush=True)
+
     def build_DOE():
         if not do_HF:
             _cached = _load_doe_cache()
@@ -964,6 +988,8 @@ if __name__ == '__main__':
                 for j in range (n_var):
                     all_grad[i][j]= grad_U_g[j]
                     SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
+            for i in range(n0):   # log incremental des points DOE (u-space U_doe, x-space X_doe, g)
+                _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
                 print("yt_doe = [")
                 for i in range(n0):
@@ -1674,6 +1700,7 @@ if __name__ == '__main__':
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
 
+        _point_log_phase[0] = "EFF"   # les run_HF d'enrichissement sont taggues EFF
         xt_eff = []
 
         def _form_is_iter(g_ot_i, label):
@@ -2085,6 +2112,7 @@ if __name__ == '__main__':
         cached = _load_hf_cache(n_grid_hf_local)
         if cached is not None:
             return cached
+        _point_log_phase[0] = "HF"   # les run_HF de la grille courbe rouge sont taggues HF
         n_total = len(grid_hf)
         Z_flat = []
         _t_start = _time_local.perf_counter()
@@ -2318,6 +2346,7 @@ if __name__ == '__main__':
         plt.show(block=False)
 
     def print_results(best_result, g_ot):
+        _point_log_phase[0] = "USTAR"   # les run_HF de verif au point de conception sont taggues USTAR
         u_star = best_result.getStandardSpaceDesignPoint()
         n_iter = best_result.getOptimizationResult().getIterationNumber()
         dist_X = dist_jointe()
@@ -2674,6 +2703,12 @@ if __name__ == '__main__':
         print(f"[DOE WORKER] termine -> {os.environ['_DOE_OUT']}", flush=True)
         sys.exit(0)
     # =============================================================================
+
+    try:   # reset du log incremental par point (1 seule fois, process principal)
+        open(_POINT_LOG_FILE, "w").close()
+        print(f"[POINT LOG] reset -> {_POINT_LOG_FILE} (DOE/HF/EFF/USTAR appendus au fil du calcul)", flush=True)
+    except Exception as _e:
+        print(f"[POINT LOG] reset echoue ({type(_e).__name__}: {_e})", flush=True)
 
     _t_log("##### PHASE: init_g_ot (DOE + GEPCK fit) START #####")
     _t0_phase = time.perf_counter()
