@@ -478,7 +478,11 @@ if __name__ == '__main__':
             coords_str = f"_u1{u1:+.3f}_u2{u2:+.3f}"
         if p1 is not None and p2 is not None:
             coords_str += f"_fy1{p1:.1f}_fy2{p2:.1f}"
-        save_dir = os.path.join(path, "SOCP_history")
+        # En mode worker DOE : SOCP_history TOUJOURS a la racine du projet principal (pas dans
+        # les copies _doe_workers) -> un seul SOCP_history qui contient tout. _DOE_MAIN_DS absent
+        # en run normal -> save_dir = path (comportement d'origine).
+        _socp_root = os.environ.get("_DOE_MAIN_DS") or path
+        save_dir = os.path.join(_socp_root, "SOCP_history")
         os.makedirs(save_dir, exist_ok=True)
         n_saved = 0
         total_size = 0
@@ -803,12 +807,15 @@ if __name__ == '__main__':
                 os.remove(out_file)
             env = dict(os.environ,
                        _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
+                       _DOE_MAIN_DS=base_ds,                       # SOCP_history -> racine du projet principal
                        _FIAB_LOG_REDIRECTED="1",
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_doe_worker.log", "w")
             print(f"    -> worker {w}: points {idxs}", flush=True)
+            # cwd = la copie .ds du worker : isole le fichier temporaire $$$.dscad que STRAINS
+            # (CetCAD.RELOAD_MODEL) ecrit dans le repertoire courant -> sinon collision entre workers.
             p = _sp.Popen([sys.executable, r"C:\workspace\fiabilite\launcher_moulin_blanc_2fy.py"],
-                          env=env, stdout=wlog, stderr=_sp.STDOUT)
+                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         for p, out_file, wlog, w, idxs in procs:
             rc = p.wait(); wlog.close()
