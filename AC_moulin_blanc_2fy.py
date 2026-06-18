@@ -2,6 +2,7 @@
 CODE FIABILITE - VERSION AVEC DEFINITION DE FONCTIONS
 """
 import os
+import sys
 import json
 import shutil
 import re
@@ -74,7 +75,8 @@ if __name__ == '__main__':
     # 2026-06-17 : fiabilite a 2 variables fy (1 par groupe d'acier), fc fixe.
     # Cas 1 (membrure inf dans tablier) : Calcul_fiabilite_13k_2fy_membrure_inf_tablier
     # Cas 2 (membrure inf dans diagonal) : Calcul_fiabilite_13k_2fy_membrure_inf_diagonal
-    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_diagonal"   # cas : membrure inf DANS le treillis (pas le tablier)
+    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_tablier"   # cas tablier (membrure inf groupe 1)
+    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname   # override sur la copie .ds en mode worker DOE (ligne ci-dessus = source pour le regex du launcher)
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
@@ -94,6 +96,10 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale
 
     n0 = 5                      # nombre de points du plan d'experience initial (DOE)
+    # 2026-06-18 : nb de calculs DOE lances EN PARALLELE (multiprocessing, copies .ds isolees).
+    #   1 = sequentiel (comportement d'origine). >1 = N workers concurrents, MKL epingle a 32//N
+    #   threads/worker. RAM ~22 Go/worker (machine 256 Go). Avec n0=5 : 3 -> 2 vagues, 5 -> 1 vague.
+    n_workers_DOE = 3           # <-- VARIABLE UTILISATEUR : nb de SOCP DOE en parallele
     # 2026-06-17 : 2 variables fy (1 par groupe d'acier), fc fixe (dans le dsCad).
     params_names = ['fy1','fy2']
     n_var = len(params_names)
@@ -177,7 +183,7 @@ if __name__ == '__main__':
     EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' (Semia flexion: nouveau, OR au lieu de AND)
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
-    n_max_EFF = 200     # 2026-06-12 : 30 -> 200 (NLopt GN_DIRECT a manque pic EFF=0.03 sur grille 300x300 avec 30 iter)
+    n_max_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
     print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
 
     # --------------------------------------------------------------------------- #
@@ -192,7 +198,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = False    # 2026-06-17 : pas de courbe rouge pour ce 1er run de validation 2-fy (pas de 49 SOCP HF)
+    print_HF = True     # 2026-06-17 : courbe rouge ON -> grille HF 7x7=49 SOCP (sauvee dans hf_grid_cache.json, runs suivants gratuits)
     print_DOE = True
     print_3D = False
 
@@ -759,6 +765,66 @@ if __name__ == '__main__':
         _t_log(f"=== run_HF END (g_HF={g_HF:.4f}) ===", _t_hf)
         return g_HF, grad_HF_U, grad_HF_X
 
+    # --- DOE parallele (multiprocessing) ---
+    def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
+        """Parallelise les SOCP du DOE (independants) via multiprocessing.
+        Chaque worker = le MEME AC relance (launcher) en mode _DOE_WORKER sur une COPIE
+        isolee du .ds (dsCad.txt + dsLoad.txt copies ; STP partage en lecture via chemin
+        absolu dans le dsCad). MKL epingle a 32//n_workers threads/worker (anti sur-souscription).
+        Reutilise run_one_SOL tel quel cote worker -> zero duplication de logique STRAINS."""
+        import subprocess as _sp
+        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
+        base_ds = storage + base_modelname + ".ds"
+        npts = len(SOL)
+        n_workers = max(1, min(n_workers, npts))
+        threads_per = max(1, 32 // n_workers)
+        batches = [[] for _ in range(n_workers)]
+        for i in range(npts):
+            batches[i % n_workers].append(i)   # round-robin
+        _t_log(f"  [DOE PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per} threads/worker)")
+        procs = []
+        for w, idxs in enumerate(batches):
+            if not idxs:
+                continue
+            # Workers ranges DANS le .ds du projet (sous-dossier _doe_workers), pas disperses
+            # dans Moulin_Blanc. run_one_SOL fait path = Moulin_Blanc\<modelname>.ds, donc le
+            # modelname porte le sous-chemin relatif -> wds = <base>.ds\_doe_workers\doewN.ds
+            wname = base_modelname + ".ds\\_doe_workers\\doew%d" % w
+            wds = storage + wname + ".ds"
+            os.makedirs(wds, exist_ok=True)
+            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
+            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
+            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
+            task_file = wds + "\\_doe_task.json"
+            out_file = wds + "\\_doe_out.json"
+            with open(task_file, "w") as _f:
+                json.dump(task, _f)
+            if os.path.exists(out_file):
+                os.remove(out_file)
+            env = dict(os.environ,
+                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
+                       _FIAB_LOG_REDIRECTED="1",
+                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
+            wlog = open(wds + "\\_doe_worker.log", "w")
+            print(f"    -> worker {w}: points {idxs}", flush=True)
+            p = _sp.Popen([sys.executable, r"C:\workspace\fiabilite\launcher_moulin_blanc_2fy.py"],
+                          env=env, stdout=wlog, stderr=_sp.STDOUT)
+            procs.append((p, out_file, wlog, w, idxs))
+        for p, out_file, wlog, w, idxs in procs:
+            rc = p.wait(); wlog.close()
+            _t_log(f"    <- worker {w} fini (rc={rc})")
+        for p, out_file, wlog, w, idxs in procs:
+            if not os.path.exists(out_file):
+                raise RuntimeError(f"[DOE PARALLELE] worker {w} sans sortie {out_file} (voir _doe_worker.log)")
+            res = json.load(open(out_file))
+            for i_str, d in res.items():
+                i = int(i_str)
+                SOL[i]['g'] = d['g']
+                for q in params_names:
+                    SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
+            print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
+        return SOL
+
     # --- DOE ---
     def build_DOE():
         dist = _dist_list()
@@ -785,7 +851,10 @@ if __name__ == '__main__':
             for i in range(n0):
                 for j in range(n_var):
                     SOL[i][params_names[j]] = X_doe[i][j]
-            SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
+            if n_workers_DOE and n_workers_DOE > 1:
+                SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
+            else:
+                SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
             yt = np.array([SOL[i]['g'] for i in range(n0)]).reshape(-1, 1)
             all_grad = np.zeros((n0, n_var))
             for i in range (n0):
@@ -1496,27 +1565,39 @@ if __name__ == '__main__':
                 solver_i.setCheckStatus(False)
                 solver_i.setMaximumConstraintError(tol_FORM)
                 form_i = ot.FORM(solver_i, ev_i)
+                _t_form = time.perf_counter()
                 form_i.run()
+                _dt_form = time.perf_counter() - _t_form
                 r_i = form_i.getResult()
             except Exception as e:
                 print(f"  [{label}] FORM echoue ({type(e).__name__})", flush=True)
                 return None
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
+            _t_is = time.perf_counter()
             res_IS  = run_IS([r_i], ev_i)
+            _dt_is = time.perf_counter() - _t_is
             pf_IS   = res_IS.getProbabilityEstimate()
             beta_IS = float(-ot.Normal().computeQuantile(pf_IS)[0])
             cov_v   = res_IS.getCoefficientOfVariation()
             print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
                   f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
+            print(f"  [TIMING FORM/IS] {label} : FORM={_dt_form:.2f}s  IS={_dt_is:.2f}s  (total={_dt_form+_dt_is:.2f}s)", flush=True)
             return beta_IS
 
-        def _three_form_is(g_ot_i, sigma_func_i, label):
+        def _three_form_is(g_ot_i, sigma_func_i, label, b_mid_precalc=None):
             """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
-            Retourne le ratio si calculable, None sinon."""
+            Retourne le ratio si calculable, None sinon.
+            2026-06-18 : b_mid_precalc reutilise le mu deja calcule (critere BS) pour eviter
+            un FORM+IS redondant sur g (le FORM est deterministe donc identique ; on economise
+            ~1/4 du bloc FORM/IS). Si None -> calcul interne (comportement d'origine)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
-            b_mid = _form_is_iter(g_ot_i, f"{label} μ")
+            if b_mid_precalc is not None:
+                b_mid = b_mid_precalc
+                print(f"  [{label} μ] reutilise mu conv (pas de recalcul FORM/IS redondant)", flush=True)
+            else:
+                b_mid = _form_is_iter(g_ot_i, f"{label} μ")
             b_sup = _form_is_iter(g_sup_i, f"{label} sup")
             b_inf = _form_is_iter(g_inf_i, f"{label} inf")
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
@@ -1537,7 +1618,9 @@ if __name__ == '__main__':
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
         algo_opti.setStartingPoint([0.0] * n_var)
         algo_opti.setMaximumCallsNumber(n_max_EFF)
+        _t0 = time.perf_counter()
         algo_opti.run()
+        _t_log(f"  [recherche EFF initiale NLopt GN_DIRECT n_max={n_max_EFF}]", _t0)
         u_opt = algo_opti.getResult().getOptimalPoint()
         _sigG = sigma_func(u_opt)
         _muG  = g_ot(ot.Point(u_opt))[0]
@@ -1589,7 +1672,9 @@ if __name__ == '__main__':
             _degree_avant = max_degree
             update_degree(len(xt))
             degree_upgraded = (max_degree != _degree_avant)
+            _t0 = time.perf_counter()
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
+            _t_log(f"  [refit GEPCK surrogate N={len(xt)}]", _t0)
 
             # --- FORM+IS sur le surrogate mis à jour (BB uniquement) ---
             if EFF_criteria == 'BB':
@@ -1634,7 +1719,7 @@ if __name__ == '__main__':
             # --- Critere at_least_one : BB, BS ou both, le premier atteint gagne ---
             if EFF_criteria == 'at_least_one':
                 iter_count += 1
-                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}")
+                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}", b_mid_precalc=_b_mid)
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1662,7 +1747,9 @@ if __name__ == '__main__':
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
             if print_EFF_progres or degree_upgraded or _about_to_upgrade:
+                _t0 = time.perf_counter()
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+                _t_log(f"  [PNG print_planche_EFF N={len(xt)}]", _t0)
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
@@ -1672,7 +1759,9 @@ if __name__ == '__main__':
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
             algo_opti.setStartingPoint([0.0] * n_var)
             algo_opti.setMaximumCallsNumber(n_max_EFF)
+            _t0 = time.perf_counter()
             algo_opti.run()
+            _t_log(f"  [recherche EFF NLopt GN_DIRECT n_max={n_max_EFF}]", _t0)
             u_opt = algo_opti.getResult().getOptimalPoint()
 
         _sigG2 = sigma_func(u_opt)
@@ -2431,6 +2520,25 @@ if __name__ == '__main__':
             print(f"  grad(sp)  = [{grad_sp[0]:.6f}, {grad_sp[1]:.6f}]", flush=True)
             print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
         sys.exit(0)
+
+    # ===================== MODE WORKER DOE (multiprocessing) =====================
+    # Lance par run_DOE_parallel : ne calcule QUE ses points DOE sur sa copie .ds isolee
+    # (modelname pointe deja sur la copie via _DOE_WORKER_MODELNAME), ecrit g + sensibilites
+    # dans le JSON de sortie, puis sort. Reutilise run_one_SOL tel quel.
+    if os.environ.get("_DOE_WORKER"):
+        _wtask = json.load(open(os.environ["_DOE_WORKER"]))
+        _wSOL = [{p: float(pt[p]) for p in params_names} for pt in _wtask["points"]]
+        print(f"[DOE WORKER] modelname={modelname} | {len(_wSOL)} points a calculer", flush=True)
+        _wSOL = run_one_SOL(modelname, _wSOL, params_names, sensitivity=True, with_sens_dict=None)
+        _wout = {}
+        for _k, _pt in enumerate(_wtask["points"]):
+            _wout[str(_pt["idx"])] = dict({"g": _wSOL[_k]["g"]},
+                                          **{f"dg_{q}": _wSOL[_k].get(f"dg_{q}") for q in params_names})
+        with open(os.environ["_DOE_OUT"], "w") as _f:
+            json.dump(_wout, _f)
+        print(f"[DOE WORKER] termine -> {os.environ['_DOE_OUT']}", flush=True)
+        sys.exit(0)
+    # =============================================================================
 
     _t_log("##### PHASE: init_g_ot (DOE + GEPCK fit) START #####")
     _t0_phase = time.perf_counter()
