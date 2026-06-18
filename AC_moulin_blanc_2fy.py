@@ -1865,6 +1865,16 @@ if __name__ == '__main__':
         - Autres modeles : batch via ot.Sample pour mu, loop fallback pour sigma
         Retourne (mu_1D, sigma_1D) en np.array de shape (len(grid),).
         """
+        # 2026-06-18 : chemin rapide GEPCK robuste — on recupere le modele fm via le bound method
+        # sigma_func (= gepck_impl._exec_sigma), car g_ot.getImplementation() n'expose PAS .fm
+        # (OpenTURNS enveloppe la PythonFunction). Variance batchee en 1 appel au lieu de 90000
+        # appels point-par-point -> PNG print_planche_EFF ~80s -> ~1s.
+        _fm = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
+        if _fm is not None:
+            mu_arr, sig2_arr = predict_gepck(_fm, grid, return_var=True)
+            mu = mu_arr[:, 0]
+            sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
+            return mu, sigma
         impl = g_ot.getImplementation()
         impl_name = type(impl).__name__
         if hasattr(impl, 'fm') and 'GEPCK' in impl_name:
