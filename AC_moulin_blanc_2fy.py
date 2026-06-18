@@ -900,6 +900,12 @@ if __name__ == '__main__':
             st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
             st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
             st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
+            # (b-bis) courbe rouge HF (hf_2d_grid_fixed) : indispensable pour redessiner
+            # print_planche_EFF + print_visu sans recalculer la grille SOCP. Sinon elle vit
+            # uniquement dans hf_grid_cache.json (sidecar separe). On la copie ici pour avoir
+            # un dump AUTO-SUFFISANT (params bornes u1/u2 + n_grid_hf + Z aplati).
+            try:    st["hf_2d_grid"] = hf_2d_grid_fixed
+            except Exception: st["hf_2d_grid"] = None
             # (c) resultats FORM (u*, beta) par mode + point de depart + IS
             st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
             st["best_result"] = _u_beta(best_result) if best_result is not None else None
