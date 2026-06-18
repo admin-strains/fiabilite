@@ -1263,6 +1263,25 @@ if __name__ == '__main__':
             sigma = self._sigma_func(u_pt)
             return [mu + self._sign * 2.0 * sigma]
 
+        def _exec_sample(self, U):
+            # 2026-06-18 : version BATCHEE -> l'IS des bornes sup/inf n'est plus evaluee
+            # point-par-point par OpenTURNS (90000+ appels _exec). mu+var en 1 appel
+            # predict_gepck via sigma_func.__self__.fm (meme technique que _batch_mu_sigma).
+            # Valeurs identiques a _exec, juste batchees. IS sup/inf ~17s -> ~3s.
+            _fm = getattr(getattr(self._sigma_func, '__self__', None), 'fm', None)
+            if _fm is not None:
+                U_np = np.array(U)
+                mu_arr, var_arr = predict_gepck(_fm, U_np, return_var=True)
+                mu    = mu_arr[:, 0]
+                sigma = np.sqrt(np.maximum(0.0, var_arr[:, 0]))
+                return (mu + self._sign * 2.0 * sigma).reshape(-1, 1).tolist()
+            # fallback generique point-par-point (modeles non-GEPCK)
+            out = []
+            for u in U:
+                u_pt  = ot.Point(list(u))
+                out.append([self._g_ot(u_pt)[0] + self._sign * 2.0 * self._sigma_func(u_pt)])
+            return out
+
     # Usage :
     #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
     #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
