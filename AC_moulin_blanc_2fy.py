@@ -198,7 +198,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = True     # 2026-06-17 : courbe rouge ON -> grille HF 7x7=49 SOCP (sauvee dans hf_grid_cache.json, runs suivants gratuits)
+    print_HF = False    # 2026-06-18 : courbe rouge OFF -> on saute les 49 SOCP HF pour atteindre vite l'enrichissement EFF (etude des timings)
     print_DOE = True
     print_3D = False
 
@@ -833,7 +833,40 @@ if __name__ == '__main__':
         return SOL
 
     # --- DOE ---
+    # --- Cache DOE (sidecar JSON, comme le cache HF) : lu s'il existe, sinon calcule + sauve ---
+    _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
+    def _doe_cache_sig():
+        return {"n0": n0, "params": list(params_names), "n_var": n_var,
+                "g1": len(group1_names), "g2": len(group2_names), "modelname": modelname}
+    def _load_doe_cache():
+        if not os.path.exists(_DOE_CACHE_FILE):
+            print(f"[DOE CACHE] aucun cache ({_DOE_CACHE_FILE}) -> calcul DOE", flush=True)
+            return None
+        try:
+            d = json.load(open(_DOE_CACHE_FILE))
+            if d.get("signature") == _doe_cache_sig():
+                print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (signature OK -> 0 SOCP DOE)", flush=True)
+                return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
+            print("[DOE CACHE] signature differente du cache existant -> recalcul DOE", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
+        return None
+    def _save_doe_cache(xt, yt, all_grad):
+        try:
+            json.dump({"signature": _doe_cache_sig(),
+                       "xt": np.asarray(xt).tolist(),
+                       "yt": np.asarray(yt).tolist(),
+                       "all_grad": np.asarray(all_grad).tolist()},
+                      open(_DOE_CACHE_FILE, "w"), indent=1)
+            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE} (reutilisable au prochain run)", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
     def build_DOE():
+        if not do_HF:
+            _cached = _load_doe_cache()
+            if _cached is not None:
+                return _cached
         dist = _dist_list()
         dist_X   = ot.JointDistribution(dist)
         T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n�cessaire puis l'applique ici
@@ -877,6 +910,7 @@ if __name__ == '__main__':
                 for i in range(n0):
                     print(f"    {yt[i][0]:.16f},")
                 print("]", flush=True)
+            _save_doe_cache(xt, yt, all_grad)
             return xt, yt, all_grad
         return xt
 
