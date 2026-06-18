@@ -1432,6 +1432,7 @@ if __name__ == '__main__':
         all_results  = []   # FORMResult correspondant
         all_sp       = []   # point de départ correspondant
         n_total = len(starting_points)
+        _t_fam_start = time.perf_counter()
 
         for k, sp in enumerate(starting_points):
             print(f"  FORM {k+1}/{n_total}...", flush=True)
@@ -1442,7 +1443,9 @@ if __name__ == '__main__':
                 solver.setCheckStatus(False)
                 solver.setMaximumConstraintError(tol_FORM)
                 form_i = ot.FORM(solver, event)
+                _t_fm = time.perf_counter()
                 form_i.run()
+                _dt_fm = time.perf_counter() - _t_fm
                 r_i    = form_i.getResult()
                 u_star = np.array(r_i.getStandardSpaceDesignPoint())
                 all_u_star.append(u_star)
@@ -1451,10 +1454,12 @@ if __name__ == '__main__':
                 print(f"  [sp={[round(v,3) for v in np.array(sp)]}, "
                     f"u*={[round(v,3) for v in u_star]}, "
                     f"beta={r_i.getHasoferReliabilityIndex():.4f}]", flush=True)
+                print(f"  [TIMING FORM_all_modes] start {k+1}/{n_total} : FORM={_dt_fm:.3f}s", flush=True)
             except Exception as e:
                 print(f"  [sp={[round(v,3) for v in np.array(sp)]}, "
                     f"ECHEC ({type(e).__name__})]", flush=True)
 
+        _t_log(f"  [TIMING FORM_all_modes] TOTAL {n_total} starts (sequentiel)", _t_fam_start)
         if not all_u_star:
             return [], []
 
