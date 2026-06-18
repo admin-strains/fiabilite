@@ -353,6 +353,7 @@ if __name__ == '__main__':
     _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
+    _eff_history_beta_IS = [] # historique beta_IS (snapshot de list_beta_IS en fin de run_EFF, pour le dump restart)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -861,6 +862,58 @@ if __name__ == '__main__':
             print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE} (reutilisable au prochain run)", flush=True)
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    # --- DUMP RESTART COMPLET (2026-06-18) -----------------------------------
+    # Ecrit TOUT ce qu'il faut pour ULTERIEUREMENT (partie a coder ensuite) :
+    #   (a) relire le set d'entrainement ENRICHI complet (DOE + points EFF) et refit le surrogate
+    #       sans recalculer de SOCP,
+    #   (b) regenerer TOUS les graphes pour TOUS les points -- en particulier les 2 derniers :
+    #       le graphe tolerance/convergence (print_EFF_graphs, qui consomme les historiques EFF/BB/BS/theta)
+    #       et le recap final (print_visu),
+    #   (c) reprendre l'enrichissement et rajouter des points (xt/yt/all_grad + u* de depart).
+    # Pour l'instant : DUMP UNIQUEMENT. La relecture/reenrichissement sera codee dans un 2e temps.
+    _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state_2fy.json")
+    def _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS):
+        def _u_beta(r):
+            try:
+                return {"u_star": [float(v) for v in np.array(r.getStandardSpaceDesignPoint())],
+                        "beta": float(r.getHasoferReliabilityIndex())}
+            except Exception:
+                return None
+        st = {}
+        try:
+            st["signature"] = _doe_cache_sig()
+            st["modele"]    = modele
+            st["timestamp"] = timestamp
+            try:    st["max_degree"] = int(max_degree)
+            except Exception: st["max_degree"] = None
+            # (a) set d'entrainement enrichi complet (DOE + EFF)
+            st["xt"]       = np.asarray(xt).tolist()       if xt       is not None else None
+            st["yt"]       = np.asarray(yt).tolist()       if yt       is not None else None
+            st["all_grad"] = np.asarray(all_grad).tolist() if all_grad is not None else None
+            st["xt_eff"]   = [np.asarray(p).tolist() for p in xt_eff] if xt_eff else []
+            st["n_doe"]    = n0
+            st["n_total"]  = int(len(xt)) if xt is not None else 0
+            # (b) historiques de convergence (pour le graphe tolerance)
+            st["hist_EFF"]     = [float(v) for v in _eff_history_EFF]
+            st["hist_BB"]      = [None if v is None else float(v) for v in _eff_history_BB]
+            st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
+            st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
+            st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
+            # (c) resultats FORM (u*, beta) par mode + point de depart + IS
+            st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
+            st["best_result"] = _u_beta(best_result) if best_result is not None else None
+            st["modes"]       = [_u_beta(m) for m in modes] if modes else []
+            try:
+                st["IS"] = {"Pf": float(result_IS.getProbabilityEstimate())} if result_IS is not None else None
+            except Exception:
+                st["IS"] = None
+            json.dump(st, open(_RESTART_STATE_FILE, "w"), indent=1)
+            print(f"[RESTART DUMP] etat complet sauve dans {_RESTART_STATE_FILE} "
+                  f"(n_total={st['n_total']}, n_eff={len(st['xt_eff'])}, "
+                  f"hist_EFF={len(st['hist_EFF'])}, modes={len(st['modes'])})", flush=True)
+        except Exception as e:
+            print(f"[RESTART DUMP] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
     def build_DOE():
         if not do_HF:
@@ -1707,7 +1760,7 @@ if __name__ == '__main__':
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
         list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS
+        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_beta_IS
         _eff_history_BB = []
         _eff_history_BS = []
         list_ratio_BB = _eff_history_BB   # alias — même objet
@@ -1870,6 +1923,7 @@ if __name__ == '__main__':
             print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
         if list_ratio_BS:
             print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
+        _eff_history_beta_IS = list(list_beta_IS)   # snapshot pour le dump restart (list_beta_IS est local)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
@@ -2682,6 +2736,7 @@ if __name__ == '__main__':
     print_results(best_result, g_ot)
     _t_log("##### PHASE: print_results END #####", _t0_phase)
 
+    result_IS = None
     if do_IS and modes:
         _t_log("##### PHASE: run_IS START #####")
         _t0_phase = time.perf_counter()
@@ -2693,4 +2748,10 @@ if __name__ == '__main__':
     _t0_phase = time.perf_counter()
     print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
     _t_log("##### PHASE: print_visu END #####", _t0_phase)
+
+    # --- DUMP RESTART : tout sauver pour reprise/regeneration ulterieure (relecture a coder ensuite) ---
+    _t_log("##### PHASE: _save_restart_state (dump complet) START #####")
+    _t0_phase = time.perf_counter()
+    _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS)
+    _t_log("##### PHASE: _save_restart_state END #####", _t0_phase)
     _t_log("########## TOTAL CALC TIME ##########")
