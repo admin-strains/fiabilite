@@ -376,6 +376,7 @@ if __name__ == '__main__':
     _enrich_round     = 0     # round courant (0 = run initial, k = k-ieme re-enrichissement)
     _round_sizes_prev = []    # round_sizes charges du dump (vide au run initial)
     _restart_xt_eff   = []    # xt_eff charge du dump (pour reseeder les triangles EFF du plot en reprise)
+    _fosm_u0_cache    = [None] # cache du run_HF([0,0]) (FOSM) : calcule 1x, reutilise pour tous les modes (evite 1 SOCP redondant/run)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -2423,7 +2424,14 @@ if __name__ == '__main__':
             for i, p in enumerate(params_names):
                 print(f"dg/du_{p} en u* (HF@u*GEK) = {grad_HF_U_star[i]:.6f}", flush=True)
             u0             = ot.Point([0.0] * n_var)
-            g0_HF, grad_HF_U0, _ = run_HF(u0)
+            # run_HF([0,0]) est INDEPENDANT du mode -> on le calcule 1 seule fois et on le
+            # reutilise pour le FOSM de tous les modes (evite 1 SOCP complet redondant/run).
+            if _fosm_u0_cache[0] is None:
+                g0_HF, grad_HF_U0, _ = run_HF(u0)
+                _fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
+            else:
+                g0_HF, grad_HF_U0 = _fosm_u0_cache[0]
+                print("  [FOSM] run_HF([0,0]) reutilise du cache (pas de SOCP redondant)", flush=True)
             u_FOSM         = grad_HF_U0 * (-g0_HF / grad_HF_U0.normSquare())
             print(f"u* FOSM (HF) = {[round(v, 4) for v in u_FOSM]}", flush=True)
             print(f"Erreur FOSM  = {(u_FOSM - u_star).norm() / u_star.norm():.4f}", flush=True)
