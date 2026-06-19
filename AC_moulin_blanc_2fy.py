@@ -180,7 +180,12 @@ if __name__ == '__main__':
     tol_EFF = 1e-3                                            # 2026-06-17 : remis a 1e-3 (valeur flexion d'origine ; avait ete teste a 1e-5)
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01         # critere BS : |beta_IS - beta_IS_prec| / beta_IS (Semia flexion: 0.005 -> 0.01)
-    EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' (Semia flexion: nouveau, OR au lieu de AND)
+    EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' | 'n_points'
+                                  #   'n_points' = on s'arrete apres un NOMBRE FIXE de points EFF (n_eff_target)
+                                  #   au lieu d'un critere de convergence (utile si le bootstrap ne converge pas).
+    n_eff_target = 10             # nb de points EFF a ajouter quand EFF_criteria=='n_points' (run initial)
+    EFF_criteria = os.environ.get("_EFF_CRITERIA") or EFF_criteria          # override env optionnel
+    if os.environ.get("_N_EFF_TARGET"): n_eff_target = int(os.environ["_N_EFF_TARGET"])
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
     n_max_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
@@ -1818,9 +1823,11 @@ if __name__ == '__main__':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
         elif EFF_criteria == 'at_least_one':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
+        elif EFF_criteria == 'n_points':   # critere = nombre fixe de points EFF (pas de convergence)
+            _cond = lambda: (len(xt_eff) - _n_eff_start) < n_eff_target
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
-        if restart_enrich_only:   # reprise : on force EXACTEMENT n_enrich_extra nouveaux points
+        if restart_enrich_only:   # reprise : on force EXACTEMENT n_enrich_extra nouveaux points (prioritaire)
             _cond = lambda: (len(xt_eff) - _n_eff_start) < n_enrich_extra
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
