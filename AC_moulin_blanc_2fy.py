@@ -75,7 +75,7 @@ if __name__ == '__main__':
     # 2026-06-17 : fiabilite a 2 variables fy (1 par groupe d'acier), fc fixe.
     # Cas 1 (membrure inf dans tablier) : Calcul_fiabilite_13k_2fy_membrure_inf_tablier
     # Cas 2 (membrure inf dans diagonal) : Calcul_fiabilite_13k_2fy_membrure_inf_diagonal
-    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_tablier"   # cas tablier (membrure inf groupe 1)
+    modelname = "Calcul_fiabilite_13k_2fy_membrure_inf_diagonal"   # cas diagonal (membrure inf groupe 2 / treillis)
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname   # override sur la copie .ds en mode worker DOE (ligne ci-dessus = source pour le regex du launcher)
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
@@ -1948,6 +1948,14 @@ if __name__ == '__main__':
                 _t0 = time.perf_counter()
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
                 _t_log(f"  [PNG print_planche_EFF N={len(xt)}]", _t0)
+
+            # --- DUMP INCREMENTAL (kill-safe) : reecrit restart_state APRES CHAQUE point EFF ---
+            # Un arret en cours laisse un dump rechargeable jusqu'au dernier point fait.
+            # best_result/modes/IS=None mid-run (calcules seulement a la fin via FORM+IS) -> sans
+            # importance : la reprise n'a besoin que de xt/yt/all_grad+degre+hf_grid+histos ; les
+            # modes se recalculent par FORM. Cout ~ms (petit JSON).
+            _eff_history_beta_IS = list(list_beta_IS)
+            _save_restart_state(xt, yt, all_grad, xt_eff, None, None, [], None)
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
