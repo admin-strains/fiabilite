@@ -1845,7 +1845,8 @@ if __name__ == '__main__':
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         # --- Ratio BB initial (avant tout enrichissement, pour criteres qui tracent BB) ---
-        if EFF_criteria in ('BB', 'both', 'at_least_one'):
+        # 'n_points' inclus : on calcule BB/BS pour les GRAPHES de tolerance meme si l'arret = compte.
+        if EFF_criteria in ('BB', 'both', 'at_least_one', 'n_points'):
             _ratio_init_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
             list_ratio_BB.append(_ratio_init_bb)
             if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
@@ -1911,8 +1912,10 @@ if __name__ == '__main__':
                     count_valid_both = 0
                 list_ratio_BB.append(_ratio_bb)
                 list_ratio_BS.append(_ratio_bs)
-            # --- Critere at_least_one : BB, BS ou both, le premier atteint gagne ---
-            if EFF_criteria == 'at_least_one':
+            # --- Critere at_least_one (et n_points : meme calcul BB/BS pour les GRAPHES) ---
+            # En 'n_points' on calcule tout comme at_least_one (BB/BS/compteurs remplis -> graphe
+            # tolerance complet) mais l'ARRET reste le compte (cond override len(xt_eff)).
+            if EFF_criteria in ('at_least_one', 'n_points'):
                 iter_count += 1
                 _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}", b_mid_precalc=_b_mid)
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
