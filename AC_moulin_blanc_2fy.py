@@ -206,6 +206,18 @@ if __name__ == '__main__':
     print_ana = False   # PAS d'analytique pour Moulin Blanc (flexion_claude = uniquement flexion pure)
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
+    # --- MODE REPRISE / RE-ENRICHISSEMENT (2026-06-19) ---
+    # True = ne fait QUE re-enrichir : lit restart_state_2fy.json (xt/yt/all_grad + degre + histos
+    # + courbe rouge), refit le surrogate, ajoute EXACTEMENT n_enrich_extra nouveaux points EFF,
+    # puis re-ecrit le MEME dump (round incremente) + append au point-log. Chainable plusieurs fois.
+    # Skip DOE et courbe rouge (reutilises du dump) -> pas de recalcul SOCP inutile.
+    restart_enrich_only = False
+    n_enrich_extra      = 2       # nombre de NOUVEAUX points EFF a ajouter par run de reprise
+    # override par env (lancer une reprise sans editer le fichier) : _RESTART_ENRICH=1 _N_ENRICH_EXTRA=2
+    restart_enrich_only = (os.environ.get("_RESTART_ENRICH") == "1") or restart_enrich_only
+    if os.environ.get("_N_ENRICH_EXTRA"):
+        n_enrich_extra = int(os.environ["_N_ENRICH_EXTRA"])
+
 
     
 
@@ -355,6 +367,10 @@ if __name__ == '__main__':
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_beta_IS = [] # historique beta_IS (snapshot de list_beta_IS en fin de run_EFF, pour le dump restart)
     _point_log_phase = ["?"]  # phase courante pour le log incremental par point (pose par chaque etape : HF/EFF/USTAR ; DOE logue a part)
+    _point_log_round = [0]    # round de re-enrichissement (0 = run initial), tague chaque ligne du point-log
+    _enrich_round     = 0     # round courant (0 = run initial, k = k-ieme re-enrichissement)
+    _round_sizes_prev = []    # round_sizes charges du dump (vide au run initial)
+    _restart_xt_eff   = []    # xt_eff charge du dump (pour reseeder les triangles EFF du plot en reprise)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -896,6 +912,17 @@ if __name__ == '__main__':
             st["xt_eff"]   = [np.asarray(p).tolist() for p in xt_eff] if xt_eff else []
             st["n_doe"]    = n0
             st["n_total"]  = int(len(xt)) if xt is not None else 0
+            # --- metadata round (re-enrichissements consecutifs coherents) ---
+            #   enrich_round : 0 = run initial, k = k-ieme re-enrichissement
+            #   round_sizes  : nb de points par round, ex [25, 2, 2] (25 = DOE+EFF initial)
+            #   round_boundaries : indices cumulés dans xt -> quel point vient de quel round
+            _prev_tot = sum(_round_sizes_prev) if _round_sizes_prev else 0
+            if _enrich_round > 0:
+                st["round_sizes"] = list(_round_sizes_prev) + [int(len(xt)) - _prev_tot]
+            else:
+                st["round_sizes"] = [int(len(xt))] if xt is not None else []
+            st["enrich_round"]     = int(_enrich_round)
+            st["round_boundaries"] = list(np.cumsum([0] + st["round_sizes"]).astype(int).tolist())
             # (b) historiques de convergence (pour le graphe tolerance)
             st["hist_EFF"]     = [float(v) for v in _eff_history_EFF]
             st["hist_BB"]      = [None if v is None else float(v) for v in _eff_history_BB]
@@ -933,7 +960,7 @@ if __name__ == '__main__':
         try:
             _u = list(u) if u is not None else []
             _x = list(x) if x is not None else []
-            rec = {"phase": phase,
+            rec = {"phase": phase, "round": _point_log_round[0],
                    "u1":  float(_u[0]) if len(_u) > 0 else None,
                    "u2":  float(_u[1]) if len(_u) > 1 else None,
                    "fy1": float(_x[0]) if len(_x) > 0 else None,
@@ -1701,7 +1728,10 @@ if __name__ == '__main__':
             return g_ot, sigma_func, xt, yt, all_grad, []
 
         _point_log_phase[0] = "EFF"   # les run_HF d'enrichissement sont taggues EFF
-        xt_eff = []
+        # En reprise : on reseed xt_eff avec les EFF deja calcules (pour que TOUS les triangles
+        # rouges s'affichent dans les plots), et on ne forcera que n_enrich_extra NOUVEAUX points.
+        xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
+        _n_eff_start = len(xt_eff)
 
         def _form_is_iter(g_ot_i, label):
             """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé."""
@@ -1790,13 +1820,20 @@ if __name__ == '__main__':
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
         else:
             _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
+        if restart_enrich_only:   # reprise : on force EXACTEMENT n_enrich_extra nouveaux points
+            _cond = lambda: (len(xt_eff) - _n_eff_start) < n_enrich_extra
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
-        list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
         global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_beta_IS
-        _eff_history_BB = []
-        _eff_history_BS = []
-        list_ratio_BB = _eff_history_BB   # alias — même objet
+        # En reprise : on ETEND les historiques charges du dump (pas de reset) -> les graphes
+        # (tolerance) couvriront ancien + nouveau. Sinon (run initial) : reset comme avant.
+        if restart_enrich_only:
+            list_beta_IS = list(_eff_history_beta_IS) + ([_beta_IS_0] if _beta_IS_0 is not None else [])
+        else:
+            list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
+            _eff_history_BB = []
+            _eff_history_BS = []
+        list_ratio_BB = _eff_history_BB   # alias — même objet (charge en reprise, vide sinon)
         list_ratio_BS = _eff_history_BS
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
@@ -2704,11 +2741,37 @@ if __name__ == '__main__':
         sys.exit(0)
     # =============================================================================
 
-    try:   # reset du log incremental par point (1 seule fois, process principal)
-        open(_POINT_LOG_FILE, "w").close()
-        print(f"[POINT LOG] reset -> {_POINT_LOG_FILE} (DOE/HF/EFF/USTAR appendus au fil du calcul)", flush=True)
-    except Exception as _e:
-        print(f"[POINT LOG] reset echoue ({type(_e).__name__}: {_e})", flush=True)
+    if restart_enrich_only:
+        # === MODE REPRISE : charger le dump, injecter, preparer le re-enrichissement ===
+        # (xt/yt/all_grad non-None -> init_g_ot saute build_DOE et refit le surrogate ; la courbe
+        #  rouge et le degre viennent du dump -> aucun SOCP DOE ni grille HF recalcules.)
+        _rs = json.load(open(_RESTART_STATE_FILE))
+        xt = np.array(_rs['xt'], float); yt = np.array(_rs['yt'], float); all_grad = np.array(_rs['all_grad'], float)
+        _restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
+        if _rs.get('max_degree') is not None:
+            max_degree = int(_rs['max_degree'])
+        hf_2d_grid_fixed = _rs.get('hf_2d_grid')           # courbe rouge reutilisee -> 0 SOCP HF
+        _eff_history_EFF     = list(_rs['hist_EFF'])
+        _eff_history_BB      = list(_rs['hist_BB'])
+        _eff_history_BS      = list(_rs['hist_BS'])
+        _eff_history_theta   = [list(t) for t in _rs['hist_theta']]
+        _eff_history_beta_IS = list(_rs['hist_beta_IS'])
+        _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
+        _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
+        _point_log_round[0] = _enrich_round
+        with open(_POINT_LOG_FILE, "a") as _pf:            # APPEND + ligne-marqueur (pas de reset)
+            _pf.write(json.dumps({"phase": "_RESTART", "round": _enrich_round,
+                                  "loaded": int(len(xt)), "n_eff_loaded": len(_restart_xt_eff),
+                                  "to_add": n_enrich_extra}) + "\n")
+        print(f"[RESTART] round {_enrich_round} : charge {len(xt)} pts ({len(_restart_xt_eff)} EFF), "
+              f"max_degree={max_degree}, courbe_rouge_reutilisee={hf_2d_grid_fixed is not None}, "
+              f"+{n_enrich_extra} nouveaux points EFF a ajouter", flush=True)
+    else:
+        try:   # reset du log incremental par point (1 seule fois, process principal)
+            open(_POINT_LOG_FILE, "w").close()
+            print(f"[POINT LOG] reset -> {_POINT_LOG_FILE} (DOE/HF/EFF/USTAR appendus au fil du calcul)", flush=True)
+        except Exception as _e:
+            print(f"[POINT LOG] reset echoue ({type(_e).__name__}: {_e})", flush=True)
 
     _t_log("##### PHASE: init_g_ot (DOE + GEPCK fit) START #####")
     _t0_phase = time.perf_counter()
