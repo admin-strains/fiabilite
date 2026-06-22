@@ -67,6 +67,12 @@ import warnings
 from datetime import datetime
 import sys; sys.path.insert(0, r"C:\workspaceiabilite\_lib")  # branche* deplaces dans _lib
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
+import os
+from _parallel_is import adaptive_is                              # IS adaptatif parallelisable (sonde + ramp-up), _lib deja dans sys.path
+_IS_PARALLEL = bool(os.environ.get("_IS_PARALLEL"))               # flag GLOBAL : nouveau chemin IS si defini (sinon OpenTURNS, comportement d'origine)
+_IS_K        = int(os.environ.get("_IS_K", "16"))                 # nb de workers du ramp-up
+_IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))              # nb de blocs par worker par ronde
+_IS_PROBE    = int(os.environ.get("_IS_PROBE", "16"))            # nb de blocs de la sonde sequentielle
 
 
 def _parse(text, name):
@@ -1740,8 +1746,10 @@ if __name__ == '__main__':
         xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
         _n_eff_start = len(xt_eff)
 
-        def _form_is_iter(g_ot_i, label):
-            """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé."""
+        def _form_is_iter(g_ot_i, label, sign=0, fm=None):
+            """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé.
+            sign/fm : si _IS_PARALLEL et fm fourni, l'IS passe par adaptive_is (sonde+ramp-up)
+            au lieu d'OpenTURNS. sign = 0 (g moyen) / +1 (g+2sigma) / -1 (g-2sigma)."""
             distribution_i = ot.JointDistribution([ot.Normal(0, 1)] * n_var)
             X_i  = ot.RandomVector(distribution_i)
             Y_i  = ot.CompositeRandomVector(g_ot_i, X_i)
@@ -1762,6 +1770,23 @@ if __name__ == '__main__':
                 return None
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
+            # --- NOUVEAU CHEMIN : IS adaptatif parallelisable (sonde + ramp-up), si flag + fm ---
+            if _IS_PARALLEL and fm is not None:
+                u_star  = list(r_i.getStandardSpaceDesignPoint())
+                _state  = dict(xt=xt, yt=yt, all_grad=all_grad, max_degree=max_degree)
+                _cap    = int(os.environ.get("_IS_CAP", str(n_IS)))
+                _t_is   = time.perf_counter()
+                _r      = adaptive_is(fm, _state, u_star, sign=sign,
+                                      cov_target=cov_IS, cap_blocks=_cap,
+                                      K=_IS_K, chunk=_IS_CHUNK, probe_blocks=_IS_PROBE)
+                _dt_is  = time.perf_counter() - _t_is
+                pf_IS   = _r['pf']
+                beta_IS = float(-ot.Normal().computeQuantile(pf_IS)[0]) if pf_IS > 0 else float('nan')
+                print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
+                      f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={_r['cov']:.3f}  [PAR:{_r['mode']}]", flush=True)
+                print(f"  [TIMING FORM/IS] {label} : FORM={_dt_form:.2f}s  IS={_dt_is:.2f}s (parallel)  (total={_dt_form+_dt_is:.2f}s)", flush=True)
+                return beta_IS
+            # --- CHEMIN D'ORIGINE : IS OpenTURNS (inchange, fallback) ---
             _t_is = time.perf_counter()
             res_IS  = run_IS([r_i], ev_i)
             _dt_is = time.perf_counter() - _t_is
@@ -1781,13 +1806,14 @@ if __name__ == '__main__':
             ~1/4 du bloc FORM/IS). Si None -> calcul interne (comportement d'origine)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
+            _FM = getattr(getattr(sigma_func_i, '__self__', None), 'fm', None)   # surrogate courant (None si non-GEPCK)
             if b_mid_precalc is not None:
                 b_mid = b_mid_precalc
                 print(f"  [{label} μ] reutilise mu conv (pas de recalcul FORM/IS redondant)", flush=True)
             else:
-                b_mid = _form_is_iter(g_ot_i, f"{label} μ")
-            b_sup = _form_is_iter(g_sup_i, f"{label} sup")
-            b_inf = _form_is_iter(g_inf_i, f"{label} inf")
+                b_mid = _form_is_iter(g_ot_i, f"{label} μ", sign=0, fm=_FM)
+            b_sup = _form_is_iter(g_sup_i, f"{label} sup", sign=+1, fm=_FM)
+            b_inf = _form_is_iter(g_inf_i, f"{label} inf", sign=-1, fm=_FM)
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
                 ratio = abs(b_sup - b_inf) / abs(b_mid)
                 print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)

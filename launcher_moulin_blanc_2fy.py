@@ -39,9 +39,17 @@ for d in dll_dirs:
     if os.path.isdir(d):
         os.add_dll_directory(d)
 
-# Add STRAINS + fiabilite repo to Python path
+# Add STRAINS + fiabilite repo to Python path (HORS garde : les process enfants de l'IS
+# parallele en ont besoin pour importer _parallel_is / branche1)
 sys.path.insert(0, r'C:\workspace\front')
 sys.path.insert(0, r'C:\workspace\fiabilite')
+sys.path.insert(0, r'C:\workspace\fiabilite\_lib')   # pour _parallel_is (workers IS parallele)
 
-# Run the target script (fiabilite 2-fy Moulin Blanc)
-exec(open(r'C:\workspace\fiabilite\AC_moulin_blanc_2fy.py').read(), {'__name__': '__main__'})
+# IMPORTANT (Windows / multiprocessing 'spawn') : l'exec de l'AC DOIT etre garde par __main__,
+# sinon chaque process enfant (cree par ProcessPoolExecutor pour l'IS parallele _IS_PARALLEL=1)
+# re-execute tout l'AC. Les enfants importent ce launcher sous '__mp_main__' -> la garde les bloque.
+if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.freeze_support()
+    # Run the target script (fiabilite 2-fy Moulin Blanc)
+    exec(open(r'C:\workspace\fiabilite\AC_moulin_blanc_2fy.py').read(), {'__name__': '__main__'})
