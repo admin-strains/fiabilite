@@ -17,7 +17,8 @@ is_subshape_of_solid_mode = one_is_enough : Ok
 compute_bnd_box = false : Ok
 print_timers = true : Ok 
 WARNING : need to reopen file C:/workspace/storage/admin/Moulin_Blanc/Test_Lshape_NORMAL.ds/lshape.stp
-Process Process CetCADData_ExternalFile in 00.025 seconds 
+Process Process CetCADData_E
+ernalFile in 00.025 seconds 
 Process ProcessModel in 00.027 seconds 
 Size of file 00.000 Mega Octets 
 Read fields C:\workspace\storage\admin\Moulin_Blanc\Test_Lshape_NORMAL.ds/Yield_analysis0_0_kine.dsmed in 0.008000 seconds 

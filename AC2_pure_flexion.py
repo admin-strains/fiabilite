@@ -43,6 +43,7 @@ from sklearn.cluster import DBSCAN
 from scipy.stats import norm
 from math import comb
 import warnings
+import sys; sys.path.insert(0, r"C:\workspaceiabilite\_lib")  # branche* deplaces dans _lib
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 
 
