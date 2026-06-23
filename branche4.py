@@ -26,6 +26,7 @@ from branche3 import uq_Kriging_calc_DiagOfCongruent, uq_Kriging_calc_auxMatrice
 from branche5 import uq_GeneralIsopTransform, uq_eval_deriv_global_Kernel
 import time as _time_module
 _timing_enabled = False
+_call_counter = 0
 
 def _dt(label, t_start):
     if _timing_enabled:
@@ -334,6 +335,9 @@ def uq_GEPCK_eval(fitted_model, X_test, return_var=False, return_cov=False):
     """
     X_test  = np.atleast_2d(X_test).astype(float)
     N_test  = X_test.shape[0]
+    global _call_counter
+    _call_counter += 1
+    _t_total = _time_module.perf_counter() if (N_test <= 1000 and _call_counter % 100 == 0) else None
 
     Nout     = fitted_model['Nout']
     Mred     = fitted_model['Mred']
@@ -384,6 +388,9 @@ def uq_GEPCK_eval(fitted_model, X_test, return_var=False, return_cov=False):
             YMu[:, oo] = uq_GEPCK_eval_one_output(
                 gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
                 CorrOptions, return_var=False, return_cov=False)
+
+    if _t_total is not None:
+        print(f"[TIMING]     [predict N={N_test} call#{_call_counter}] total : {_time_module.perf_counter() - _t_total:.4f}s", flush=True)
 
     if return_cov:
         return YMu, YSigma2, YCov
