@@ -474,10 +474,11 @@ if __name__ == '__main__':
                 "remesh_type": 1,
                 "old_size_factor": 0.0,
             }
+            Meshkwargs["model_handle"] = model.GETHANDLEPTR()
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca. 
+            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -503,6 +504,7 @@ if __name__ == '__main__':
                     {"param": "YIELD_STRENGTH", "rebars": rebar_names},
                 ]) #transformée en texte json (liste de caractères) pour être lisible par C++
 
+            kwargs["model_handle"] = model.GETHANDLEPTR()
             CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
 
             # Lire le resultat
@@ -576,10 +578,11 @@ if __name__ == '__main__':
             "remesh_type": 1,
             "old_size_factor": 0.0,
         }
+        Meshkwargs["model_handle"] = model.GETHANDLEPTR()
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-        exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca. 
+        exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
         kwargs["static_params"] = static_params
         kwargs["cinematic_params"] = cinematic_params
         kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -605,6 +608,7 @@ if __name__ == '__main__':
                 {"param": "YIELD_STRENGTH", "rebars": rebar_names},
             ]) #transformée en texte json (liste de caractères) pour être lisible par C++
 
+        kwargs["model_handle"] = model.GETHANDLEPTR()
         CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
 
         # Lire le resultat
