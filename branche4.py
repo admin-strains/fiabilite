@@ -239,11 +239,17 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
         _dt(f"    [predict N={N_test}] DiagOfCongruent (cov)", _t)
         return YMu, YSigma2, YCov
 
+    _t_diag = _time_module.perf_counter()
     D1      = uq_Kriging_calc_DiagOfCongruent(r0, R_tilde)
+    _t_d1 = _time_module.perf_counter()
     D2      = uq_Kriging_calc_DiagOfCongruent(u0.T, FTRinvF)
+    _t_d2 = _time_module.perf_counter()
     YSigma2 = sigmaSQ * (np.ones(N_test) - D1 + D2)
     YSigma2 = _verify_YSigma2(YSigma2)
-    _dt(f"    [predict N={N_test}] DiagOfCongruent (var)", _t)
+    if N_test > 1000:
+        print(f"[TIMING]     [predict N={N_test}] DiagOfCongruent D1 : {_t_d1 - _t_diag:.4f}s", flush=True)
+        print(f"[TIMING]     [predict N={N_test}] DiagOfCongruent D2 : {_t_d2 - _t_d1:.4f}s", flush=True)
+        print(f"[TIMING]     [predict N={N_test}] DiagOfCongruent total+u0 : {_t_d2 - _t:.4f}s", flush=True)
     return YMu, YSigma2
 
 
