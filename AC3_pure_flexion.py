@@ -447,8 +447,7 @@ if __name__ == '__main__':
             print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
             loadfile = open(path + '\\dsLoad.txt', 'r')
-            model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-            loadscript = loadfile.read() 
+            loadscript = loadfile.read()
             with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
                 exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
 
@@ -550,8 +549,7 @@ if __name__ == '__main__':
         print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
 
         loadfile = open(path + '\\dsLoad.txt', 'r')
-        model.Load(fileName) #on remplit le modèle en lisant .dscad et ainsi l'utiliser avec LOAD_MODEL plus bas. 
-        loadscript = loadfile.read() 
+        loadscript = loadfile.read()
         with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
             exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
 
