@@ -24,6 +24,12 @@ if _dir not in sys.path:
 
 from branche3 import uq_Kriging_calc_DiagOfCongruent, uq_Kriging_calc_auxMatrices
 from branche5 import uq_GeneralIsopTransform, uq_eval_deriv_global_Kernel
+import time as _time_module
+_timing_enabled = False
+
+def _dt(label, t_start):
+    if _timing_enabled:
+        print(f"[TIMING] {label} : {_time_module.perf_counter() - t_start:.4f}s", flush=True)
 
 
 # ===========================================================================
@@ -185,15 +191,20 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
     N_aug  = R_tilde.shape[0]          # N*(M+1)
 
     # --- f0 : trend standard au point test — NON augmenté (Zuhal : f(x*) non augmenté)
+    _t = _time_module.perf_counter()
     f0 = F_global_handle(U_test)[:N_test, :]   # (N_test, P)
+    _dt(f"    [predict N={N_test}] F_global_handle", _t)
 
     # --- r̃₀ : cross-corrélation augmentée, nugget forcé à 0
     CrossCorOpts           = dict(CorrOptions)
     CrossCorOpts['Nugget'] = 0.0
     evalR = CorrOptions['Handle']
+    _t = _time_module.perf_counter()
     r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N*(M+1))
+    _dt(f"    [predict N={N_test}] uq_eval_global_Kernel (r0)", _t)
 
     # --- Rinv
+    _t = _time_module.perf_counter()
     cholR = am['cholR']
     if cholR is not None:
         Rinv = np.linalg.solve(cholR,
@@ -204,11 +215,13 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
     # --- YMu = f0 @ beta + r̃₀ @ Rinv @ (Y_aug - F̃ @ beta)
     residual = Y_aug - F_tilde_train @ beta
     YMu      = f0 @ beta + r0 @ (Rinv @ residual)
+    _dt(f"    [predict N={N_test}] Rinv + YMu", _t)
 
     if not return_var and not return_cov:
         return YMu
 
     # --- u0 = FTRinv @ r̃₀ᵀ − f0ᵀ
+    _t = _time_module.perf_counter()
     FTRinv  = am['FTRinv']     # (P, N*(M+1))
     FTRinvF = am['FTRinvF']    # (P, P)
     u0      = FTRinv @ r0.T - f0.T   # (P, N_test)
@@ -223,12 +236,14 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
         CorrU0  = evalR(U_test, U_test, theta, CorrOptions)
         YCov    = sigmaSQ * (CorrU0 - D1_mat + D2_mat)
         YSigma2 = _verify_YSigma2(np.diag(YCov))
+        _dt(f"    [predict N={N_test}] DiagOfCongruent (cov)", _t)
         return YMu, YSigma2, YCov
 
     D1      = uq_Kriging_calc_DiagOfCongruent(r0, R_tilde)
     D2      = uq_Kriging_calc_DiagOfCongruent(u0.T, FTRinvF)
     YSigma2 = sigmaSQ * (np.ones(N_test) - D1 + D2)
     YSigma2 = _verify_YSigma2(YSigma2)
+    _dt(f"    [predict N={N_test}] DiagOfCongruent (var)", _t)
     return YMu, YSigma2
 
 
@@ -325,8 +340,12 @@ def uq_GEPCK_eval(fitted_model, X_test, return_var=False, return_cov=False):
     aux_cop  = fitted_model['AuxSpace']['Copula']
     red_cop  = {'Type': 'Independent', 'Parameters': np.eye(Mred)}
 
+    global _timing_enabled
+    _timing_enabled = (N_test > 1000)
+    _t = _time_module.perf_counter()
     U_test = uq_GeneralIsopTransform(
         Xred_test, red_marg, red_cop, aux_marg, aux_cop)
+    _dt(f"    [predict N={N_test}] uq_GeneralIsopTransform", _t)
 
     U_train     = fitted_model['ExpDesign']['U']
     Y_aug       = fitted_model['ExpDesign']['Y_aug']
