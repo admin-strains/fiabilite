@@ -1029,6 +1029,17 @@ if __name__ == '__main__':
             sigma = self._sigma_func(u_pt)
             return [mu + self._sign * 2.0 * sigma]
 
+        def _exec_sample(self, U):
+            _fm = getattr(getattr(self._sigma_func, '__self__', None), 'fm', None)
+            if _fm is not None:
+                U_np = np.array(U)
+                mu_arr, sig2_arr = predict_gepck(_fm, U_np, return_var=True)
+                mu    = mu_arr[:, 0]
+                sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
+                result = mu + self._sign * 2.0 * sigma
+                return result.reshape(-1, 1).tolist()
+            return [[self._exec(u)[0]] for u in U]
+
     # Usage :
     #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
     #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
