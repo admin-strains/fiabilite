@@ -32,7 +32,8 @@ import openturns as ot
 import numpy as np
 import autograd.numpy as anp
 import matplotlib
-matplotlib.use('TkAgg')
+_HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_LOG_REDIRECTED"))
+matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from smt.surrogate_models import GEKPLS
