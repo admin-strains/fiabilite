@@ -53,7 +53,11 @@ import openturns as ot
 import numpy as np
 import autograd.numpy as anp
 import matplotlib
-matplotlib.use('TkAgg')
+# Backend conditionnel : headless 'Agg' en mode batch/parallele (run via launcher ou _IS_PARALLEL),
+# 'TkAgg' interactif sinon. Evite la race Tcl_AsyncDelete (Tk + pool multiprocessing au teardown)
+# qui peut faire planter le ramp-up de l'IS parallele. Agg supporte savefig (PNG) sans Tk.
+_HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_LOG_REDIRECTED"))
+matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from smt.surrogate_models import GEKPLS
@@ -65,7 +69,7 @@ from scipy.stats import norm
 from math import comb
 import warnings
 from datetime import datetime
-import sys; sys.path.insert(0, r"C:\workspaceiabilite\_lib")  # branche* deplaces dans _lib
+import sys; sys.path.insert(0, r"C:\workspace\fiabilite\_lib")  # branche* deplaces dans _lib
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 import os
 from _parallel_is import adaptive_is                              # IS adaptatif parallelisable (sonde + ramp-up), _lib deja dans sys.path
@@ -1784,6 +1788,8 @@ if __name__ == '__main__':
                 beta_IS = float(-ot.Normal().computeQuantile(pf_IS)[0]) if pf_IS > 0 else float('nan')
                 print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
                       f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={_r['cov']:.3f}  [PAR:{_r['mode']}]", flush=True)
+                print(f"  [IS DETAIL PAR] {label} : blocs={_r['n_blocks']} evals~{_r['n_evals']:,} rondes_par={_r.get('n_rounds',0)} "
+                      f"COV={_r['cov']:.4f} (cible {cov_IS}) t_IS={_r['t']:.2f}s debit={_r['n_evals']/max(_r['t'],1e-9):,.0f} evals/s", flush=True)
                 print(f"  [TIMING FORM/IS] {label} : FORM={_dt_form:.2f}s  IS={_dt_is:.2f}s (parallel)  (total={_dt_form+_dt_is:.2f}s)", flush=True)
                 return beta_IS
             # --- CHEMIN D'ORIGINE : IS OpenTURNS (inchange, fallback) ---
