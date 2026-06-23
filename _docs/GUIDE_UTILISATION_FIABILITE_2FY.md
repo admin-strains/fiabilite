@@ -53,10 +53,16 @@ Le plus simple : **reproduire l'arborescence `C:\workspace`** (front, fiabilite,
 
 ## 3. Lancer un calcul
 
+> ### ⚠️ À FAIRE AVANT LE 1er LANCEMENT (sinon plantage immédiat)
+> Dans `AC_moulin_blanc_2fy.py`, mettre **`modelname` = ton projet `.ds`** (qui doit **exister** dans `storage/admin/...`).
+> La valeur par défaut (`Calcul_fiabilite_13k_2fy_membrure_inf_diagonal`) est un **exemple** : si ce dossier `.ds` n'existe pas sur ta machine, le calcul **échoue dès la création du log / lecture du `dsCad.txt`**.
+> → Vérifie aussi que ton `.ds` contient bien `dsCad.txt`, `dsLoad.txt`, le `.stp`, et (optionnel) `doe_cache.json`.
+
 ```bat
-set _IS_PARALLEL=1
 _run\_run_moulin_blanc_2fy.bat
 ```
+
+> La parallélisation de l'IS est **active par défaut** (`_IS_PARALLEL` ON). Pour revenir à l'IS séquentiel OpenTURNS : `set _IS_PARALLEL=0` avant de lancer.
 
 Le log détaillé (y compris la sortie C++ de STRAINS) est écrit dans :
 `<projet>.ds/log_2fy_<horodatage>.log`
@@ -82,13 +88,11 @@ Par point HF : `patch dsCad.txt (nouveaux fy)` → `exec dsCad → modèle OCC` 
 
 ---
 
-## 4. La parallélisation (`_IS_PARALLEL=1`)
+## 4. La parallélisation (`_IS_PARALLEL`)
 
 ### Ce que ça active
 
-Le flag `_IS_PARALLEL=1` remplace l'IS séquentiel d'OpenTURNS par le module **`_lib/_parallel_is.py`** (sonde + ramp-up). **Sans le flag → IS séquentiel d'origine** (comportement inchangé, fallback).
-
-> Par défaut le flag est **lu dans l'environnement** ; il faut donc `set _IS_PARALLEL=1` avant de lancer (ou le poser dans l'AC).
+Le flag `_IS_PARALLEL` (**ON par défaut**) fait passer l'IS par le module **`_lib/_parallel_is.py`** (sonde + ramp-up) au lieu de l'IS séquentiel d'OpenTURNS. Pour **désactiver** et revenir au comportement d'origine : `set _IS_PARALLEL=0` avant de lancer.
 
 ### Quelle partie est parallélisée
 
