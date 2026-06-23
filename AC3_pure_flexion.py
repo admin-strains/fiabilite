@@ -45,10 +45,6 @@ from math import comb
 import warnings
 from datetime import datetime
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
-import time as _time_module
-
-def _dt(label, t_start):
-    print(f"[TIMING] {label} : {_time_module.perf_counter() - t_start:.2f}s", flush=True)
 
 
 def _parse(text, name):
@@ -366,13 +362,67 @@ if __name__ == '__main__':
         dist = ot.LogNormal(mu_ln, sigma_ln, 0.0)
         return dist
 
+    def loi_F_permanente(Fm, cov=None):
+        """Charge permanente (poids propre). JCSS PMC 2.1.
+        Distribution : Normale. Moyenne = nominale. COV par defaut = 0.05 (beton ordinaire).
+        COV recommandes : 0.02-0.04 (acier), 0.05 (beton), 0.08-0.10 (avec non-structuraux), 0.10 (bois)."""
+        if cov is None:
+            cov = 0.05
+        return ot.Normal(Fm, cov * Fm)
+
+    def loi_F_exploitation(Fm, cov=None, usage='office'):
+        """Charge d'exploitation soutenue. JCSS PMC 2.2, Table 2.2.1.
+        Distribution : Gamma. Parametres selon la categorie d'usage.
+        Si cov est fourni, utilise Fm et cov directement. Sinon, utilise les parametres JCSS.
+        Si cov=None et usage=None, utilise 'office' par defaut."""
+        PARAMS = {
+            'office':     {'mq': 0.5, 'sv': 0.3, 'su': 0.6},
+            'residence':  {'mq': 0.3, 'sv': 0.15, 'su': 0.3},
+            'hotel':      {'mq': 0.3, 'sv': 0.05, 'su': 0.1},
+            'hospital':   {'mq': 0.4, 'sv': 0.3, 'su': 0.6},
+            'laboratory': {'mq': 0.7, 'sv': 0.4, 'su': 0.8},
+            'library':    {'mq': 1.7, 'sv': 0.5, 'su': 1.0},
+            'classroom':  {'mq': 0.6, 'sv': 0.15, 'su': 0.4},
+            'retail':     {'mq': 0.9, 'sv': 0.6, 'su': 1.6},
+            'storage':    {'mq': 3.5, 'sv': 2.5, 'su': 6.9},
+            'industrial_light':  {'mq': 1.0, 'sv': 1.0, 'su': 2.8},
+            'industrial_heavy':  {'mq': 3.0, 'sv': 1.5, 'su': 4.1},
+        }
+        if cov is not None:
+            sigma = cov * Fm
+        else:
+            p = PARAMS.get(usage, PARAMS['office'])
+            sigma = np.sqrt(p['sv']**2 + p['su']**2)
+            Fm = p['mq']
+        k = (Fm / sigma)**2
+        lam = Fm / sigma**2
+        return ot.Gamma(k, lam, 0.0)
+
+    def loi_F_intermittente(usage='office'):
+        """Charge d'exploitation intermittente. JCSS PMC 2.2, Table 2.2.1.
+        Distribution : Exponentielle (sigma = moyenne).
+        Si usage=None, utilise 'office' par defaut."""
+        PARAMS = {
+            'office':     {'mp': 0.2},
+            'residence':  {'mp': 0.3},
+            'hotel':      {'mp': 0.2},
+            'hospital':   {'mp': 0.2},
+            'classroom':  {'mp': 0.5},
+            'retail':     {'mp': 0.4},
+            'crowd':      {'mp': 1.25},
+        }
+        p = PARAMS.get(usage, PARAMS['office'])
+        return ot.Exponential(1.0 / p['mp'], 0.0)
+
     def dist_jointe():
         dist = []
         if 'fc' in params_names:
-            dist.append(loi_fc(fcm, cov_fc)) 
+            dist.append(loi_fc(fcm, cov_fc))
         if 'fy' in params_names:
             dist.append(loi_fy(fym, cov_fy))
         #AJOUTER suite pour plus de variable 'if 'load' in params_names' etc.
+        #  if 'F' in params_names:
+        #      dist.append(loi_F_permanente(Fm, cov_F))    # ou loi_F_exploitation(Fm, usage=...)
         dist_X   = ot.JointDistribution(dist)
         return dist_X
 
@@ -1339,15 +1389,9 @@ if __name__ == '__main__':
             Retourne (ratio, pf_mid, pf_sup, pf_inf) ou (None, None, None, None)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
-            _t3 = _time_module.perf_counter()
             b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} mu")
-            _dt(f"  [_three_form_is] FORM+IS mu ({label})", _t3)
-            _t3 = _time_module.perf_counter()
             b_sup, pf_sup = _form_is_iter(g_sup_i, f"{label} sup")
-            _dt(f"  [_three_form_is] FORM+IS sup ({label})", _t3)
-            _t3 = _time_module.perf_counter()
             b_inf, pf_inf = _form_is_iter(g_inf_i, f"{label} inf")
-            _dt(f"  [_three_form_is] FORM+IS inf ({label})", _t3)
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
                 ratio = abs(b_sup - b_inf) / abs(b_mid)
                 print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
@@ -1412,11 +1456,8 @@ if __name__ == '__main__':
             _eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
             xt_eff.append(np.array(u_opt))
             # --- On reconstruit le modèle ---
-            _t_post_hf = _time_module.perf_counter()
-            _t_blk = _time_module.perf_counter()
             g_val, grad_U, _ = run_HF(np.array(u_opt))
             print(f"[EFF HF] u={[round(float(u_opt[i]),10) for i in range(n_var)]}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]),10) for i in range(n_var)]}", flush=True)
-            _dt(f"[EFF iter {iter_count+1}] run_HF (N={len(xt)+1})", _t_blk)
             xt = np.vstack([xt, [np.array(u_opt)]])
             yt = np.vstack([yt, [[g_val]]])
             grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
@@ -1425,21 +1466,15 @@ if __name__ == '__main__':
             _degree_avant = max_degree
             update_degree(len(xt))
             degree_upgraded = (max_degree != _degree_avant)
-            _t_blk = _time_module.perf_counter()
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-            _dt(f"[EFF iter {iter_count+1}] init_g_ot (N={len(xt)})", _t_blk)
 
             # --- FORM+IS inconditionnel : mid/sup/inf ---
             iter_count += 1
-            _t_blk = _time_module.perf_counter()
             _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}")
-            _dt(f"[EFF iter {iter_count}] _three_form_is (N={len(xt)})", _t_blk)
             list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
 
             # --- Suivi convergence beta_IS ---
-            _t_blk = _time_module.perf_counter()
             _b_mid, _ = _form_is_iter(g_ot, f"N={len(xt)} mu conv")
-            _dt(f"[EFF iter {iter_count}] mu_conv (N={len(xt)})", _t_blk)
 
             # --- Critere BB ---
             if EFF_criteria == 'BB':
@@ -1507,12 +1542,9 @@ if __name__ == '__main__':
             # --- Visu intermediaire apres ajout de point ---
             _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
             if print_EFF_progres or degree_upgraded or _about_to_upgrade:
-                _t_blk = _time_module.perf_counter()
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
-                _dt(f"[EFF iter {iter_count}] print_planche_EFF (N={len(xt)})", _t_blk)
 
             # --- On re-résoud u = argmax(EFF) ---
-            _t_blk = _time_module.perf_counter()
             f = ot.Function(EFFFunction(g_ot, sigma_func))
             bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
@@ -1521,8 +1553,6 @@ if __name__ == '__main__':
             algo_opti.setStartingPoint([0.0] * n_var)
             algo_opti.setMaximumCallsNumber(n_max_EFF)
             algo_opti.run()
-            _dt(f"[EFF iter {iter_count}] NLopt GN_DIRECT (N={len(xt)})", _t_blk)
-            _dt(f"[EFF iter {iter_count}] TOTAL post-HF (N={len(xt)})", _t_post_hf)
             u_opt = algo_opti.getResult().getOptimalPoint()
 
         _sigG2 = sigma_func(u_opt)
@@ -1727,12 +1757,8 @@ if __name__ == '__main__':
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
         # --- Z_eff, Z_sigma, Z_g (batch vectorise via BLAS multi-thread) ---
-        _t_planche = _time_module.perf_counter()
         mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        _dt(f"  [planche_EFF N={len(xt)}] _batch_mu_sigma {len(grid)} pts", _t_planche)
-        _t_planche = _time_module.perf_counter()
         Z_eff   = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
-        _dt(f"  [planche_EFF N={len(xt)}] _eff_vectorized", _t_planche)
         Z_sigma = sigma_grid.reshape(n_grid, n_grid)
         Z_g     = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
@@ -1801,11 +1827,9 @@ if __name__ == '__main__':
         _decorate(ax3)
 
         plt.tight_layout()
-        _t_planche = _time_module.perf_counter()
         fname = f'EFF_{n_added}points_{timestamp}.png'
         fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
-        _dt(f"  [planche_EFF N={len(xt)}] matplotlib savefig", _t_planche)
         print(f"  [EFF visu] -> {fname}", flush=True)
 
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
@@ -2268,31 +2292,16 @@ if __name__ == '__main__':
             print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
         sys.exit(0)
 
-    _t0_global = _time_module.perf_counter()
-    _t_blk = _time_module.perf_counter()
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-    _dt("init_g_ot initial (DOE + fit)", _t_blk)
     if do_EFF:
         print_planche_EFF(g_ot, sigma_func, xt, [])
-        _t_blk = _time_module.perf_counter()
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
-        _dt("run_EFF TOTAL", _t_blk)
         if not print_EFF_progres:
-            _t_blk = _time_module.perf_counter()
             print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
-            _dt("print_planche_EFF post-EFF", _t_blk)
-        _t_blk = _time_module.perf_counter()
         print_EFF_graphs()
-        _dt("print_EFF_graphs", _t_blk)
-        _t_blk = _time_module.perf_counter()
         print_Pf_evolution()
-        _dt("print_Pf_evolution", _t_blk)
-        _t_blk = _time_module.perf_counter()
         print_logPf_evolution()
-        _dt("print_logPf_evolution", _t_blk)
-    _t_blk = _time_module.perf_counter()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
-    _dt("init_FORM", _t_blk)
 
     if event is None:
         if best_sol_modes_fixed is not None:
@@ -2303,18 +2312,14 @@ if __name__ == '__main__':
 
     if do_warmstart:
         starting_points = np.array([[0.0, 0.0]])
-        _t_blk = _time_module.perf_counter()
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
-        _dt(f"FORM_all_modes ({len(starting_points)} pts)", _t_blk)
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
         if start_from_LHS:
             starting_points = build_starting_points()
         else:
             starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
-        _t_blk = _time_module.perf_counter()
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
-        _dt(f"FORM_all_modes ({len(starting_points)} pts)", _t_blk)
 
     best_result = modes[0] if modes else None
     if best_result is None:
@@ -2322,19 +2327,10 @@ if __name__ == '__main__':
         sys.exit(1)
     if len(modes)>1:
         print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
-        _t_blk = _time_module.perf_counter()
         print_results(modes[1], g_ot)
-        _dt("print_results mode 2", _t_blk)
         print('Les résultats du mode 1 sont : ')
-    _t_blk = _time_module.perf_counter()
     print_results(best_result, g_ot)
-    _dt("print_results mode 1", _t_blk)
     if do_IS and modes:
-        _t_blk = _time_module.perf_counter()
         result_IS = run_IS(modes, event)
-        _dt(f"run_IS (N_IS={n_IS})", _t_blk)
         print_results_IS(result_IS)
-    _t_blk = _time_module.perf_counter()
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
-    _dt("print_visu", _t_blk)
-    _dt("TEMPS TOTAL", _t0_global)
