@@ -73,7 +73,7 @@ import sys; sys.path.insert(0, r"C:\workspace\fiabilite\_lib")  # branche* depla
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 import os
 from _parallel_is import adaptive_is                              # IS adaptatif parallelisable (sonde + ramp-up), _lib deja dans sys.path
-_IS_PARALLEL = bool(os.environ.get("_IS_PARALLEL"))               # flag GLOBAL : nouveau chemin IS si defini (sinon OpenTURNS, comportement d'origine)
+_IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"         # flag GLOBAL : IS parallele (sonde+ramp-up) ON par defaut ; _IS_PARALLEL=0 -> fallback OpenTURNS sequentiel
 _IS_K        = int(os.environ.get("_IS_K", "16"))                 # nb de workers du ramp-up
 _IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))              # nb de blocs par worker par ronde
 _IS_PROBE    = int(os.environ.get("_IS_PROBE", "16"))            # nb de blocs de la sonde sequentielle
