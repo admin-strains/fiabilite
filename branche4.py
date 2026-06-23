@@ -240,6 +240,7 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
         _dt(f"    [predict N={N_test}] DiagOfCongruent (cov)", _t)
         return YMu, YSigma2, YCov
 
+    print(f"[DEBUG] ENTERING DiagOfCongruent path, N_test={N_test}, return_var={return_var}, return_cov={return_cov}", flush=True)
     _t_diag = _time_module.perf_counter()
     D1      = uq_Kriging_calc_DiagOfCongruent(r0, R_tilde)
     _t_d1 = _time_module.perf_counter()
