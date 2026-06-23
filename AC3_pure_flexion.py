@@ -88,7 +88,7 @@ if __name__ == '__main__':
     n_max_FORM = 50
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
-    start_from_LHS = True #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
+    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
     n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
 
     tol_FORM = 0.002                # précision acceptée par FORM pour l'état limite
@@ -1996,15 +1996,18 @@ if __name__ == '__main__':
 
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='royalblue', s=60, zorder=6,
+            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=60, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
             for i, pt in enumerate(xt_eff_arr):  # supprimer ces 2 lignes pour masquer la numerotation
                 ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='royalblue', zorder=7)
+                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
         ax.scatter(0, 0, c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
 
-        mode_colors = plt.cm.tab10(np.linspace(0, 0.9, max(len(modes), 1)))
+        _fixed_mode_colors = ['gold', 'magenta', 'green', 'blue', 'purple']
+        n_modes = max(len(modes), 1)
+        mode_colors = [_fixed_mode_colors[i] if i < len(_fixed_mode_colors)
+                       else plt.cm.tab10((i % 10) / 10.0) for i in range(n_modes)]
 
         if best_sps:
             for i, sp in enumerate(best_sps):
