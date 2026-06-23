@@ -1611,18 +1611,16 @@ if __name__ == '__main__':
         - GEPCK : 1 appel predict_gepck(return_var=True) -> mu + var en 1 fois (BLAS multi-thread)
         - Autres modeles : batch via ot.Sample pour mu, loop fallback pour sigma
         """
-        impl = g_ot.getImplementation()
-        impl_name = type(impl).__name__
-        if hasattr(impl, 'fm') and 'GEPCK' in impl_name:
-            mu_arr, sig2_arr = predict_gepck(impl.fm, grid, return_var=True)
+        _fm = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
+        if _fm is not None:
+            mu_arr, sig2_arr = predict_gepck(_fm, grid, return_var=True)
             mu    = mu_arr[:, 0]
             sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
             return mu, sigma
-        else:
-            grid_ot = ot.Sample(grid.tolist())
-            mu    = np.array(g_ot(grid_ot))[:, 0]
-            sigma = np.array([sigma_func(pt) for pt in grid])
-            return mu, sigma
+        grid_ot = ot.Sample(grid.tolist())
+        mu    = np.array(g_ot(grid_ot))[:, 0]
+        sigma = np.array([sigma_func(pt) for pt in grid])
+        return mu, sigma
 
     def _eff_vectorized(mu, sigma, eps_factor):
         """Calcul vectorise du critere EFF (Expected Feasibility Function)."""
