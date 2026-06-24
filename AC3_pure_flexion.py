@@ -429,7 +429,42 @@ if __name__ == '__main__':
         return dist_X
 
     # --- APPELS STRAINS ---
-    def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None): 
+    _socp_call_counter = [0]
+
+    def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p_vals=None):
+        """Copie les fichiers de sortie SOCP dans un sous-dossier de SOCP_history/.
+        Un sous-dossier par appel SOCP, nomme prefix_tag + coords."""
+        files_to_save = [
+            f"{AnalysisName}_0_PL_cin_out.msh",
+            f"{AnalysisName}_0_kine.dsmed",
+            f"{AnalysisName}_0_kine.dslog",
+            f"{AnalysisName}_0_kine.dsmetares",
+            f"{AnalysisName}_0_stat.dsmed",
+        ]
+        coords_str = ""
+        if u1 is not None and u2 is not None:
+            coords_str = f"_u1{u1:+.3f}_u2{u2:+.3f}"
+        if p_vals is not None:
+            coords_str += "_" + "_".join(f"{params_names[i]}{p_vals[i]:.1f}" for i in range(len(p_vals)))
+        _socp_root = os.environ.get("_DOE_MAIN_DS") or path
+        sub_dir = os.path.join(_socp_root, "SOCP_history", f"{prefix_tag}{coords_str}")
+        os.makedirs(sub_dir, exist_ok=True)
+        n_saved = 0
+        total_size = 0
+        for f in files_to_save:
+            src = os.path.join(path, f)
+            if os.path.exists(src):
+                dst = os.path.join(sub_dir, f)
+                try:
+                    shutil.copy2(src, dst)
+                    n_saved += 1
+                    total_size += os.path.getsize(src)
+                except Exception as e:
+                    print(f"  [SOCP HISTORY] copy failed for {f} : {e}", flush=True)
+        print(f"  [SOCP HISTORY] {prefix_tag}{coords_str} : {n_saved} fichiers sauves "
+              f"({total_size/1024/1024:.1f} MB) dans {sub_dir}", flush=True)
+
+    def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire)"""
         path = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
@@ -514,6 +549,10 @@ if __name__ == '__main__':
             with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
                 d = json.load(f) #chargement du fichier .dsmetares
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
+            _socp_call_counter[0] += 1
+            _save_socp_outputs(path, AnalysisName,
+                               prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
+                               p_vals=[float(SOL[i][p]) for p in params_names])
             for p in params_names:
                 SOL[i][f'dg_{p}'] = None
             if sensitivity and 'Sensitivity' in d['info']:
@@ -618,6 +657,11 @@ if __name__ == '__main__':
         with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
             d = json.load(f) #chargement du fichier .dsmetares
         g_HF=d['info']['Primal_bound'][0] -1
+        _socp_call_counter[0] += 1
+        _save_socp_outputs(path, AnalysisName,
+                           prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
+                           u1=float(u[0]), u2=float(u[1]),
+                           p_vals=[float(x_point[j]) for j in range(n_var)])
         grad_HF_X=[None]*n_var
         grad_HF_U=[None]*n_var
         if sensitivity and 'Sensitivity' in d['info']:
