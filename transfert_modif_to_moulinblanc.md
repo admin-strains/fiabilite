@@ -107,33 +107,32 @@ ajouter `save_history = True` dans les options et wrapper les 2 appels existants
 
 ---
 
-## Modif 3a — DOE cache sans signature, conditionne par `config_is_identical`
+## Modif 3a — DOE cache : validation par `config_is_identical` au lieu de signature
 
 **Commit AC3** : `9b4b4f5`
 
 ### Ce qui change par rapport a moulin_blanc
 
-Dans moulin_blanc (commit `9052a3c`), le cache DOE utilise une **signature automatique** :
+Dans moulin_blanc (commit `9052a3c`), le cache DOE utilise une **signature automatique**
+via `_doe_cache_sig()` pour decider si le cache est valide.
 
-```python
-def _doe_cache_sig():
-    return {"n0": n0, "params": list(params_names), "n_var": n_var,
-            "g1": len(group1_names), "g2": len(group2_names), "modelname": modelname}
-```
-
-Le cache est invalide si la signature change (n0, params, groupes, modelname).
-
-Dans AC3, on remplace ca par un **flag explicite utilisateur** :
+Dans AC3, le **DOE cache** ne se sert pas de `_doe_cache_sig()` pour la validation.
+C'est un **flag explicite utilisateur** qui controle :
 
 ```python
 config_is_identical = True   # True = reutilise doe_cache.json si present (0 SOCP DOE)
 ```
 
-- `True` + fichier existe → charge le cache sans verification
+- `True` + fichier existe → charge le cache sans verification de signature
 - `True` + fichier absent → calcule le DOE, sauvegarde le cache
 - `False` → recalcule toujours (ignore le cache)
 
 Le JSON sauvegarde ne contient pas de signature — juste `xt`, `yt`, `all_grad`.
+
+> **NOTE** : la fonction `_doe_cache_sig()` n'est pas supprimee — elle est ajoutee
+> dans la **modif 3b (restart state)** car le dump restart l'utilise pour ecrire
+> un champ `signature` informatif dans le JSON. Elle est simplement **pas utilisee
+> par le DOE cache** pour la validation (c'est `config_is_identical` qui decide).
 
 ### Pourquoi ce choix
 
@@ -143,11 +142,10 @@ teste que n0/params/modelname). Mieux vaut laisser l'utilisatrice decider explic
 
 ### Comment appliquer a moulin_blanc
 
-Remplacer `_doe_cache_sig()` + la comparaison dans `_load_doe_cache` par :
+1. Ajouter `config_is_identical = True` dans les options utilisateur.
 
+2. Dans `_load_doe_cache`, remplacer la comparaison de signature par :
 ```python
-config_is_identical = True   # ajouter dans les options utilisateur
-
 def _load_doe_cache():
     if not config_is_identical:
         return None
@@ -160,14 +158,20 @@ def _load_doe_cache():
         return None
 ```
 
-Et simplifier `_save_doe_cache` pour ne plus ecrire de signature :
-
+3. Simplifier `_save_doe_cache` pour ne plus ecrire de signature :
 ```python
 def _save_doe_cache(xt, yt, all_grad):
     json.dump({"xt": np.asarray(xt).tolist(),
                "yt": np.asarray(yt).tolist(),
                "all_grad": np.asarray(all_grad).tolist()},
               open(_DOE_CACHE_FILE, "w"), indent=1)
+```
+
+4. **Garder `_doe_cache_sig()`** (ne pas la supprimer) — elle est utilisee par le
+   dump restart (modif 3b). La version generique (sans `g1`/`g2`) :
+```python
+def _doe_cache_sig():
+    return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
 ```
 
 ---

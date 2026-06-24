@@ -73,6 +73,7 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
+    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     params_names = ['fc','fy']
     n_var = len(params_names)
 
@@ -312,6 +313,10 @@ if __name__ == '__main__':
     _fosm_u0_cache     = [None] # cache run_HF([0,0]) FOSM : calcule 1x, reutilise pour tous les modes
     _point_log_phase   = ["?"]  # phase courante pour le log incremental (HF/EFF/USTAR ; DOE logue a part)
     _point_log_round   = [0]    # round de re-enrichissement (0 = run initial)
+    _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
+    _enrich_round     = 0       # 0 = run initial, k = k-ieme reprise
+    _round_sizes_prev = []      # taille de chaque round precedent (charge du dump)
+    _restart_xt_eff   = []      # points EFF charges du dump (seeder xt_eff en reprise)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -774,6 +779,60 @@ if __name__ == '__main__':
             print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE}", flush=True)
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
+    def _doe_cache_sig():
+        return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
+
+    # --- DUMP RESTART ---
+    _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state.json")
+    def _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS):
+        def _u_beta(r):
+            try:
+                return {"u_star": [float(v) for v in np.array(r.getStandardSpaceDesignPoint())],
+                        "beta": float(r.getHasoferReliabilityIndex())}
+            except Exception:
+                return None
+        st = {}
+        try:
+            st["signature"] = _doe_cache_sig()
+            st["modele"]    = modele
+            st["timestamp"] = timestamp
+            try:    st["max_degree"] = int(max_degree)
+            except Exception: st["max_degree"] = None
+            st["xt"]       = np.asarray(xt).tolist()       if xt       is not None else None
+            st["yt"]       = np.asarray(yt).tolist()       if yt       is not None else None
+            st["all_grad"] = np.asarray(all_grad).tolist() if all_grad is not None else None
+            st["xt_eff"]   = [np.asarray(p).tolist() for p in xt_eff] if xt_eff else []
+            st["n_doe"]    = n0
+            st["n_total"]  = int(len(xt)) if xt is not None else 0
+            _prev_tot = sum(_round_sizes_prev) if _round_sizes_prev else 0
+            if _enrich_round > 0:
+                st["round_sizes"] = list(_round_sizes_prev) + [int(len(xt)) - _prev_tot]
+            else:
+                st["round_sizes"] = [int(len(xt))] if xt is not None else []
+            st["enrich_round"]     = int(_enrich_round)
+            st["round_boundaries"] = list(np.cumsum([0] + st["round_sizes"]).astype(int).tolist())
+            st["hist_EFF"]     = [float(v) for v in _eff_history_EFF]
+            st["hist_BB"]      = [None if v is None else float(v) for v in _eff_history_BB]
+            st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
+            st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
+            st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
+            try:    st["hf_2d_grid"] = hf_2d_grid_fixed
+            except Exception: st["hf_2d_grid"] = None
+            st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
+            st["best_result"] = _u_beta(best_result) if best_result is not None else None
+            st["modes"]       = [_u_beta(m) for m in modes] if modes else []
+            try:
+                st["IS"] = {"Pf": float(result_IS.getProbabilityEstimate())} if result_IS is not None else None
+            except Exception:
+                st["IS"] = None
+            json.dump(st, open(_RESTART_STATE_FILE, "w"), indent=1)
+            print(f"[RESTART DUMP] etat sauve dans {_RESTART_STATE_FILE} "
+                  f"(n_total={st['n_total']}, n_eff={len(st['xt_eff'])}, "
+                  f"hist_EFF={len(st['hist_EFF'])}, modes={len(st['modes'])})", flush=True)
+        except Exception as e:
+            print(f"[RESTART DUMP] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
     # --- LOG INCREMENTAL PAR POINT ---
     _POINT_LOG_FILE = os.path.join(_path_ds, "points_log.jsonl")
@@ -1533,7 +1592,7 @@ if __name__ == '__main__':
             return g_ot, sigma_func, xt, yt, all_grad, []
         _point_log_phase[0] = "EFF"
 
-        xt_eff = []
+        xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
 
         def _form_is_iter(g_ot_i, label):
             """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé."""
@@ -1610,11 +1669,15 @@ if __name__ == '__main__':
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
         _beta_IS_0, _ = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
-        list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf
-        _eff_history_BB = []
-        _eff_history_BS = []
-        _eff_history_Pf = []
+        if restart_enrich_only:
+            list_beta_IS = list(_eff_history_beta_IS) + ([_beta_IS_0] if _beta_IS_0 is not None else [])
+        else:
+            list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
+        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
+        if not restart_enrich_only:
+            _eff_history_BB = []
+            _eff_history_BS = []
+            _eff_history_Pf = []
         list_ratio_BB = _eff_history_BB   # alias — même objet
         list_ratio_BS = _eff_history_BS
         list_Pf = _eff_history_Pf
@@ -1723,6 +1786,10 @@ if __name__ == '__main__':
             if print_EFF_progres or degree_upgraded or _about_to_upgrade:
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
 
+            # --- Dump restart incremental (kill-safe) ---
+            _eff_history_beta_IS = list(list_beta_IS)
+            _save_restart_state(xt, yt, all_grad, xt_eff, None, None, [], None)
+
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
             bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
@@ -1775,6 +1842,7 @@ if __name__ == '__main__':
             print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
         if list_ratio_BS:
             print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
+        _eff_history_beta_IS = list(list_beta_IS)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
@@ -2470,13 +2538,41 @@ if __name__ == '__main__':
         print(f"[DOE WORKER] termine -> {os.environ['_DOE_OUT']}", flush=True)
         sys.exit(0)
 
-    # --- Reset log incremental ---
-    open(_POINT_LOG_FILE, "w").close()
-    print(f"[POINT LOG] reset -> {_POINT_LOG_FILE}", flush=True)
+    # --- Mode restart : charger le dump et preparer le re-enrichissement ---
+    if restart_enrich_only:
+        _rs = json.load(open(_RESTART_STATE_FILE))
+        xt = np.array(_rs['xt'], float)
+        yt = np.array(_rs['yt'], float)
+        all_grad = np.array(_rs['all_grad'], float)
+        _restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
+        if _rs.get('max_degree') is not None:
+            max_degree = int(_rs['max_degree'])
+        hf_2d_grid_fixed = _rs.get('hf_2d_grid')
+        _eff_history_EFF   = list(_rs.get('hist_EFF', []))
+        _eff_history_BB    = list(_rs.get('hist_BB', []))
+        _eff_history_BS    = list(_rs.get('hist_BS', []))
+        _eff_history_theta = list(_rs.get('hist_theta', []))
+        _eff_history_beta_IS = list(_rs.get('hist_beta_IS', []))
+        _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
+        _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
+        _point_log_round[0] = _enrich_round
+        with open(_POINT_LOG_FILE, "a") as _pf:
+            _pf.write(json.dumps({"phase": "_RESTART", "round": _enrich_round,
+                                  "n_total": int(len(xt)), "n_eff": len(_restart_xt_eff)}) + "\n")
+        print(f"[RESTART] charge {len(xt)} pts (dont {len(_restart_xt_eff)} EFF) "
+              f"depuis {_RESTART_STATE_FILE} (round {_enrich_round})", flush=True)
 
-    update_degree(n0)
-    event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
-    xt_eff = None
+        update_degree(len(xt))
+        event, g_ot, sigma_func = None, None, None
+        xt_eff = None
+    else:
+        # --- Reset log incremental ---
+        open(_POINT_LOG_FILE, "w").close()
+        print(f"[POINT LOG] reset -> {_POINT_LOG_FILE}", flush=True)
+
+        update_degree(n0)
+        event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
+        xt_eff = None
 
     if print_3D:
         print_3D_HF()
@@ -2532,7 +2628,9 @@ if __name__ == '__main__':
         print_results(modes[1], g_ot)
         print('Les résultats du mode 1 sont : ')
     print_results(best_result, g_ot)
+    result_IS = None
     if do_IS and modes:
         result_IS = run_IS(modes, event)
         print_results_IS(result_IS)
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
+    _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sps[0] if best_sps else None, modes, result_IS)
