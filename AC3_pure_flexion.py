@@ -1989,10 +1989,42 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [logPf_evolution] -> {fname}", flush=True)
 
+    # --- HF GRID CACHE ---
+    _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
+
+    def _load_hf_cache(n_grid_hf_local):
+        if not config_is_identical:
+            return None
+        if not os.path.exists(_HF_CACHE_FILE):
+            print(f"[HF CACHE] aucun cache ({_HF_CACHE_FILE}) -> calcul grille HF", flush=True)
+            return None
+        try:
+            d = json.load(open(_HF_CACHE_FILE))
+            print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (config_is_identical=True -> 0 SOCP grille)", flush=True)
+            return np.array(d['Z'])
+        except Exception as e:
+            print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
+        return None
+
+    def _save_hf_cache(Z, n_grid_hf_local):
+        try:
+            json.dump({'Z': Z.tolist()},
+                      open(_HF_CACHE_FILE, 'w'), indent=1)
+            print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE}", flush=True)
+        except Exception as e:
+            print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context=""):
         """Calcule la grille HF point par point avec progress + ETA.
+        Lecture/ecriture automatique d'un cache sidecar JSON.
         Met a jour hf_2d_grid_fixed. Retourne Z (n_grid_hf x n_grid_hf)."""
         global hf_2d_grid_fixed
+        cached = _load_hf_cache(n_grid_hf_local)
+        if cached is not None:
+            hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
+                                            'u2_min': u2_min, 'u2_max': u2_max,
+                                            'n_grid_hf': n_grid_hf_local}, 'Z': cached.tolist()}
+            return cached
         import time as _time_local
         _point_log_phase[0] = "HF"
         n_total = len(grid_hf)
@@ -2016,6 +2048,7 @@ if __name__ == '__main__':
                                         'u2_min': u2_min, 'u2_max': u2_max,
                                         'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
         print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+        _save_hf_cache(Z, n_grid_hf_local)
         return Z
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
