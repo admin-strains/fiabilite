@@ -127,13 +127,14 @@ if __name__ == '__main__':
     tol_EFF = 1e-3                                            # critere d'arret EFF
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'at_least_one'   # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
+    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     u1_eff_min, u1_eff_max = -7.5, 7.5
     u2_eff_min, u2_eff_max = -7.5, 7.5
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
+    print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
     save_history = True                       # True = copie les fichiers SOCP dans SOCP_history/
 
     # --------------------------------------------------------------------------- #
@@ -1622,12 +1623,17 @@ if __name__ == '__main__':
                   f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
             return beta_IS, pf_IS
 
-        def _three_form_is(g_ot_i, sigma_func_i, label):
+        def _three_form_is(g_ot_i, sigma_func_i, label, b_mid_precalc=None):
             """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
+            b_mid_precalc=(beta_IS, pf_IS) : reutilise le mu deja calcule (evite 1 FORM+IS redondant).
             Retourne (ratio, pf_mid, pf_sup, pf_inf) ou (None, None, None, None)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
-            b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} mu")
+            if b_mid_precalc is not None:
+                b_mid, pf_mid = b_mid_precalc
+                print(f"  [{label} mu] reutilise mu conv (pas de recalcul FORM/IS redondant)", flush=True)
+            else:
+                b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} mu")
             b_sup, pf_sup = _form_is_iter(g_sup_i, f"{label} sup")
             b_inf, pf_inf = _form_is_iter(g_inf_i, f"{label} inf")
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
@@ -1684,9 +1690,10 @@ if __name__ == '__main__':
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         # --- Ratio BB initial (avant tout enrichissement) ---
-        _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
-        list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
-        if EFF_criteria in ('BB', 'both', 'at_least_one'):
+        if print_Pf:
+            _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
+            list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
+        if EFF_criteria in ('BB', 'both', 'at_least_one') and print_Pf:
             list_ratio_BB.append(_ratio_init_bb)
             if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
                 count_valid_BB = 1
@@ -1710,16 +1717,19 @@ if __name__ == '__main__':
             degree_upgraded = (max_degree != _degree_avant)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
-            # --- FORM+IS inconditionnel : mid/sup/inf ---
-            iter_count += 1
-            _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}")
-            list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
-
             # --- Suivi convergence beta_IS ---
-            _b_mid, _ = _form_is_iter(g_ot, f"N={len(xt)} mu conv")
+            iter_count += 1
+            _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} mu conv")
+
+            # --- FORM+IS mid/sup/inf (conditionne par print_Pf) ---
+            if print_Pf:
+                _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
+                list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
 
             # --- Critere BB ---
             if EFF_criteria == 'BB':
+                if not print_Pf:
+                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
                 if _ratio_bb is not None and _ratio_bb < tol_BB:
                     count_valid_BB += 1
                 else:
@@ -1742,6 +1752,8 @@ if __name__ == '__main__':
 
             # --- Critere both ---
             if EFF_criteria == 'both':
+                if not print_Pf:
+                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} both] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1757,6 +1769,8 @@ if __name__ == '__main__':
 
             # --- Critere at_least_one ---
             if EFF_criteria == 'at_least_one':
+                if not print_Pf:
+                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1842,6 +1856,15 @@ if __name__ == '__main__':
             print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
         if list_ratio_BS:
             print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
+
+        # --- BB informatif final (1 appel _three_form_is apres la boucle) ---
+        if print_Pf:
+            # _ratio_bb deja calcule par le dernier _three_form_is dans la boucle
+            print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
+        else:
+            _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, "BB final", b_mid_precalc=(_b_mid, _pf_mid_conv))
+            print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
+
         _eff_history_beta_IS = list(list_beta_IS)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
@@ -2649,8 +2672,9 @@ if __name__ == '__main__':
         if not print_EFF_progres:
             print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
         print_EFF_graphs()
-        print_Pf_evolution()
-        print_logPf_evolution()
+        if print_Pf:
+            print_Pf_evolution()
+            print_logPf_evolution()
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
     if event is None:
