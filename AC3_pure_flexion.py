@@ -72,6 +72,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
+    config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     params_names = ['fc','fy']
     n_var = len(params_names)
 
@@ -743,8 +744,39 @@ if __name__ == '__main__':
             print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
         return SOL
 
+    # --- DOE cache ---
+    _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
+
+    def _load_doe_cache():
+        if not config_is_identical:
+            return None
+        if not os.path.exists(_DOE_CACHE_FILE):
+            print(f"[DOE CACHE] aucun cache ({_DOE_CACHE_FILE}) -> calcul DOE", flush=True)
+            return None
+        try:
+            d = json.load(open(_DOE_CACHE_FILE))
+            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (config_is_identical=True -> 0 SOCP DOE)", flush=True)
+            return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
+        except Exception as e:
+            print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
+        return None
+
+    def _save_doe_cache(xt, yt, all_grad):
+        try:
+            json.dump({"xt": np.asarray(xt).tolist(),
+                       "yt": np.asarray(yt).tolist(),
+                       "all_grad": np.asarray(all_grad).tolist()},
+                      open(_DOE_CACHE_FILE, "w"), indent=1)
+            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE}", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
     # --- DOE ---
     def build_DOE(n_doe=n0, eval_hf=True):
+        if not do_HF and eval_hf:
+            _cached = _load_doe_cache()
+            if _cached is not None:
+                return _cached
         dist = []
         if 'fc' in params_names:
             dist.append(loi_fc(fcm, cov_fc))
@@ -796,6 +828,7 @@ if __name__ == '__main__':
                 for i in range(n_doe):
                     print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
                 print("]", flush=True)
+            _save_doe_cache(xt, yt, all_grad)
             return xt, yt, all_grad
         return xt
 
