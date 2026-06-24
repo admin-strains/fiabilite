@@ -129,7 +129,8 @@ if __name__ == '__main__':
     EFF_criteria = 'at_least_one'   # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     u1_eff_min, u1_eff_max = -7.5, 7.5
     u2_eff_min, u2_eff_max = -7.5, 7.5
-    n_max_EFF = 30
+    n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
+    n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     save_history = True                       # True = copie les fichiers SOCP dans SOCP_history/
@@ -1564,7 +1565,7 @@ if __name__ == '__main__':
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
         algo_opti.setStartingPoint([0.0] * n_var)
-        algo_opti.setMaximumCallsNumber(n_max_EFF)
+        algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
         algo_opti.run()
         u_opt = algo_opti.getResult().getOptimalPoint()
         _sigG = sigma_func(u_opt)
@@ -1575,15 +1576,15 @@ if __name__ == '__main__':
 
         iter_count = 0
         if EFF_criteria == 'BB':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
         elif EFF_criteria == 'BS':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
         elif EFF_criteria == 'both':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
         elif EFF_criteria == 'at_least_one':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
         else:
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
         _beta_IS_0, _ = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
@@ -1706,7 +1707,7 @@ if __name__ == '__main__':
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
             algo_opti.setStartingPoint([0.0] * n_var)
-            algo_opti.setMaximumCallsNumber(n_max_EFF)
+            algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
             algo_opti.run()
             u_opt = algo_opti.getResult().getOptimalPoint()
 
