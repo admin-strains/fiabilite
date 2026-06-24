@@ -2,10 +2,66 @@
 
 Ce guide documente les modifications faites sur `AC3_pure_flexion.py` (branche `flexion`)
 qui **divergent** de ce qui existe dans `AC_moulin_blanc_2fy.py` (branche `moulin_blanc`).
-Le but : permettre au developpeur de moulin_blanc d'appliquer ces changements sur son code.
 
-Seules les differences sont documentees ici. Les fix identiques (fix1 a fix6) ne sont pas
-listes car ils sont deja en place dans moulin_blanc.
+**L'objectif final : les deux codes doivent etre IDENTIQUES.** Les seules differences
+autorisees sont :
+
+- `modelname`, `_path_ds`, chemins du projet
+- `params_names` (`['fc','fy']` vs `['fy1','fy2']`)
+- `dsCad.txt` / `dsLoad.txt` (geometrie, charges)
+- Parametres physiques (`fcm`, `fym`, `cov_*`, etc.)
+- Logique specifique 2fy (`group1_names`, `_sens_key_to_param`, etc.) vs fc/fy
+
+Toutes les fonctions utilitaires (`_save_socp_outputs`, `_append_point_log`,
+`_save_restart_state`, `_batch_mu_sigma`, `_doe_cache_sig`, etc.) doivent etre
+**le meme code** dans les deux fichiers. Ce n'est pas une "adaptation pour AC3" —
+c'est la version finale commune que moulin_blanc doit aussi adopter.
+
+## Principe de generalisation : tout passe par `params_names`
+
+Dans moulin_blanc actuellement, plusieurs fonctions hardcodent `fy1`/`fy2` :
+
+```python
+# _save_socp_outputs : signature hardcodee
+coords_str += f"_fy1{p1:.1f}_fy2{p2:.1f}"
+
+# _append_point_log : champs hardcodes
+rec = {"fy1": float(_x[0]), "fy2": float(_x[1]), ...}
+
+# _doe_cache_sig : taille des groupes hardcodee
+return {"g1": len(group1_names), "g2": len(group2_names), ...}
+```
+
+Dans la version finale (celle d'AC3 et celle que moulin_blanc doit adopter), tout
+passe par `params_names` :
+
+```python
+# _save_socp_outputs : generique
+coords_str += "_" + "_".join(f"{params_names[i]}{p_vals[i]:.1f}" for i in range(len(p_vals)))
+
+# _append_point_log : generique
+for i, p in enumerate(params_names):
+    rec[f"u_{p}"] = float(_u[i]) if i < len(_u) else None
+    rec[f"x_{p}"] = float(_x[i]) if i < len(_x) else None
+
+# _doe_cache_sig : generique (pas de g1/g2)
+return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
+```
+
+Le meme code produit :
+- Avec `params_names = ['fc','fy']` → `fc48.0_fy550.0`, champs `u_fc, x_fc, u_fy, x_fy`
+- Avec `params_names = ['fy1','fy2']` → `fy1235.0_fy2210.0`, champs `u_fy1, x_fy1, u_fy2, x_fy2`
+- Avec `params_names = ['fc','fy','F']` → marcherait aussi sans rien toucher
+
+**Pourquoi retirer `g1`/`g2` de `_doe_cache_sig`** : ces champs servaient a invalider
+le cache DOE si la taille des groupes changeait. Or la validation par signature est
+remplacee par `config_is_identical` (flag explicite utilisateur). Le champ `signature`
+dans le dump restart est purement informatif — `g1`/`g2` n'y apportent rien. Les
+groupes eux-memes (`group1_names`, `_sens_key_to_param`, etc.) restent dans le code
+moulin_blanc pour le parsing des sensibilites — ils disparaissent juste des fonctions
+utilitaires partagees.
+
+Les fix identiques (fix1 a fix6) ne sont pas listes car deja en place dans moulin_blanc.
 
 ---
 
@@ -215,3 +271,116 @@ Remplacer le bloc `rec = {...}` dans `_append_point_log` par la version generiqu
 ci-dessus. Renommer le fichier en `points_log.jsonl` (ou garder `_2fy` si prefere).
 Aucun autre changement — les points d'appel (`run_HF`, `build_DOE`, `run_EFF`,
 `print_results`, bloc principal reset) sont identiques.
+
+---
+
+## Modif 3b-prep — Renommage `n_max_EFF` + plafond `n_max_EFF_points`
+
+**Commit AC3** : `eeca06a`
+
+### Ce qui change par rapport a moulin_blanc
+
+Dans moulin_blanc, `n_max_EFF` controle le budget NLopt (`setMaximumCallsNumber`) —
+c'est le nombre d'evaluations du surrogate par NLopt pour trouver le max de EFF(u) a
+chaque iteration. Ce n'est PAS un plafond sur le nombre de points EFF ajoutes au DOE.
+
+Dans AC3, on clarifie :
+- **`n_NLopt_EFF = 30`** : budget NLopt GN_DIRECT (renommage de `n_max_EFF`)
+- **`n_max_EFF_points = 30`** : plafond de points EFF ajoutes (nouveau)
+
+`len(xt_eff) < n_max_EFF_points` est ajoute au debut de **toutes les `_cond`** de
+`run_EFF` (BB, BS, both, at_least_one, else). La boucle EFF s'arrete si :
+- BB/BS converge (comme avant), **ou**
+- le plafond `n_max_EFF_points` est atteint (nouveau)
+
+### Pourquoi ce choix
+
+Le plafond sert de filet de securite en run normal ET de mecanisme pour le mode
+restart (modif 3b) : en reprise, `xt_eff` demarre non-vide (charge du dump), donc
+`len(xt_eff) < n_max_EFF_points` laisse automatiquement le budget restant.
+Pas besoin de `n_enrich_extra` comme dans moulin_blanc.
+
+### Comment appliquer a moulin_blanc
+
+1. Renommer `n_max_EFF` en `n_NLopt_EFF` dans les 2 appels `setMaximumCallsNumber`
+2. Ajouter `n_max_EFF_points = 30` dans les options utilisateur
+3. Ajouter `len(xt_eff) < n_max_EFF_points and` au debut de chaque `_cond`
+4. Supprimer `n_enrich_extra` (devenu inutile — voir modif 3b)
+
+---
+
+## Modif 3b — Restart state (dump + reprise)
+
+**Commit AC3** : `46991be`
+
+Cette modif a deux parties : le dump (ecriture du JSON) et la reprise (chargement).
+
+### Partie A — Le dump (`_save_restart_state`)
+
+**Identique a moulin_blanc** sauf 2 points :
+
+1. **`_doe_cache_sig()`** : la version AC3 n'a pas `g1`/`g2` (pas de groupes acier) :
+```python
+# moulin_blanc :
+def _doe_cache_sig():
+    return {"n0": n0, "params": list(params_names), "n_var": n_var,
+            "g1": len(group1_names), "g2": len(group2_names), "modelname": modelname}
+
+# AC3 :
+def _doe_cache_sig():
+    return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
+```
+Cette fonction est appelee par `_save_restart_state` pour le champ `signature` informatif.
+Elle n'est PAS utilisee par le DOE cache (qui est controle par `config_is_identical`).
+
+2. **Nom du fichier** : `restart_state.json` au lieu de `restart_state_2fy.json`.
+
+**Tout le reste est identique** : les 22 champs du JSON, la fonction `_u_beta`, les
+appels (incremental dans `run_EFF` apres chaque point, final apres `print_visu`),
+la globale `_eff_history_beta_IS`, le snapshot en fin de `run_EFF`.
+
+### Partie B — La reprise (`restart_enrich_only`)
+
+Le bloc de chargement dans le code principal est **identique a moulin_blanc** :
+charge le JSON, injecte xt/yt/all_grad/max_degree/hf_2d_grid/historiques, set
+`_enrich_round`/`_round_sizes_prev`/`_restart_xt_eff`/`_point_log_round`, append
+marqueur `_RESTART` dans le point log.
+
+Le seeding dans `run_EFF` est **identique** :
+- `xt_eff = list(_restart_xt_eff) if restart_enrich_only else []`
+- `list_beta_IS` seede depuis `_eff_history_beta_IS` si restart
+- Historiques non reset si restart
+
+**Une divergence majeure : pas d'override de `_cond` en mode reprise.**
+
+Dans moulin_blanc, la reprise ecrase `_cond` et ignore BB/BS :
+```python
+# moulin_blanc :
+if restart_enrich_only:
+    _cond = lambda: (len(xt_eff) - _n_eff_start) < n_enrich_extra
+```
+
+Dans AC3, `_cond` est **identique en mode normal et en mode reprise**. Les criteres
+BB/BS restent actifs. Le plafond `n_max_EFF_points` (modif 3b-prep) controle le
+budget total via `len(xt_eff) < n_max_EFF_points` dans chaque `_cond`.
+
+| | Moulin blanc | AC3 |
+|---|---|---|
+| `_cond` en reprise | Override : force N points, ignore BB/BS | Pas d'override : meme `_cond` qu'en normal |
+| Comment ajouter des points | `n_enrich_extra = 5` | Augmenter `n_max_EFF_points` (ex: 30 → 50) |
+| BB/BS actifs en reprise | Non | Oui |
+| `n_enrich_extra` | Oui (variable utilisateur) | Non (inutile) |
+
+### Workflow typique en mode reprise (AC3)
+
+1. Run initial (`n_max_EFF_points=30`) → sort par le plafond apres 30 pts, BB/BS pas converge
+2. Pas contente → mettre `restart_enrich_only=True`, augmenter `n_max_EFF_points=50`
+3. La reprise charge les 30 pts, repart dans EFF, continue jusqu'a BB/BS converge ou 50 atteint
+4. Si sort encore par plafond → `n_max_EFF_points=70`, relancer
+
+### Comment appliquer a moulin_blanc
+
+1. Retirer `n_enrich_extra` et son override de `_cond` en mode restart
+2. Ajouter `n_max_EFF_points` dans les `_cond` (modif 3b-prep ci-dessus)
+3. Renommer `restart_state_2fy.json` en `restart_state.json`
+4. Adapter `_doe_cache_sig()` (retirer `g1`/`g2` ou garder si pertinent pour 2fy)
