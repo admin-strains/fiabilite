@@ -310,6 +310,8 @@ if __name__ == '__main__':
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
     _fosm_u0_cache     = [None] # cache run_HF([0,0]) FOSM : calcule 1x, reutilise pour tous les modes
+    _point_log_phase   = ["?"]  # phase courante pour le log incremental (HF/EFF/USTAR ; DOE logue a part)
+    _point_log_round   = [0]    # round de re-enrichissement (0 = run initial)
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
@@ -688,6 +690,7 @@ if __name__ == '__main__':
             grad_HF_U = J_Tinv_T * ot.Point(grad_HF_X)
         if sensitivity and any(v is None for v in grad_HF_U):
             raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
+        _append_point_log(_point_log_phase[0], u, x_point, g_HF)
         return g_HF, grad_HF_U, grad_HF_X
 
     # --- DOE PARALLELE ---
@@ -772,6 +775,23 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
+    # --- LOG INCREMENTAL PAR POINT ---
+    _POINT_LOG_FILE = os.path.join(_path_ds, "points_log.jsonl")
+    def _append_point_log(phase, u, x, g):
+        try:
+            _u = list(u) if u is not None else []
+            _x = list(x) if x is not None else []
+            rec = {"phase": phase, "round": _point_log_round[0],
+                   "g": None if g is None else float(g),
+                   "lambda": None if g is None else float(g) + 1.0}
+            for i, p in enumerate(params_names):
+                rec[f"u_{p}"] = float(_u[i]) if i < len(_u) else None
+                rec[f"x_{p}"] = float(_x[i]) if i < len(_x) else None
+            with open(_POINT_LOG_FILE, "a") as _pf:
+                _pf.write(json.dumps(rec) + "\n")
+        except Exception as e:
+            print(f"[POINT LOG] append echoue ({type(e).__name__}: {e})", flush=True)
+
     # --- DOE ---
     def build_DOE(n_doe=n0, eval_hf=True):
         if not do_HF and eval_hf:
@@ -820,6 +840,8 @@ if __name__ == '__main__':
                 for j in range (n_var):
                     all_grad[i][j]= grad_U_g[j]
                     SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
+            for i in range(n_doe):
+                _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
                 print("yt_doe = [")
                 for i in range(n_doe):
@@ -1509,6 +1531,7 @@ if __name__ == '__main__':
         # --- Si aucune branche ne tourne, on ne fait rien ---
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
+        _point_log_phase[0] = "EFF"
 
         xt_eff = []
 
@@ -2099,6 +2122,7 @@ if __name__ == '__main__':
         plt.show(block=False)
 
     def print_results(best_result, g_ot):
+        _point_log_phase[0] = "USTAR"
         u_star = best_result.getStandardSpaceDesignPoint()
         n_iter = best_result.getOptimizationResult().getIterationNumber()
         dist_X = dist_jointe()
@@ -2445,6 +2469,10 @@ if __name__ == '__main__':
             json.dump(_wout, _f)
         print(f"[DOE WORKER] termine -> {os.environ['_DOE_OUT']}", flush=True)
         sys.exit(0)
+
+    # --- Reset log incremental ---
+    open(_POINT_LOG_FILE, "w").close()
+    print(f"[POINT LOG] reset -> {_POINT_LOG_FILE}", flush=True)
 
     update_degree(n0)
     event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
