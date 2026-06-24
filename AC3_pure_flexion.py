@@ -77,19 +77,10 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
-    config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
+    config_is_identical = False   #False = recalcule le DOE (mettre True apres 1er run reussi avec ces params)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
-    params_names = ['fc','fy']
-    n_var = len(params_names)
+    # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
-    # --------------------------------------------------------------------------- #G
-    # CARACTERISTIQUES DU MODELE                                                  #
-
-    # --- Paramètres variables ---
-    fcm, fym = 48, 550 #MPa
-    cov_fc, cov_fy = 0.12, None
-    fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
-    
     n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
     rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
 
@@ -159,24 +150,15 @@ if __name__ == '__main__':
     print_3D = False
     
     # --- Print facultatifs, par défaut à False ---
-    print_ana = False    #True que pour pure_flexion (flexion_claude que dans ce cas) 
+    print_ana = False    #True que pour pure_flexion (flexion_claude que dans ce cas)
+    # print_ana est force a False si les params ne sont pas tous dans PARAM_CONFIG_CAD
+    # (flexion_claude n'est valide que pour des params materiaux CAD comme fc/fy)
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
 
     # --- Résultats fixés ---
-    hf_3d_grid_fixed = {
-        'params': (-10.0, 10.0, -10.0, 10.0, 7),
-        'Z': [
-            [-0.359874, -0.266997, -0.205356, -0.162941, -0.133274, -0.118529, -0.110761],
-            [-0.259757, -0.080302,  0.041437,  0.123736,  0.180376,  0.218425,  0.237580],
-            [-0.224965,  0.048410,  0.247795,  0.382025,  0.475826,  0.541447,  0.578053],
-            [-0.196753,  0.115993,  0.413867,  0.617429,  0.752362,  0.844787,  0.910014],
-            [-0.168402,  0.147183,  0.541008,  0.821024,  1.009377,  1.139576,  1.232379],
-            [-0.140437,  0.175700,  0.624863,  0.998493,  1.249463,  1.421116,  1.540467],
-            [-0.112244,  0.204017,  0.672091,  1.150387,  1.477693,  1.691754,  1.840008],
-        ]
-    }
-    hf_2d_grid_fixed = {'params': {'u1_min': -7.5, 'u1_max': 7.5, 'u2_min': -7.5, 'u2_max': 7.5, 'n_grid_hf': 7}, 'Z': [[-0.3048427695030216, -0.22891590973411535, -0.17506898503051704, -0.13244927109611004, -0.10129543042397982, -0.0765360998544049, -0.062249235714368245], [-0.2257816162078632, -0.11365958979528101, -0.028997372818430844, 0.03332663340911579, 0.08064234781595059, 0.11726736695066453, 0.14310361369809366], [-0.17805651290624536, -0.018910316459999188, 0.09918786130374846, 0.1858251917575513, 0.2531158870931547, 0.3021885029686284, 0.34268145767558456], [-0.1549148648029084, 0.05269494738730307, 0.20998061097485365, 0.3299189462908805, 0.41580441863004003, 0.4826545516122871, 0.5336960785866443], [-0.13729312621600687, 0.10035424842020402, 0.3052273682406095, 0.4578253209378169, 0.5686256147041158, 0.6553285879729309, 0.7187290068785122], [-0.11968311744349758, 0.12831008336264493, 0.3838387509925443, 0.5728516899364615, 0.7147663269643572, 0.8209517903183503, 0.9004409022006188], [-0.10240227164036131, 0.14626332604325398, 0.4432055444725922, 0.676394666281652, 0.8535084808020308, 0.9788340488849436, 1.0781099259800206]]}
+    hf_3d_grid_fixed = None
+    hf_2d_grid_fixed = None
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
@@ -346,15 +328,15 @@ if __name__ == '__main__':
 
     # --- DSCAD ET DSLOAD ---
     def patch_params(path, **params):
-        """Reecrit dsCad.txt avec de nouvelles valeurs de parametres."""
-        cad = os.path.join(path, 'dsCad.txt') #donne un nom au txt
-        with open(cad, 'r') as f: #on stocke son contenu
-            content = f.read()
-        for name, value in params.items(): #on le modifie variable par variable pour celles dans la liste params
-            content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
-        with open(cad, 'w') as f:
-            f.write(content) #on l'écrit dans un fichier vide f (car 'w' donc vidé) - dsCad.txt est modifié
-        # A COMPLETER AVEC COPIE COLLE DE CA AVEC DSLOAD QUAND ON AJOUTE LES LOADS MODIFIES.
+        """Reecrit dsCad.txt et dsLoad.txt avec de nouvelles valeurs de parametres."""
+        for filename in ('dsCad.txt', 'dsLoad.txt'):
+            fpath = os.path.join(path, filename)
+            with open(fpath, 'r') as f:
+                content = f.read()
+            for name, value in params.items():
+                content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
+            with open(fpath, 'w') as f:
+                f.write(content)
 
     # --- DISTRIBUTIONS ---
     
@@ -434,17 +416,24 @@ if __name__ == '__main__':
         p = PARAMS.get(usage, PARAMS['office'])
         return ot.Exponential(1.0 / p['mp'], 0.0)
 
+    # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    PARAM_CONFIG_CAD = {
+        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
+               'loi': loi_fy, 'mean': 550, 'cov': None},
+    }
+    PARAM_CONFIG_LOAD = {
+        'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0"},
+               'loi': loi_F_permanente, 'mean': 1.0, 'cov': 0.05},
+    }
+    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
+    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
+    n_var = len(params_names)
+    if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
+        print_ana = False
+
     def dist_jointe():
-        dist = []
-        if 'fc' in params_names:
-            dist.append(loi_fc(fcm, cov_fc))
-        if 'fy' in params_names:
-            dist.append(loi_fy(fym, cov_fy))
-        #AJOUTER suite pour plus de variable 'if 'load' in params_names' etc.
-        #  if 'F' in params_names:
-        #      dist.append(loi_F_permanente(Fm, cov_F))    # ou loi_F_exploitation(Fm, usage=...)
-        dist_X   = ot.JointDistribution(dist)
-        return dist_X
+        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
+                                     for p in params_names])
 
     # --- APPELS STRAINS ---
     _socp_call_counter = [0]
@@ -554,10 +543,9 @@ if __name__ == '__main__':
 
             if sensitivity:
                 kwargs["sensitivity_analysis"] = "true"
-                kwargs["sensitivity_regions"] = json.dumps([
-                    {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
-                    {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-                ]) #transformée en texte json (liste de caractères) pour être lisible par C++
+                kwargs["sensitivity_regions"] = json.dumps(
+                    [PARAM_CONFIG[p]['sens'] for p in params_names]
+                )
 
             kwargs["model_handle"] = model.GETHANDLEPTR()
             CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
@@ -577,15 +565,12 @@ if __name__ == '__main__':
             if sensitivity and 'Sensitivity' in d['info']:
                 print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
-                    #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
-                    #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                    #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. 
-                    if 'COMPRESSIVE_STRENGTH' in k: 
-                        SOL[i]['dg_fc']= v
-                    if 'YIELD_STRENGTH' in k: 
-                        SOL[i]['dg_fy']= v
+                    for p in params_names:
+                        if PARAM_CONFIG[p]['sens']['param'] in k:
+                            SOL[i][f'dg_{p}'] = v
+                            break
                     if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
-                        break    
+                        break
         return SOL
 
     def run_HF(u):
@@ -663,10 +648,9 @@ if __name__ == '__main__':
 
         if sensitivity:
             kwargs["sensitivity_analysis"] = "true"
-            kwargs["sensitivity_regions"] = json.dumps([
-                {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
-                {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-            ]) #transformée en texte json (liste de caractères) pour être lisible par C++
+            kwargs["sensitivity_regions"] = json.dumps(
+                [PARAM_CONFIG[p]['sens'] for p in params_names]
+            )
 
         kwargs["model_handle"] = model.GETHANDLEPTR()
         CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
@@ -687,13 +671,10 @@ if __name__ == '__main__':
         if sensitivity and 'Sensitivity' in d['info']:
             print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
             for k, v in d['info']['Sensitivity'].items():
-                #je ne sais pas encore comment généraliser pour le code ci dessous donc je vais juste
-                #faire if 1, if 2, mais on devrait faire une double boucle, mais la question est comment
-                #on définit la liste des noms 'tensile_strength' etc. Voir dans dsCad. #faudrait un truc avec des clés et des asocciations officielels entre fc et compressive strength.... 
-                if 'COMPRESSIVE_STRENGTH' in k: 
-                    grad_HF_X[params_names.index('fc')] = v
-                if 'YIELD_STRENGTH' in k: 
-                    grad_HF_X[params_names.index('fy')] = v
+                for p in params_names:
+                    if PARAM_CONFIG[p]['sens']['param'] in k:
+                        grad_HF_X[params_names.index(p)] = v
+                        break
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
                     break
             J_Tinv = T_inv.gradient(u)
@@ -863,13 +844,8 @@ if __name__ == '__main__':
             _cached = _load_doe_cache()
             if _cached is not None:
                 return _cached
-        dist = []
-        if 'fc' in params_names:
-            dist.append(loi_fc(fcm, cov_fc))
-        if 'fy' in params_names:
-            dist.append(loi_fy(fym, cov_fy))
-        dist_X   = ot.JointDistribution(dist)
-        T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n﻿cessaire puis l'applique ici
+        dist_X   = dist_jointe()
+        T     = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
         dist_U = dist_X.getStandardDistribution()
         lhs    = ot.LHSExperiment(dist_U, n_doe)
@@ -974,13 +950,8 @@ if __name__ == '__main__':
             Med = F * L
 
             # --- Définition de la transformation isoprobabiliste ---
-            self.fym = fy_otparams[0]
-            dist = []
-            if 'fc' in params_names:
-                dist.append(loi_fc(*fc_otparams))
-            if 'fy' in params_names:
-                dist.append(loi_fy(*fy_otparams))
-            dist_X     = ot.JointDistribution(dist)
+            self.fym = PARAM_CONFIG['fy']['mean'] if 'fy' in PARAM_CONFIG else 550
+            dist_X     = dist_jointe()
             self.T_inv = dist_X.getInverseIsoProbabilisticTransformation()
             self.T     = dist_X.getIsoProbabilisticTransformation()
 
@@ -2568,8 +2539,8 @@ if __name__ == '__main__':
                     ng = grad_sp_fixed[lbl]['neg_grad']
                     ax.quiver(u1_s, u2_s, 0.0, ng[0], ng[1], 0.0,
                               color=col, length=3.0, normalize=True, arrow_length_ratio=0.3)
-        ax.set_xlabel('u1 (fc)')
-        ax.set_ylabel('u2 (fy)')
+        ax.set_xlabel(f'u1 ({params_names[0]})')
+        ax.set_ylabel(f'u2 ({params_names[1]})')
         ax.set_zlabel('g_HF')
         ax.set_title(f'Surface g_HF - {n_grid_hf}x{n_grid_hf} pts HF')
         ax.legend()
