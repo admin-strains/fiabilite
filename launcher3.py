@@ -21,5 +21,9 @@ sys.path.insert(0, r'C:\workspace\front')
 sys.path.insert(0, r'C:\_workingDir\_SF\fiabilite')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion')
 
-# Run the target script
-exec(open(r'C:\_workingDir\_SF\test flexion\AC3_pure_flexion.py').read(), {'__name__': '__main__'})
+# Run the target script — guard __main__ + freeze_support pour que les
+# subprocesses DOE paralleles (Windows spawn) ne re-executent pas tout.
+import multiprocessing as mp
+if __name__ == "__main__":
+    mp.freeze_support()
+    exec(open(r'C:\_workingDir\_SF\test flexion\AC3_pure_flexion.py').read(), {'__name__': '__main__'})

@@ -53,6 +53,7 @@ def _parse(text, name):
 
 if __name__ == '__main__':
     modelname = "test_pure_flexion"
+    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
     _path_ds = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
@@ -70,6 +71,7 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
+    n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     params_names = ['fc','fy']
     n_var = len(params_names)
 
@@ -686,6 +688,61 @@ if __name__ == '__main__':
             raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
         return g_HF, grad_HF_U, grad_HF_X
 
+    # --- DOE PARALLELE ---
+    def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
+        """Parallelise les SOCP du DOE via subprocesses independants.
+        Chaque worker = launcher3.py relance en mode _DOE_WORKER sur une copie .ds isolee."""
+        import subprocess as _sp
+        storage = "C:\\workspace\\storage\\admin\\SF\\"
+        base_ds = storage + base_modelname + ".ds"
+        npts = len(SOL)
+        n_workers = max(1, min(n_workers, npts))
+        threads_per = max(1, 32 // n_workers)
+        batches = [[] for _ in range(n_workers)]
+        for i in range(npts):
+            batches[i % n_workers].append(i)
+        print(f"  [DOE PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per} threads/worker)", flush=True)
+        procs = []
+        for w, idxs in enumerate(batches):
+            if not idxs:
+                continue
+            wname = base_modelname + ".ds\\_doe_workers\\doew%d" % w
+            wds = storage + wname + ".ds"
+            os.makedirs(wds, exist_ok=True)
+            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
+            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
+            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
+            task_file = wds + "\\_doe_task.json"
+            out_file = wds + "\\_doe_out.json"
+            with open(task_file, "w") as _f:
+                json.dump(task, _f)
+            if os.path.exists(out_file):
+                os.remove(out_file)
+            env = dict(os.environ,
+                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
+                       _DOE_MAIN_DS=base_ds,
+                       _FIAB_LOG_REDIRECTED="1",
+                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
+            wlog = open(wds + "\\_doe_worker.log", "w")
+            print(f"    -> worker {w}: points {idxs}", flush=True)
+            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\launcher3.py"],
+                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
+            procs.append((p, out_file, wlog, w, idxs))
+        for p, out_file, wlog, w, idxs in procs:
+            rc = p.wait(); wlog.close()
+            print(f"    <- worker {w} fini (rc={rc})", flush=True)
+        for p, out_file, wlog, w, idxs in procs:
+            if not os.path.exists(out_file):
+                raise RuntimeError(f"[DOE PARALLELE] worker {w} sans sortie {out_file} (voir _doe_worker.log)")
+            res = json.load(open(out_file))
+            for i_str, d in res.items():
+                i = int(i_str)
+                SOL[i]['g'] = d['g']
+                for q in params_names:
+                    SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
+            print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
+        return SOL
+
     # --- DOE ---
     def build_DOE(n_doe=n0, eval_hf=True):
         dist = []
@@ -716,7 +773,10 @@ if __name__ == '__main__':
             for i in range(n_doe):
                 for j in range(n_var):
                     SOL[i][params_names[j]] = X_doe[i][j]
-            SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
+            if n_workers_DOE and n_workers_DOE > 1:
+                SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
+            else:
+                SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
             yt = np.array([SOL[i]['g'] for i in range(n_doe)]).reshape(-1, 1)
             all_grad = np.zeros((n_doe, n_var))
             for i in range (n_doe):
@@ -2337,6 +2397,21 @@ if __name__ == '__main__':
     """
     DEBUT DE CODE
     """
+    # --- Mode worker DOE parallele : calcule ses points et sort ---
+    if os.environ.get("_DOE_WORKER"):
+        _wtask = json.load(open(os.environ["_DOE_WORKER"]))
+        _wSOL = [{p: float(pt[p]) for p in params_names} for pt in _wtask["points"]]
+        print(f"[DOE WORKER] modelname={modelname} | {len(_wSOL)} points a calculer", flush=True)
+        _wSOL = run_one_SOL(modelname, _wSOL, params_names, sensitivity=True, with_sens_dict=None)
+        _wout = {}
+        for _k, _pt in enumerate(_wtask["points"]):
+            _wout[str(_pt["idx"])] = dict({"g": _wSOL[_k]["g"]},
+                                          **{f"dg_{q}": _wSOL[_k].get(f"dg_{q}") for q in params_names})
+        with open(os.environ["_DOE_OUT"], "w") as _f:
+            json.dump(_wout, _f)
+        print(f"[DOE WORKER] termine -> {os.environ['_DOE_OUT']}", flush=True)
+        sys.exit(0)
+
     update_degree(n0)
     event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
     xt_eff = None
