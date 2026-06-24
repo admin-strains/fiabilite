@@ -1989,6 +1989,35 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [logPf_evolution] -> {fname}", flush=True)
 
+    def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context=""):
+        """Calcule la grille HF point par point avec progress + ETA.
+        Met a jour hf_2d_grid_fixed. Retourne Z (n_grid_hf x n_grid_hf)."""
+        global hf_2d_grid_fixed
+        import time as _time_local
+        _point_log_phase[0] = "HF"
+        n_total = len(grid_hf)
+        Z_flat = []
+        _t_start = _time_local.perf_counter()
+        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context}) #####", flush=True)
+        for i, pt in enumerate(grid_hf):
+            _t_pt0 = _time_local.perf_counter()
+            g_val = run_HF(pt)[0]
+            Z_flat.append(g_val)
+            _t_pt = _time_local.perf_counter() - _t_pt0
+            _t_elapsed = _time_local.perf_counter() - _t_start
+            _t_avg = _t_elapsed / (i + 1)
+            _t_eta = _t_avg * (n_total - i - 1)
+            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
+                  f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
+        _t_total = (_time_local.perf_counter() - _t_start) / 60
+        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
+        Z = np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+        hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
+                                        'u2_min': u2_min, 'u2_max': u2_max,
+                                        'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
+        print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+        return Z
+
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
         Sauvegarde en PNG dans out_dir_eff sans afficher de fenetre."""
@@ -2017,11 +2046,7 @@ if __name__ == '__main__':
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
-                                                'u2_min': u2_min, 'u2_max': u2_max,
-                                                'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_planche_EFF")
 
         # --- Figure ---
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(21, 6))
@@ -2106,9 +2131,7 @@ if __name__ == '__main__':
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_EFF")
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
 
         # --- Points DOE ---
@@ -2163,9 +2186,7 @@ if __name__ == '__main__':
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_sigma")
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
 
         if xt is not None:
@@ -2278,9 +2299,7 @@ if __name__ == '__main__':
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = np.array([run_HF(pt)[0] for pt in grid_hf]).reshape(n_grid_hf, n_grid_hf)
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu")
             ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
