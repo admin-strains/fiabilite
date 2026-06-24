@@ -129,6 +129,7 @@ if __name__ == '__main__':
     n_max_EFF = 30
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
+    save_history = True                       # True = copie les fichiers SOCP dans SOCP_history/
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
@@ -549,10 +550,11 @@ if __name__ == '__main__':
             with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
                 d = json.load(f) #chargement du fichier .dsmetares
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
-            _socp_call_counter[0] += 1
-            _save_socp_outputs(path, AnalysisName,
-                               prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
-                               p_vals=[float(SOL[i][p]) for p in params_names])
+            if save_history:
+                _socp_call_counter[0] += 1
+                _save_socp_outputs(path, AnalysisName,
+                                   prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
+                                   p_vals=[float(SOL[i][p]) for p in params_names])
             for p in params_names:
                 SOL[i][f'dg_{p}'] = None
             if sensitivity and 'Sensitivity' in d['info']:
@@ -657,11 +659,12 @@ if __name__ == '__main__':
         with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
             d = json.load(f) #chargement du fichier .dsmetares
         g_HF=d['info']['Primal_bound'][0] -1
-        _socp_call_counter[0] += 1
-        _save_socp_outputs(path, AnalysisName,
-                           prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
-                           u1=float(u[0]), u2=float(u[1]),
-                           p_vals=[float(x_point[j]) for j in range(n_var)])
+        if save_history:
+            _socp_call_counter[0] += 1
+            _save_socp_outputs(path, AnalysisName,
+                               prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
+                               u1=float(u[0]), u2=float(u[1]),
+                               p_vals=[float(x_point[j]) for j in range(n_var)])
         grad_HF_X=[None]*n_var
         grad_HF_U=[None]*n_var
         if sensitivity and 'Sensitivity' in d['info']:
