@@ -25,3 +25,6 @@ C：tmpform_out.txt
 
 # Sessions Claude
 global_resume_session*.md
+
+# Logs de tâches en arrière-plan (build/deploy/UI) — déplacés vers ~/scripts_claude/
+/*.log

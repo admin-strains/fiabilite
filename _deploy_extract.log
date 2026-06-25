@@ -1,6 +1,0 @@
-=== Deploy CmnVISU.dll + CetVISU.pyd ===
-Deploy OK
-=== Stop Django ===
-=== Restart Django ===
-=== Delete cached dsviewres for L-shape ===
-dsviewres cleared
