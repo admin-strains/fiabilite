@@ -412,15 +412,17 @@ if __name__ == '__main__':
 
     # --- DSCAD ET DSLOAD ---
     def patch_params(path, **params):
-        """Reecrit dsCad.txt avec de nouvelles valeurs de parametres."""
-        cad = os.path.join(path, 'dsCad.txt') #donne un nom au txt
-        with open(cad, 'r') as f: #on stocke son contenu
-            content = f.read()
-        for name, value in params.items(): #on le modifie variable par variable pour celles dans la liste params
-            content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
-        with open(cad, 'w') as f:
-            f.write(content) #on l'écrit dans un fichier vide f (car 'w' donc vidé) - dsCad.txt est modifié
-        # A COMPLETER AVEC COPIE COLLE DE CA AVEC DSLOAD QUAND ON AJOUTE LES LOADS MODIFIES.
+        """Reecrit dsCad.txt ET dsLoad.txt avec de nouvelles valeurs de parametres.
+        Materiaux (fy*, fc) -> matchent dans dsCad ; charges -> matchent dans dsLoad.
+        Pour 2-fy (que des aciers) le regex ne matche rien dans dsLoad -> reecrit identique (no-op)."""
+        for filename in ('dsCad.txt', 'dsLoad.txt'):
+            fpath = os.path.join(path, filename)
+            with open(fpath, 'r') as f:
+                content = f.read()
+            for name, value in params.items():   # on remplace variable par variable
+                content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
+            with open(fpath, 'w') as f:
+                f.write(content)
 
     # --- DISTRIBUTIONS ---
     
