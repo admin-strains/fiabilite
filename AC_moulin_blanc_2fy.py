@@ -226,16 +226,14 @@ if __name__ == '__main__':
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
     # --- MODE REPRISE / RE-ENRICHISSEMENT (2026-06-19) ---
-    # True = ne fait QUE re-enrichir : lit restart_state_2fy.json (xt/yt/all_grad + degre + histos
-    # + courbe rouge), refit le surrogate, ajoute EXACTEMENT n_enrich_extra nouveaux points EFF,
+    # True = ne fait QUE re-enrichir : lit restart_state.json (xt/yt/all_grad + degre + histos
+    # + courbe rouge), refit le surrogate, continue l'enrichissement selon le critere EFF courant
+    # (budget = n_max_EFF_points ; pour "+N relatif a la reprise" : EFF_criteria='n_points' + n_eff_target),
     # puis re-ecrit le MEME dump (round incremente) + append au point-log. Chainable plusieurs fois.
     # Skip DOE et courbe rouge (reutilises du dump) -> pas de recalcul SOCP inutile.
     restart_enrich_only = False
-    n_enrich_extra      = 2       # nombre de NOUVEAUX points EFF a ajouter par run de reprise
-    # override par env (lancer une reprise sans editer le fichier) : _RESTART_ENRICH=1 _N_ENRICH_EXTRA=2
+    # override par env : _RESTART_ENRICH=1
     restart_enrich_only = (os.environ.get("_RESTART_ENRICH") == "1") or restart_enrich_only
-    if os.environ.get("_N_ENRICH_EXTRA"):
-        n_enrich_extra = int(os.environ["_N_ENRICH_EXTRA"])
 
 
     
@@ -907,7 +905,7 @@ if __name__ == '__main__':
     #       et le recap final (print_visu),
     #   (c) reprendre l'enrichissement et rajouter des points (xt/yt/all_grad + u* de depart).
     # Pour l'instant : DUMP UNIQUEMENT. La relecture/reenrichissement sera codee dans un 2e temps.
-    _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state_2fy.json")
+    _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state.json")
     def _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS):
         def _u_beta(r):
             try:
@@ -1745,7 +1743,7 @@ if __name__ == '__main__':
 
         _point_log_phase[0] = "EFF"   # les run_HF d'enrichissement sont taggues EFF
         # En reprise : on reseed xt_eff avec les EFF deja calcules (pour que TOUS les triangles
-        # rouges s'affichent dans les plots), et on ne forcera que n_enrich_extra NOUVEAUX points.
+        # rouges s'affichent dans les plots) ; l'enrichissement continue selon le critere EFF courant.
         xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
         _n_eff_start = len(xt_eff)
 
@@ -1860,8 +1858,6 @@ if __name__ == '__main__':
             _cond = lambda: (len(xt_eff) - _n_eff_start) < n_eff_target
         else:
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
-        if restart_enrich_only:   # reprise : on force EXACTEMENT n_enrich_extra nouveaux points (prioritaire)
-            _cond = lambda: (len(xt_eff) - _n_eff_start) < n_enrich_extra
 
         _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
         global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_beta_IS
@@ -2812,11 +2808,10 @@ if __name__ == '__main__':
         _point_log_round[0] = _enrich_round
         with open(_POINT_LOG_FILE, "a") as _pf:            # APPEND + ligne-marqueur (pas de reset)
             _pf.write(json.dumps({"phase": "_RESTART", "round": _enrich_round,
-                                  "loaded": int(len(xt)), "n_eff_loaded": len(_restart_xt_eff),
-                                  "to_add": n_enrich_extra}) + "\n")
+                                  "loaded": int(len(xt)), "n_eff_loaded": len(_restart_xt_eff)}) + "\n")
         print(f"[RESTART] round {_enrich_round} : charge {len(xt)} pts ({len(_restart_xt_eff)} EFF), "
-              f"max_degree={max_degree}, courbe_rouge_reutilisee={hf_2d_grid_fixed is not None}, "
-              f"+{n_enrich_extra} nouveaux points EFF a ajouter", flush=True)
+              f"max_degree={max_degree}, courbe_rouge_reutilisee={hf_2d_grid_fixed is not None} "
+              f"-> enrichissement selon critere EFF (cap n_max_EFF_points)", flush=True)
     else:
         try:   # reset du log incremental par point (1 seule fois, process principal)
             open(_POINT_LOG_FILE, "w").close()

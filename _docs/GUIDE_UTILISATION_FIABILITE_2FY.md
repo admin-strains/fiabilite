@@ -194,7 +194,7 @@ Le solveur SOCP C++ de STRAINS utilise **MKL multi-thread** (~32 cœurs). Par d�
 
 Dans le dossier `<projet>.ds/` :
 - `log_2fy_<ts>.log` — log complet
-- `restart_state_2fy.json`, `points_log_2fy.jsonl` — état (reprise possible)
+- `restart_state.json`, `points_log_2fy.jsonl` — état (reprise possible)
 - `.dscad` / `.dsmed` / `.dsmetares` — fichiers intermédiaires STRAINS
 
 Dans `output/png_EFF_moulin_blanc/png_EFF_<ts>/` :
