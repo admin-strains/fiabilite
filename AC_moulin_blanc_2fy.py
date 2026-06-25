@@ -215,6 +215,7 @@ if __name__ == '__main__':
 
     # --- Options de print ---
     print_HF = True     # 2026-06-18 : courbe rouge ON pour le run complet tablier (49 SOCP HF) -> dump + validation u*
+    save_history = True  # True = sauve les fichiers SOCP dans SOCP_history/ (1 sous-dossier par appel) ; False = off
     print_DOE = True
     print_3D = False
 
@@ -490,11 +491,11 @@ if __name__ == '__main__':
     # Counter pour identifier chaque appel SOCP (run_one_SOL + run_HF)
     _socp_call_counter = [0]  # liste pour eviter scope issues
 
-    def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p1=None, p2=None):
-        """Copie les fichiers de sortie SOCP avec un prefix pour eviter qu ils soient ecrases.
+    def _save_socp_outputs(path, AnalysisName, prefix_tag, u_vals=None, p_vals=None):
+        """Copie les fichiers de sortie SOCP dans un sous-dossier dedie (eviter ecrasement).
 
         prefix_tag : ex `SOL_001` ou `HF_006`
-        u1/u2/p1/p2 : coords (p1=fy1, p2=fy2) pour incorporer dans le nom
+        u_vals/p_vals : listes de coords (u espace standard / valeurs physiques params_names) pour le nom du sous-dossier
 
         Fichiers sauves : PL_cin_out.msh, kine.dsmed, kine.dslog, kine.dsmetares, stat.dsmed.
         """
@@ -507,25 +508,24 @@ if __name__ == '__main__':
             f"{AnalysisName}_0_kine.dsmetares",
             f"{AnalysisName}_0_stat.dsmed",
         ]
-        # Format du suffix : inclut u1, u2, fc, fy si dispos
+        # Format du suffix : coords u (espace standard) + valeurs physiques (params_names), generique
         coords_str = ""
-        if u1 is not None and u2 is not None:
-            coords_str = f"_u1{u1:+.3f}_u2{u2:+.3f}"
-        if p1 is not None and p2 is not None:
-            coords_str += f"_fy1{p1:.1f}_fy2{p2:.1f}"
+        if u_vals is not None:
+            coords_str += "".join(f"_u{i+1}{u_vals[i]:+.3f}" for i in range(len(u_vals)))
+        if p_vals is not None:
+            coords_str += "".join(f"_{params_names[i]}{p_vals[i]:.1f}" for i in range(len(p_vals)))
         # En mode worker DOE : SOCP_history TOUJOURS a la racine du projet principal (pas dans
         # les copies _doe_workers) -> un seul SOCP_history qui contient tout. _DOE_MAIN_DS absent
         # en run normal -> save_dir = path (comportement d'origine).
         _socp_root = os.environ.get("_DOE_MAIN_DS") or path
-        save_dir = os.path.join(_socp_root, "SOCP_history")
-        os.makedirs(save_dir, exist_ok=True)
+        sub_dir = os.path.join(_socp_root, "SOCP_history", f"{prefix_tag}{coords_str}")
+        os.makedirs(sub_dir, exist_ok=True)
         n_saved = 0
         total_size = 0
         for f in files_to_save:
             src = os.path.join(path, f)
             if os.path.exists(src):
-                dst_name = f"{prefix_tag}{coords_str}_{f}"
-                dst = os.path.join(save_dir, dst_name)
+                dst = os.path.join(sub_dir, f)
                 try:
                     shutil.copy2(src, dst)
                     n_saved += 1
@@ -533,7 +533,7 @@ if __name__ == '__main__':
                 except Exception as e:
                     print(f"  [SOCP HISTORY] copy failed for {f} : {e}", flush=True)
         print(f"  [SOCP HISTORY] {prefix_tag}{coords_str} : {n_saved} fichiers sauves "
-              f"({total_size/1024/1024:.1f} MB) dans {save_dir}", flush=True)
+              f"({total_size/1024/1024:.1f} MB) dans {sub_dir}", flush=True)
 
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
@@ -647,11 +647,10 @@ if __name__ == '__main__':
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
             # 2026-06-16 : sauvegarde des fichiers SOCP avec prefix avant ecrasement par next iter
             _socp_call_counter[0] += 1
-            _fy1_val = float(SOL[i]["fy1"]) if "fy1" in SOL[i] else None
-            _fy2_val = float(SOL[i]["fy2"]) if "fy2" in SOL[i] else None
-            _save_socp_outputs(path, AnalysisName,
-                               prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
-                               p1=_fy1_val, p2=_fy2_val)
+            if save_history:
+                _save_socp_outputs(path, AnalysisName,
+                                   prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
+                                   p_vals=[float(SOL[i][p]) for p in params_names])
             for p in params_names:
                 SOL[i][f'dg_{p}'] = None
             if sensitivity and 'Sensitivity' in d['info']:
@@ -780,11 +779,11 @@ if __name__ == '__main__':
         g_HF=d['info']['Primal_bound'][0] -1
         # 2026-06-16 : sauvegarde des fichiers SOCP avec prefix avant ecrasement par next call
         _socp_call_counter[0] += 1
-        _save_socp_outputs(path, AnalysisName,
-                           prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
-                           u1=float(u[0]), u2=float(u[1]),
-                           p1=float(x_point[0]) if n_var >= 1 else None,
-                           p2=float(x_point[1]) if n_var >= 2 else None)
+        if save_history:
+            _save_socp_outputs(path, AnalysisName,
+                               prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
+                               u_vals=[float(v) for v in u],
+                               p_vals=[float(x_point[i]) for i in range(n_var)])
         grad_HF_X=[None]*n_var
         grad_HF_U=[None]*n_var
         if sensitivity and 'Sensitivity' in d['info']:
