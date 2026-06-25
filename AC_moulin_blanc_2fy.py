@@ -970,7 +970,7 @@ if __name__ == '__main__':
     # (phase, u1, u2, fy1, fy2, g, lambda=pObj). phase in {DOE, HF, EFF, USTAR} -> permet
     # de separer/filtrer DOE vs courbe rouge HF vs enrichissement EFF vs verif au point u*.
     # Append-only (pas de reecriture -> robuste), tronque une seule fois en debut de run.
-    _POINT_LOG_FILE = os.path.join(_path_ds, "points_log_2fy.jsonl")
+    _POINT_LOG_FILE = os.path.join(_path_ds, "points_log.jsonl")
     def _append_point_log(phase, u, x, g):
         try:
             _u = list(u) if u is not None else []
