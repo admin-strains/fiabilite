@@ -25,23 +25,23 @@ from branche1 import fit_gepck, predict_gepck
 from threadpoolctl import threadpool_limits
 import concurrent.futures as cf
 
-NV = 2
-
 # --------- construction du surrogate depuis l'etat (xt,yt,all_grad,max_degree) ----------
 def build_fm_from_state(xt, yt, all_grad, max_degree):
     xt = np.asarray(xt, float); yt = np.asarray(yt, float); ag = np.asarray(all_grad, float)
-    Y = np.concatenate([yt.flatten()] + [ag[:, j] for j in range(NV)])
+    nv = xt.shape[1]
+    Y = np.concatenate([yt.flatten()] + [ag[:, j] for j in range(nv)])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return fit_gepck(xt, Y,
                          {'Mode': 'optimal', 'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}},
-                         [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * NV,
-                         {'Type': 'Independent', 'Parameters': np.eye(NV)})
+                         [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * nv,
+                         {'Type': 'Independent', 'Parameters': np.eye(nv)})
 
 # --------- un bloc : sommes partielles (n, sum_c, sumsq_c) -- combinables exactement ---------
 def block_partial(fm, u_star, half_ustar2, sign, seed, n):
+    nv = len(u_star)
     rng = np.random.default_rng(seed)
-    U   = rng.standard_normal((n, NV)) + u_star
+    U   = rng.standard_normal((n, nv)) + u_star
     if sign == 0:
         g = predict_gepck(fm, U)[:, 0]
     else:
