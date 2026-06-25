@@ -113,8 +113,7 @@ if __name__ == '__main__':
     #   threads/worker. RAM ~22 Go/worker (machine 256 Go). Avec n0=5 : 3 -> 2 vagues, 5 -> 1 vague.
     n_workers_DOE = 3           # <-- VARIABLE UTILISATEUR : nb de SOCP DOE en parallele
     # 2026-06-17 : 2 variables fy (1 par groupe d'acier), fc fixe (dans le dsCad).
-    params_names = ['fy1','fy2']
-    n_var = len(params_names)
+    # params_names / n_var sont derives de PARAM_CONFIG (defini plus bas, apres loi_* et group1/2_names).
 
     # --------------------------------------------------------------------------- #G
     # CARACTERISTIQUES DU MODELE                                                  #
@@ -448,6 +447,18 @@ if __name__ == '__main__':
 
         dist = ot.LogNormal(mu_ln, sigma_ln, 0.0)
         return dist
+
+    # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
+    PARAM_CONFIG_CAD = {
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names},
+                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names},
+                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+    }
+    PARAM_CONFIG_LOAD = {}                       # vide (pas de variable de charge pour l'instant)
+    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
+    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
+    n_var = len(params_names)
 
     def _dist_list():
         """Liste des lois marginales selon params_names.
