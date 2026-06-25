@@ -420,6 +420,8 @@ if __name__ == '__main__':
     PARAM_CONFIG_CAD = {
         'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
                'loi': loi_fy, 'mean': 550, 'cov': None},
+        'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
+               'loi': loi_fc, 'mean': 48, 'cov': 0.12},
     }
     PARAM_CONFIG_LOAD = {
         'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0"},
@@ -430,6 +432,7 @@ if __name__ == '__main__':
     n_var = len(params_names)
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
         print_ana = False
+    slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
 
     def dist_jointe():
         return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
@@ -1382,8 +1385,7 @@ if __name__ == '__main__':
 
         elif do_GEPCK:
             if xt is None: xt, yt, all_grad = build_DOE()
-            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
-                          {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
+            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
             _opts      = {'Mode': 'optimal',
                           'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
@@ -1535,7 +1537,7 @@ if __name__ == '__main__':
                 grad_val = np.array([[grad_ot[i, 0] for i in range(n_var)]])
                 all_grad = np.vstack([all_grad, grad_val])
                 event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
-                starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+                starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
                 modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
         return modes, best_sps
 
@@ -1643,7 +1645,7 @@ if __name__ == '__main__':
         count_valid_both = 0
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
+        bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
         problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -1801,7 +1803,7 @@ if __name__ == '__main__':
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
+            bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -2011,7 +2013,7 @@ if __name__ == '__main__':
     _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
 
     def _load_hf_cache(n_grid_hf_local):
-        if not config_is_identical:
+        if not config_is_identical or n_var > 2:
             return None
         if not os.path.exists(_HF_CACHE_FILE):
             print(f"[HF CACHE] aucun cache ({_HF_CACHE_FILE}) -> calcul grille HF", flush=True)
@@ -2025,6 +2027,8 @@ if __name__ == '__main__':
         return None
 
     def _save_hf_cache(Z, n_grid_hf_local):
+        if n_var > 2:
+            return
         try:
             json.dump({'Z': Z.tolist()},
                       open(_HF_CACHE_FILE, 'w'), indent=1)
@@ -2057,7 +2061,8 @@ if __name__ == '__main__':
             _t_elapsed = _time_local.perf_counter() - _t_start
             _t_avg = _t_elapsed / (i + 1)
             _t_eta = _t_avg * (n_total - i - 1)
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
+            _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(len(pt)))
+            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
         print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
@@ -2070,16 +2075,22 @@ if __name__ == '__main__':
         return Z
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
-        """Planche 2 graphiques cote a cote : critere EFF (gauche) et sigma surrogate (droite).
-        Sauvegarde en PNG dans out_dir_eff sans afficher de fenetre."""
+        """Planche 3 graphiques cote a cote : EFF, sigma, g surrogate.
+        Utilise la globale slice_def pour definir la coupe 2D."""
         global hf_2d_grid_fixed
+        _sd = slice_def if slice_def is not None else (0, 1, {})
+        idx_x, idx_y, fixed = _sd
         n_added = len(xt_eff)
 
-        # --- Grille commune (calculee une seule fois) ---
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        # --- Grille commune (coupe 2D dans l'espace n_var-D) ---
+        ux = np.linspace(u1_min, u1_max, n_grid)
+        uy = np.linspace(u2_min, u2_max, n_grid)
+        UX, UY = np.meshgrid(ux, uy)
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = UX.ravel()
+        grid[:, idx_y] = UY.ravel()
+        for idx, val in fixed.items():
+            grid[:, idx] = val
 
         # --- Z_eff, Z_sigma, Z_g (batch vectorise via BLAS multi-thread) ---
         mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
@@ -2088,15 +2099,19 @@ if __name__ == '__main__':
         Z_g     = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
         # --- Contour g=0 HF (depuis cache ou calcul, une seule fois) ---
-        Z_true, U1_hf, U2_hf = None, None, None
+        Z_true, UX_hf, UY_hf = None, None, None
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
+            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = UX_hf.ravel()
+                grid_hf[:, idx_y] = UY_hf.ravel()
+                for idx, val in fixed.items():
+                    grid_hf[:, idx] = val
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_planche_EFF")
 
         # --- Figure ---
@@ -2104,46 +2119,50 @@ if __name__ == '__main__':
         _pce_line   = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
         _theta_str  = '  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']' if _eff_history_theta else ''
         _loo_str    = f'  LOO={_gepck_loo:.3e}' if _gepck_loo is not None else ''
-        fig.suptitle(f'{modele} - N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_theta_str}{_loo_str}{_pce_line}', fontsize=10)
+        _fixed_str  = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
+        fig.suptitle(f'{modele} - N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_theta_str}{_loo_str}{_fixed_str}{_pce_line}', fontsize=10)
+
+        _xlabel = f'u_{params_names[idx_x]}'
+        _ylabel = f'u_{params_names[idx_y]}'
 
         def _decorate(ax):
             if Z_g is not None:
-                ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
+                ax.contour(UX, UY, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
             if Z_true is not None:
-                ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
+                ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2)
             if xt is not None:
-                ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
+                ax.scatter(xt[:, idx_x], xt[:, idx_y], c='white', s=40, zorder=5,
                            edgecolors='black', linewidths=0.8, label='DOE')
             if n_added > 0:
                 xt_eff_arr = np.array(xt_eff)
-                ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
+                ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=80, zorder=6,
                            marker='^', label=f'EFF ({n_added} pts)')
                 for i, pt in enumerate(xt_eff_arr):
-                    ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                    ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
                                 xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-            ax.set_xlabel('u1')
-            ax.set_ylabel('u2')
+            ax.set_xlabel(_xlabel)
+            ax.set_ylabel(_ylabel)
             ax.set_xlim(u1_min, u1_max)
             ax.set_ylim(u2_min, u2_max)
             ax.legend(loc='best', fontsize=9)
 
         # --- Ax1 : EFF ---
-        cf1 = ax1.contourf(U1, U2, Z_eff, levels=20, cmap='viridis', alpha=0.85)
+        cf1 = ax1.contourf(UX, UY, Z_eff, levels=20, cmap='viridis', alpha=0.85)
         plt.colorbar(cf1, ax=ax1, label='EFF')
         ax1.set_title('Critere EFF')
         _decorate(ax1)
 
         # --- Ax2 : sigma ---
-        cf2 = ax2.contourf(U1, U2, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
+        cf2 = ax2.contourf(UX, UY, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
         plt.colorbar(cf2, ax=ax2, label='sigma (ecart-type surrogate)')
         ax2.set_title('Ecart-type surrogate (sigma)')
         _decorate(ax2)
 
         # --- Ax3 : g surrogate (isocouleurs RdYlGn) ---
         if Z_g is not None:
-            cf3 = ax3.contourf(U1, U2, Z_g, levels=20, cmap='RdYlGn', alpha=0.6)
+            cf3 = ax3.contourf(UX, UY, Z_g, levels=20, cmap='RdYlGn', alpha=0.6)
             plt.colorbar(cf3, ax=ax3, label='g surrogate')
-            ax3.contour(U1, U2, Z_g, levels=[0], colors='blue', linewidths=2)
+            ax3.contour(UX, UY, Z_g, levels=[0], colors='blue', linewidths=2)
         ax3.set_title('g surrogate - etat limite')
         _decorate(ax3)
 
@@ -2680,14 +2699,14 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if do_warmstart:
-        starting_points = np.array([[0.0, 0.0]])
+        starting_points = np.array([[0.0] * n_var])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
         if start_from_LHS:
             starting_points = build_starting_points()
         else:
-            starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+            starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
 
     best_result = modes[0] if modes else None
