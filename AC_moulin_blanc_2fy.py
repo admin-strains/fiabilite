@@ -460,19 +460,10 @@ if __name__ == '__main__':
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
 
-    def _dist_list():
-        """Liste des lois marginales selon params_names.
-        fy1/fy2/fy -> Normal(FY_MEAN, SIGMA) (acier). fc -> LogNormal (legacy)."""
-        dist = []
-        for p in params_names:
-            if p.startswith('fy'):
-                dist.append(loi_fy(FY_MEAN, None))
-            elif p.startswith('fc'):
-                dist.append(loi_fc(fcm, cov_fc))
-        return dist
-
     def dist_jointe():
-        return ot.JointDistribution(_dist_list())
+        """Loi jointe des variables aleatoires, construite depuis PARAM_CONFIG."""
+        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
+                                     for p in params_names])
 
     # ===================== VALIDATION CONFIG 2-FY (logs detailles) =====================
     print("\n" + "=" * 78, flush=True)
@@ -1003,8 +994,7 @@ if __name__ == '__main__':
             _cached = _load_doe_cache()
             if _cached is not None:
                 return _cached
-        dist = _dist_list()
-        dist_X   = ot.JointDistribution(dist)
+        dist_X   = dist_jointe()
         T     = dist_X.getIsoProbabilisticTransformation() # on interroge dist_X et trouve la transfo n�cessaire puis l'applique ici
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
         dist_U = dist_X.getStandardDistribution()
@@ -1101,8 +1091,7 @@ if __name__ == '__main__':
 
             # --- Définition de la transformation isoprobabiliste ---
             self.fym = FY_MEAN
-            dist = _dist_list()   # 2-fy : lois Normales acier (legacy analytique, non utilise)
-            dist_X     = ot.JointDistribution(dist)
+            dist_X     = dist_jointe()   # 2-fy : lois Normales acier (legacy analytique, non utilise)
             self.T_inv = dist_X.getInverseIsoProbabilisticTransformation()
             self.T     = dist_X.getIsoProbabilisticTransformation()
 
