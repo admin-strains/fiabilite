@@ -140,16 +140,22 @@ if __name__ == '__main__':
     _g1_sentinel, _g2_sentinel = group1_names[0], group2_names[0]
 
     def _sens_key_to_param(k):
-        """Mappe une cle de sensibilite STRAINS ('YIELD_STRENGTH:nom1,nom2,...')
-        vers le nom de variable 'fy1'/'fy2' selon l'appartenance au groupe.
-        Bornage par virgules pour eviter les faux-positifs de sous-chaine."""
-        if not k.startswith('YIELD_STRENGTH:'):
-            return None
-        namelist = ',' + k.split(':', 1)[1].rstrip(',') + ','
-        if (',' + _g1_sentinel + ',') in namelist:
-            return 'fy1'
-        if (',' + _g2_sentinel + ',') in namelist:
-            return 'fy2'
+        """Mappe une cle de sensibilite STRAINS vers un nom de params_names, GENERIQUE
+        depuis PARAM_CONFIG (defini plus bas ; resolu a l'appel). Matching ROBUSTE :
+        - le 'param' (YIELD_STRENGTH / COMPRESSIVE_STRENGTH / LIVE_LOAD...) doit etre dans la cle ;
+        - si la region a des 'rebars', la sentinelle (1er rebar) doit apparaitre BORNEE PAR
+          VIRGULES (',nom,') -> evite les faux-positifs de sous-chaine (HA_5_1 vs HA_5_10).
+        On garde ce bornage plutot que le 'in' brut de l'option B du guide transfert2."""
+        for p in params_names:
+            sens = PARAM_CONFIG[p]['sens']
+            if sens['param'] not in k:
+                continue
+            rebars = sens.get('rebars')
+            if rebars:
+                namelist = ',' + k.split(':', 1)[1].rstrip(',') + ',' if ':' in k else ''
+                if (',' + rebars[0] + ',') not in namelist:
+                    continue
+            return p
         return None
 
 
