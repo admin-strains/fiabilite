@@ -633,10 +633,9 @@ if __name__ == '__main__':
 
             if sensitivity:
                 kwargs["sensitivity_analysis"] = "true"
-                kwargs["sensitivity_regions"] = json.dumps([
-                    {"param": "YIELD_STRENGTH", "rebars": group1_names},   # dg/dfy1 (groupe 1)
-                    {"param": "YIELD_STRENGTH", "rebars": group2_names},   # dg/dfy2 (groupe 2)
-                ]) # 2-fy : 2 regions acier, pas de beton (fc fixe)
+                kwargs["sensitivity_regions"] = json.dumps(
+                    [PARAM_CONFIG[p]['sens'] for p in params_names]
+                )   # generique : JSON identique au 2-fy (fy1->groupe1, fy2->groupe2)
 
             # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
             kwargs["model_handle"] = model.GETHANDLEPTR()
@@ -765,10 +764,9 @@ if __name__ == '__main__':
 
         if sensitivity:
             kwargs["sensitivity_analysis"] = "true"
-            kwargs["sensitivity_regions"] = json.dumps([
-                {"param": "YIELD_STRENGTH", "rebars": group1_names},   # dg/dfy1 (groupe 1)
-                {"param": "YIELD_STRENGTH", "rebars": group2_names},   # dg/dfy2 (groupe 2)
-            ]) # 2-fy : 2 regions acier, pas de beton (fc fixe)
+            kwargs["sensitivity_regions"] = json.dumps(
+                [PARAM_CONFIG[p]['sens'] for p in params_names]
+            )   # generique : JSON identique au 2-fy (fy1->groupe1, fy2->groupe2)
 
         # OPTIM 2026-05-29 (630d96ccf) : skip ~240s relecture .dscad par CetSOLV
         kwargs["model_handle"] = model.GETHANDLEPTR()
