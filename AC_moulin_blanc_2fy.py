@@ -2161,23 +2161,17 @@ if __name__ == '__main__':
     # Fichier dans le dossier .ds du projet -> 1 cache par projet (tablier / diagonal).
     _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
 
-    def _hf_cache_sig(n_grid_hf_local):
-        """Signature de validation : bornes + densite grille + variables + tailles groupes.
-        Toute difference (bornes, maillage de grille, grouping) invalide le cache."""
-        return {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max,
-                'n_grid_hf': n_grid_hf_local, 'params': list(params_names),
-                'n_g1': len(group1_names), 'n_g2': len(group2_names)}
-
     def _load_hf_cache(n_grid_hf_local):
         import json as _j
+        if not config_is_identical:
+            print("[HF CACHE] config_is_identical=False -> recalcul grille HF", flush=True)
+            return None
         if not os.path.exists(_HF_CACHE_FILE):
             return None
         try:
             d = _j.load(open(_HF_CACHE_FILE))
-            if d.get('signature') == _hf_cache_sig(n_grid_hf_local):
-                print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (signature OK -> 0 calcul SOCP)", flush=True)
-                return np.array(d['Z'])
-            print(f"[HF CACHE] signature differente du cache existant -> recalcul", flush=True)
+            print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (config_is_identical -> 0 calcul SOCP)", flush=True)
+            return np.array(d['Z'])
         except Exception as e:
             print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
         return None
@@ -2185,9 +2179,8 @@ if __name__ == '__main__':
     def _save_hf_cache(Z, n_grid_hf_local):
         import json as _j
         try:
-            _j.dump({'signature': _hf_cache_sig(n_grid_hf_local), 'Z': Z.tolist()},
-                    open(_HF_CACHE_FILE, 'w'), indent=1)
-            print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE} (reutilisable au prochain run)", flush=True)
+            _j.dump({'Z': Z.tolist()}, open(_HF_CACHE_FILE, 'w'), indent=1)
+            print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE} (reutilisable si config_is_identical=True)", flush=True)
         except Exception as e:
             print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
