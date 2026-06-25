@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 8                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
-    config_is_identical = False   #False = recalcule le DOE (mettre True apres 1er run reussi avec ces params)
+    config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -2013,24 +2013,28 @@ if __name__ == '__main__':
     _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
 
     def _load_hf_cache(n_grid_hf_local):
-        if not config_is_identical or n_var > 2:
+        if not config_is_identical:
             return None
         if not os.path.exists(_HF_CACHE_FILE):
             print(f"[HF CACHE] aucun cache ({_HF_CACHE_FILE}) -> calcul grille HF", flush=True)
             return None
         try:
             d = json.load(open(_HF_CACHE_FILE))
-            print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (config_is_identical=True -> 0 SOCP grille)", flush=True)
+            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
+            _sd_now = (slice_def[0], slice_def[1]) if slice_def is not None else (0, 1)
+            if _sd_cache != _sd_now:
+                print(f"[HF CACHE] coupe differente (cache={_sd_cache}, courant={_sd_now}) -> recalcul", flush=True)
+                return None
+            print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (config_is_identical=True, coupe OK -> 0 SOCP grille)", flush=True)
             return np.array(d['Z'])
         except Exception as e:
             print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
         return None
 
     def _save_hf_cache(Z, n_grid_hf_local):
-        if n_var > 2:
-            return
         try:
-            json.dump({'Z': Z.tolist()},
+            _sd = slice_def if slice_def is not None else (0, 1, {})
+            json.dump({'Z': Z.tolist(), 'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
                       open(_HF_CACHE_FILE, 'w'), indent=1)
             print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE}", flush=True)
         except Exception as e:
