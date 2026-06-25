@@ -17,7 +17,9 @@
 #   c = (g_band<0) ? w : 0 ;  Pf = mean(c) ;  COV = std(c)/Pf/sqrt(N).
 
 import os, sys, json, time, warnings, math
-sys.path.insert(0, r"C:\workspace\fiabilite\_lib")
+_here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _here)                    # branche1 a cote (layout _lib/)
+sys.path.insert(0, os.path.dirname(_here))   # branche1 au parent (layout racine)
 import numpy as np
 from branche1 import fit_gepck, predict_gepck
 from threadpoolctl import threadpool_limits
