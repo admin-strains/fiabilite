@@ -120,10 +120,7 @@ if __name__ == '__main__':
 
     # --- Paramètres variables ---
     # Valeurs caractéristiques du pont du Moulin Blanc (cf dsCad : COMPRESSIVE_STRENGTH=20 MPa, GRADE=235 MPa)
-    FY_MEAN = 235.0              # MPa : moyenne acier, identique pour fy1 et fy2
-    fcm, fym = 20, 235           # gardes pour code legacy/analytique (non utilises en 2-fy)
-    cov_fc, cov_fy = None, None
-    fc_otparams, fy_otparams = (fcm,cov_fc), (fym, cov_fy)
+    FY_MEAN = 235.0              # MPa : moyenne acier, identique pour fy1 et fy2 (utilise par PARAM_CONFIG)
 
 
     # Moulin Blanc : les noms réels sont HA_5_1, HA_5_2, etc. — on les extrait du dsCad
@@ -467,6 +464,9 @@ if __name__ == '__main__':
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
+    # garde : pas d'analytique si une variable n'est pas un materiau CAD (ex. variable de charge)
+    if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
+        print_ana = False
 
     def dist_jointe():
         """Loi jointe des variables aleatoires, construite depuis PARAM_CONFIG."""
