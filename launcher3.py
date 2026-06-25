@@ -21,7 +21,6 @@ sys.path.insert(0, r'C:\workspace\front')
 sys.path.insert(0, r'C:\_workingDir\_SF\fiabilite')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion\_lib')
-sys.path.insert(0, r'C:\workspace\fiabilite\_lib')
 
 # Run the target script — guard __main__ + freeze_support pour que les
 # subprocesses DOE paralleles (Windows spawn) ne re-executent pas tout.

@@ -75,7 +75,7 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
+    n0 = 8                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = False   #False = recalcule le DOE (mettre True apres 1er run reussi avec ces params)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
@@ -1672,11 +1672,11 @@ if __name__ == '__main__':
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
         global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
-        _beta_IS_0, _ = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
+        _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         if restart_enrich_only:
-            list_beta_IS = list(_eff_history_beta_IS) + ([_beta_IS_0] if _beta_IS_0 is not None else [])
+            list_beta_IS = list(_eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
         else:
-            list_beta_IS = [_beta_IS_0] if _beta_IS_0 is not None else []
+            list_beta_IS = [_b_mid] if _b_mid is not None else []
         if not restart_enrich_only:
             _eff_history_BB = []
             _eff_history_BS = []
@@ -2316,61 +2316,45 @@ if __name__ == '__main__':
 
     def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff):
         global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        _sd = slice_def_final if slice_def_final is not None else (slice_def if slice_def is not None else (0, 1, {}))
+        idx_x, idx_y, fixed = _sd
+
+        ux = np.linspace(u1_min, u1_max, n_grid)
+        uy = np.linspace(u2_min, u2_max, n_grid)
+        UX, UY = np.meshgrid(ux, uy)
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = UX.ravel()
+        grid[:, idx_y] = UY.ravel()
+        for idx, val in fixed.items():
+            grid[:, idx] = val
 
         fig, ax = plt.subplots(figsize=(7, 6))
+        _xlabel = f'u_{params_names[idx_x]}'
+        _ylabel = f'u_{params_names[idx_y]}'
 
-        # --- Fond coloré : GEK en priorité, sinon KRG ---
-        if do_GEK:
+        # --- Fond coloré : surrogate actif ---
+        if g_ot is not None:
             grid_ot = ot.Sample(grid.tolist())
-            Z_gek = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(U1, U2, Z_gek, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label='g (GEK)')
-            ax.contour(U1, U2, Z_gek, levels=[0], colors='blue', linewidths=2)
-        elif do_KRG:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_krg = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(U1, U2, Z_krg, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label='g (KRG)')
-        elif do_PCKRG:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_pckrg = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(U1, U2, Z_pckrg, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label='g (PCKRG)')
-            ax.contour(U1, U2, Z_pckrg, levels=[0], colors='blue', linewidths=2)
-        elif do_old_GEPCK:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_gepck = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(U1, U2, Z_gepck, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label='g (old GEPCK)')
-            ax.contour(U1, U2, Z_gepck, levels=[0], colors='blue', linewidths=2)
-        elif do_GEPCK:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_gepck = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(U1, U2, Z_gepck, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label='g (GEPCK)')
-            ax.contour(U1, U2, Z_gepck, levels=[0], colors='blue', linewidths=2)
-
-        # --- Contour KRG ---
-        if do_KRG:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_krg = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            ax.contour(U1, U2, Z_krg, levels=[0], colors='purple', linewidths=2, linestyles=':')
+            Z_sur = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
+            cf = ax.contourf(UX, UY, Z_sur, levels=20, cmap='RdYlGn', alpha=0.6)
+            plt.colorbar(cf, ax=ax, label=f'g ({modele})')
+            ax.contour(UX, UY, Z_sur, levels=[0], colors='blue', linewidths=2)
 
         # --- Contour HF grossier ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
+            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = UX_hf.ravel()
+                grid_hf[:, idx_y] = UY_hf.ravel()
+                for idx, val in fixed.items():
+                    grid_hf[:, idx] = val
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu")
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
+            ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
         if print_ana:
@@ -2386,14 +2370,14 @@ if __name__ == '__main__':
 
         # --- Points ---
         if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='black', s=30, zorder=5, label='DOE')
+            ax.scatter(xt[:, idx_x], xt[:, idx_y], c='black', s=30, zorder=5, label='DOE')
 
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=60, zorder=6,
+            ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=60, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):  # supprimer ces 2 lignes pour masquer la numerotation
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+            for i, pt in enumerate(xt_eff_arr):
+                ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
                             xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
         ax.scatter(0, 0, c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
@@ -2405,19 +2389,19 @@ if __name__ == '__main__':
 
         if best_sps:
             for i, sp in enumerate(best_sps):
-                ax.scatter(sp[0], sp[1], color=mode_colors[i], s=100, zorder=7, marker='D',
+                ax.scatter(sp[idx_x], sp[idx_y], color=mode_colors[i], s=100, zorder=7, marker='D',
                         label=f'sp mode {i+1}')
 
         if best_result is not None:
             u_star = np.array(best_result.getStandardSpaceDesignPoint())
-            ax.scatter(u_star[0], u_star[1], color=mode_colors[0], s=200, zorder=8, marker='*',
-                    label=f'u*1 [{u_star[0]:.2f},{u_star[1]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
+            ax.scatter(u_star[idx_x], u_star[idx_y], color=mode_colors[0], s=200, zorder=8, marker='*',
+                    label=f'u*1 [{u_star[idx_x]:.2f},{u_star[idx_y]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
 
         if len(modes) > 0:
             for k, mode in enumerate(modes[1:], start=2):
                 u_m = np.array(mode.getStandardSpaceDesignPoint())
-                ax.scatter(u_m[0], u_m[1], color=mode_colors[k-1], s=200, zorder=8, marker='*',
-                        label=f'u*{k} [{u_m[0]:.2f},{u_m[1]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
+                ax.scatter(u_m[idx_x], u_m[idx_y], color=mode_colors[k-1], s=200, zorder=8, marker='*',
+                        label=f'u*{k} [{u_m[idx_x]:.2f},{u_m[idx_y]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
 
         # --- Points fixes (run HF précédent) ---
         if best_sol_modes_fixed is not None:
@@ -2425,14 +2409,14 @@ if __name__ == '__main__':
             for col, (lbl, data) in zip(colors_fixed, best_sol_modes_fixed.items()):
                 ustar_f = data['u*']
                 sp_f    = data['sp']
-                ax.scatter(ustar_f[0], ustar_f[1], c=col, s=200, zorder=9, marker='*',
+                ax.scatter(ustar_f[idx_x], ustar_f[idx_y], c=col, s=200, zorder=9, marker='*',
                            label=f'u* {lbl}')
-                ax.scatter(sp_f[0], sp_f[1], c=col, s=100, zorder=9, marker='x',
+                ax.scatter(sp_f[idx_x], sp_f[idx_y], c=col, s=100, zorder=9, marker='x',
                            linewidths=2, label=f'sp {lbl}')
                 if grad_sp_fixed is not None and lbl in grad_sp_fixed:
                     ng = np.array(grad_sp_fixed[lbl]['neg_grad'])
                     ng = ng / np.linalg.norm(ng) * 1.5
-                    ax.quiver(sp_f[0], sp_f[1], ng[0], ng[1], color=col,
+                    ax.quiver(sp_f[idx_x], sp_f[idx_y], ng[0], ng[1], color=col,
                               angles='xy', scale_units='xy', scale=1.0, width=0.005)
 
         # --- Trajectoires FORM hardcodees ---
@@ -2444,42 +2428,28 @@ if __name__ == '__main__':
                 pts  = np.array(traj['points'])
                 grds = np.array(traj['grads'])
                 all_pts.append(pts)
-                # polyligne
-                ax.plot(pts[:, 0], pts[:, 1], '-', color=col, alpha=0.5, linewidth=1.2)
-                # points intermediaires
-                ax.scatter(pts[1:-1, 0], pts[1:-1, 1], c=col, s=12, zorder=7, alpha=0.5)
-                # depart et arrivee
-                ax.scatter(pts[0, 0],  pts[0, 1],  c=col, s=60,  zorder=8, marker='o')
-                ax.scatter(pts[-1, 0], pts[-1, 1], c=col, s=150, zorder=8, marker='*')
-                # petites fleches -grad normalise (longueur 0.3)
+                ax.plot(pts[:, idx_x], pts[:, idx_y], '-', color=col, alpha=0.5, linewidth=1.2)
+                ax.scatter(pts[1:-1, idx_x], pts[1:-1, idx_y], c=col, s=12, zorder=7, alpha=0.5)
+                ax.scatter(pts[0, idx_x],  pts[0, idx_y],  c=col, s=60,  zorder=8, marker='o')
+                ax.scatter(pts[-1, idx_x], pts[-1, idx_y], c=col, s=150, zorder=8, marker='*')
                 for pt, g in zip(pts, grds):
                     ng = np.array(g)
                     nrm = np.linalg.norm(ng)
                     if nrm > 0:
                         ng = -ng / nrm * 0.3
-                        ax.annotate('', xy=(pt[0]+ng[0], pt[1]+ng[1]), xytext=(pt[0], pt[1]),
+                        ax.annotate('', xy=(pt[idx_x]+ng[0], pt[idx_y]+ng[1]), xytext=(pt[idx_x], pt[idx_y]),
                                     arrowprops=dict(arrowstyle='->', color=col, lw=0.7))
-            # zoom sur les trajectoires : mise a jour des variables globales
             all_pts_arr = np.vstack(all_pts)
             margin = 1.0
-            u1_min = float(all_pts_arr[:, 0].min()) - margin
-            u1_max = float(all_pts_arr[:, 0].max()) + margin
-            u2_min = float(all_pts_arr[:, 1].min()) - margin
-            u2_max = float(all_pts_arr[:, 1].max()) + margin
+            u1_min = float(all_pts_arr[:, idx_x].min()) - margin
+            u1_max = float(all_pts_arr[:, idx_x].max()) + margin
+            u2_min = float(all_pts_arr[:, idx_y].min()) - margin
+            u2_max = float(all_pts_arr[:, idx_y].max()) + margin
 
         # --- Légende contours ---
         legend_lines = []
-        
-        if do_KRG:
-            legend_lines.append(Line2D([0], [0], color='purple', linestyle=':',  linewidth=2, label='g=0 KRG'))
-        if do_GEK:
-            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 GEKPLS'))
-        if do_PCKRG:
-            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 PCKRG'))
-        if do_old_GEPCK:
-            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 old GEPCK'))
-        if do_GEPCK:
-            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label='g=0 GEPCK'))
+        if g_ot is not None:
+            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label=f'g=0 {modele}'))
         if print_HF:
             legend_lines.append(Line2D([0], [0], color='red',    linestyle='--', linewidth=2, label='g=0 HF'))
         if print_ana:
@@ -2487,11 +2457,12 @@ if __name__ == '__main__':
 
         ax.legend(handles=ax.legend().legend_handles + legend_lines)
 
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
+        ax.set_xlabel(_xlabel)
+        ax.set_ylabel(_ylabel)
         ax.set_xlim(u1_min, u1_max)
         ax.set_ylim(u2_min, u2_max)
-        ax.set_title('FORM et etat limite g=0')
+        _fixed_str = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
+        ax.set_title(f'FORM et etat limite g=0{_fixed_str}')
         plt.tight_layout()
         fname = f'visu{modele}_{timestamp}.png'
         fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
@@ -2722,5 +2693,14 @@ if __name__ == '__main__':
     if do_IS and modes:
         result_IS = run_IS(modes, event)
         print_results_IS(result_IS)
+    # --- slice_def_final : coupe 2D optimale depuis les importances FORM mode 1 ---
+    if best_result is not None:
+        _imp = np.array(best_result.getImportanceFactors())
+        _top2 = list(np.argsort(_imp)[::-1][:2])
+        _u_star = np.array(best_result.getStandardSpaceDesignPoint())
+        slice_def_final = (min(_top2), max(_top2),
+                           {i: float(_u_star[i]) for i in range(n_var) if i not in _top2})
+    else:
+        slice_def_final = slice_def
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
     _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sps[0] if best_sps else None, modes, result_IS)
