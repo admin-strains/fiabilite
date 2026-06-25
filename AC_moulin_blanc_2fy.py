@@ -200,7 +200,8 @@ if __name__ == '__main__':
     if os.environ.get("_N_EFF_TARGET"): n_eff_target = int(os.environ["_N_EFF_TARGET"])
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
-    n_max_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
+    n_NLopt_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
+    n_max_EFF_points = 30   # plafond DUR du nombre de points EFF ajoutes (securite anti-poursuite infinie)
     print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
 
     # --------------------------------------------------------------------------- #
@@ -1835,10 +1836,10 @@ if __name__ == '__main__':
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
         algo_opti.setStartingPoint([0.0] * n_var)
-        algo_opti.setMaximumCallsNumber(n_max_EFF)
+        algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
         _t0 = time.perf_counter()
         algo_opti.run()
-        _t_log(f"  [recherche EFF initiale NLopt GN_DIRECT n_max={n_max_EFF}]", _t0)
+        _t_log(f"  [recherche EFF initiale NLopt GN_DIRECT n_max={n_NLopt_EFF}]", _t0)
         u_opt = algo_opti.getResult().getOptimalPoint()
         _sigG = sigma_func(u_opt)
         _muG  = g_ot(ot.Point(u_opt))[0]
@@ -1848,17 +1849,17 @@ if __name__ == '__main__':
 
         iter_count = 0
         if EFF_criteria == 'BB':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
         elif EFF_criteria == 'BS':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
         elif EFF_criteria == 'both':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
         elif EFF_criteria == 'at_least_one':
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
         elif EFF_criteria == 'n_points':   # critere = nombre fixe de points EFF (pas de convergence)
             _cond = lambda: (len(xt_eff) - _n_eff_start) < n_eff_target
         else:
-            _cond = lambda: abs(f(u_opt)[0]) > tol_EFF
+            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
         if restart_enrich_only:   # reprise : on force EXACTEMENT n_enrich_extra nouveaux points (prioritaire)
             _cond = lambda: (len(xt_eff) - _n_eff_start) < n_enrich_extra
 
@@ -1996,10 +1997,10 @@ if __name__ == '__main__':
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
             algo_opti.setStartingPoint([0.0] * n_var)
-            algo_opti.setMaximumCallsNumber(n_max_EFF)
+            algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
             _t0 = time.perf_counter()
             algo_opti.run()
-            _t_log(f"  [recherche EFF NLopt GN_DIRECT n_max={n_max_EFF}]", _t0)
+            _t_log(f"  [recherche EFF NLopt GN_DIRECT n_max={n_NLopt_EFF}]", _t0)
             u_opt = algo_opti.getResult().getOptimalPoint()
 
         _sigG2 = sigma_func(u_opt)
