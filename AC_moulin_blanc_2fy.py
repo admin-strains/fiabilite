@@ -192,7 +192,7 @@ if __name__ == '__main__':
     tol_EFF = 1e-3                                            # 2026-06-17 : remis a 1e-3 (valeur flexion d'origine ; avait ete teste a 1e-5)
     tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01         # critere BS : |beta_IS - beta_IS_prec| / beta_IS (Semia flexion: 0.005 -> 0.01)
-    EFF_criteria = 'at_least_one' # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' | 'n_points'
+    EFF_criteria = 'BS'           # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' | 'n_points' (BS recommande, cf. guide)
                                   #   'n_points' = on s'arrete apres un NOMBRE FIXE de points EFF (n_eff_target)
                                   #   au lieu d'un critere de convergence (utile si le bootstrap ne converge pas).
     n_eff_target = 10             # nb de points EFF a ajouter quand EFF_criteria=='n_points' (run initial)
@@ -218,6 +218,7 @@ if __name__ == '__main__':
     # --- Options de print ---
     print_HF = True     # 2026-06-18 : courbe rouge ON pour le run complet tablier (49 SOCP HF) -> dump + validation u*
     save_history = True  # True = sauve les fichiers SOCP dans SOCP_history/ (1 sous-dossier par appel) ; False = off
+    print_Pf = False     # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) ; False = 1 seul FORM+IS (mu)
     print_DOE = True
     print_3D = False
 
@@ -1768,7 +1769,7 @@ if __name__ == '__main__':
                 r_i = form_i.getResult()
             except Exception as e:
                 print(f"  [{label}] FORM echoue ({type(e).__name__})", flush=True)
-                return None
+                return None, None
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
             # --- NOUVEAU CHEMIN : IS adaptatif parallelisable (sonde + ramp-up), si flag + fm ---
@@ -1788,7 +1789,7 @@ if __name__ == '__main__':
                 print(f"  [IS DETAIL PAR] {label} : blocs={_r['n_blocks']} evals~{_r['n_evals']:,} rondes_par={_r.get('n_rounds',0)} "
                       f"COV={_r['cov']:.4f} (cible {cov_IS}) t_IS={_r['t']:.2f}s debit={_r['n_evals']/max(_r['t'],1e-9):,.0f} evals/s", flush=True)
                 print(f"  [TIMING FORM/IS] {label} : FORM={_dt_form:.2f}s  IS={_dt_is:.2f}s (parallel)  (total={_dt_form+_dt_is:.2f}s)", flush=True)
-                return beta_IS
+                return beta_IS, pf_IS
             # --- CHEMIN D'ORIGINE : IS OpenTURNS (inchange, fallback) ---
             _t_is = time.perf_counter()
             res_IS  = run_IS([r_i], ev_i)
@@ -1799,29 +1800,29 @@ if __name__ == '__main__':
             print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
                   f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
             print(f"  [TIMING FORM/IS] {label} : FORM={_dt_form:.2f}s  IS={_dt_is:.2f}s  (total={_dt_form+_dt_is:.2f}s)", flush=True)
-            return beta_IS
+            return beta_IS, pf_IS
 
         def _three_form_is(g_ot_i, sigma_func_i, label, b_mid_precalc=None):
             """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
-            Retourne le ratio si calculable, None sinon.
-            2026-06-18 : b_mid_precalc reutilise le mu deja calcule (critere BS) pour eviter
+            Retourne (ratio, pf_mid, pf_sup, pf_inf) ou (None, None, None, None).
+            2026-06-18 : b_mid_precalc=(beta_IS, pf_IS) reutilise le mu deja calcule pour eviter
             un FORM+IS redondant sur g (le FORM est deterministe donc identique ; on economise
             ~1/4 du bloc FORM/IS). Si None -> calcul interne (comportement d'origine)."""
             g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
             g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
             _FM = getattr(getattr(sigma_func_i, '__self__', None), 'fm', None)   # surrogate courant (None si non-GEPCK)
             if b_mid_precalc is not None:
-                b_mid = b_mid_precalc
+                b_mid, pf_mid = b_mid_precalc
                 print(f"  [{label} μ] reutilise mu conv (pas de recalcul FORM/IS redondant)", flush=True)
             else:
-                b_mid = _form_is_iter(g_ot_i, f"{label} μ", sign=0, fm=_FM)
-            b_sup = _form_is_iter(g_sup_i, f"{label} sup", sign=+1, fm=_FM)
-            b_inf = _form_is_iter(g_inf_i, f"{label} inf", sign=-1, fm=_FM)
+                b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} μ", sign=0, fm=_FM)
+            b_sup, pf_sup = _form_is_iter(g_sup_i, f"{label} sup", sign=+1, fm=_FM)
+            b_inf, pf_inf = _form_is_iter(g_inf_i, f"{label} inf", sign=-1, fm=_FM)
             if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
                 ratio = abs(b_sup - b_inf) / abs(b_mid)
                 print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
-                return ratio
-            return None
+                return ratio, pf_mid, pf_sup, pf_inf
+            return None, None, None, None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
         count_valid_BB   = 0
@@ -1859,7 +1860,7 @@ if __name__ == '__main__':
         else:
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
-        _beta_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
+        _beta_IS_0, _pf_IS_0 = _form_is_iter(g_ot, f"N={len(xt)} initial μ conv")
         global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_beta_IS
         # En reprise : on ETEND les historiques charges du dump (pas de reset) -> les graphes
         # (tolerance) couvriront ancien + nouveau. Sinon (run initial) : reset comme avant.
@@ -1873,10 +1874,12 @@ if __name__ == '__main__':
         list_ratio_BS = _eff_history_BS
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
+        # init _b_mid/_pf_mid_conv (mu conv initial) -> BB informatif final dispose d'une valeur meme si 0 iter
+        _b_mid, _pf_mid_conv = _beta_IS_0, _pf_IS_0
         # --- Ratio BB initial (avant tout enrichissement, pour criteres qui tracent BB) ---
         # 'n_points' inclus : on calcule BB/BS pour les GRAPHES de tolerance meme si l'arret = compte.
         if EFF_criteria in ('BB', 'both', 'at_least_one', 'n_points'):
-            _ratio_init_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
+            _ratio_init_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
             list_ratio_BB.append(_ratio_init_bb)
             if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
                 count_valid_BB = 1
@@ -1904,7 +1907,7 @@ if __name__ == '__main__':
             # --- FORM+IS sur le surrogate mis à jour (BB uniquement) ---
             if EFF_criteria == 'BB':
                 iter_count += 1
-                _ratio = _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
+                _ratio, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} EFF iter {iter_count}")
                 if _ratio is not None and _ratio < tol_BB:
                     count_valid_BB += 1
                 else:
@@ -1912,7 +1915,7 @@ if __name__ == '__main__':
                 list_ratio_BB.append(_ratio)
 
             # --- Suivi convergence beta_IS ---
-            _b_mid = _form_is_iter(g_ot, f"N={len(xt)} μ conv")
+            _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} μ conv")
             if EFF_criteria == 'BS':
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_conv = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
@@ -1928,7 +1931,7 @@ if __name__ == '__main__':
             # --- Critere both : BB et BS simultanement ---
             if EFF_criteria == 'both':
                 iter_count += 1
-                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} both iter {iter_count}")
+                _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} both iter {iter_count}")
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} both] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -1946,7 +1949,7 @@ if __name__ == '__main__':
             # tolerance complet) mais l'ARRET reste le compte (cond override len(xt_eff)).
             if EFF_criteria in ('at_least_one', 'n_points'):
                 iter_count += 1
-                _ratio_bb = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}", b_mid_precalc=_b_mid)
+                _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} alo iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
                 if _b_mid is not None and list_beta_IS and _b_mid != 0:
                     _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
                     print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
@@ -2040,6 +2043,11 @@ if __name__ == '__main__':
             print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
         if list_ratio_BS:
             print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
+
+        # --- BB informatif final : ratio enveloppe surrogate (sup/inf) a convergence (1 _three_form_is) ---
+        _ratio_bb_final, _, _, _ = _three_form_is(g_ot, sigma_func, "BB final", b_mid_precalc=(_b_mid, _pf_mid_conv))
+        print(f"  [BB informatif final] ratio = {_ratio_bb_final}  tol_BB = {tol_BB}", flush=True)
+
         _eff_history_beta_IS = list(list_beta_IS)   # snapshot pour le dump restart (list_beta_IS est local)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
