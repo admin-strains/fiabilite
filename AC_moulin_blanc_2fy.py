@@ -872,8 +872,7 @@ if __name__ == '__main__':
     # --- Cache DOE (sidecar JSON, comme le cache HF) : lu s'il existe, sinon calcule + sauve ---
     _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
     def _doe_cache_sig():
-        return {"n0": n0, "params": list(params_names), "n_var": n_var,
-                "g1": len(group1_names), "g2": len(group2_names), "modelname": modelname}
+        return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
     def _load_doe_cache():
         if not os.path.exists(_DOE_CACHE_FILE):
             print(f"[DOE CACHE] aucun cache ({_DOE_CACHE_FILE}) -> calcul DOE", flush=True)
@@ -977,13 +976,12 @@ if __name__ == '__main__':
         try:
             _u = list(u) if u is not None else []
             _x = list(x) if x is not None else []
-            rec = {"phase": phase, "round": _point_log_round[0],
-                   "u1":  float(_u[0]) if len(_u) > 0 else None,
-                   "u2":  float(_u[1]) if len(_u) > 1 else None,
-                   "fy1": float(_x[0]) if len(_x) > 0 else None,
-                   "fy2": float(_x[1]) if len(_x) > 1 else None,
-                   "g":      None if g is None else float(g),
-                   "lambda": None if g is None else float(g) + 1.0}  # lambda = pObj = g+1
+            rec = {"phase": phase, "round": _point_log_round[0]}
+            for i, p in enumerate(params_names):
+                rec[f"u_{p}"] = float(_u[i]) if i < len(_u) else None
+                rec[f"x_{p}"] = float(_x[i]) if i < len(_x) else None
+            rec["g"]      = None if g is None else float(g)
+            rec["lambda"] = None if g is None else float(g) + 1.0  # lambda = pObj = g+1
             with open(_POINT_LOG_FILE, "a") as _pf:
                 _pf.write(json.dumps(rec) + "\n")
         except Exception as e:
