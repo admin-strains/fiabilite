@@ -107,6 +107,7 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale
 
     n0 = 5                      # nombre de points du plan d'experience initial (DOE)
+    config_is_identical = False  # False = recalcule le DOE ; True = reutilise doe_cache.json (mettre True apres 1er run OK avec ces params)
     # 2026-06-18 : nb de calculs DOE lances EN PARALLELE (multiprocessing, copies .ds isolees).
     #   1 = sequentiel (comportement d'origine). >1 = N workers concurrents, MKL epingle a 32//N
     #   threads/worker. RAM ~22 Go/worker (machine 256 Go). Avec n0=5 : 3 -> 2 vagues, 5 -> 1 vague.
@@ -873,26 +874,26 @@ if __name__ == '__main__':
     def _doe_cache_sig():
         return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
     def _load_doe_cache():
+        if not config_is_identical:
+            print("[DOE CACHE] config_is_identical=False -> recalcul DOE", flush=True)
+            return None
         if not os.path.exists(_DOE_CACHE_FILE):
             print(f"[DOE CACHE] aucun cache ({_DOE_CACHE_FILE}) -> calcul DOE", flush=True)
             return None
         try:
             d = json.load(open(_DOE_CACHE_FILE))
-            if d.get("signature") == _doe_cache_sig():
-                print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (signature OK -> 0 SOCP DOE)", flush=True)
-                return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
-            print("[DOE CACHE] signature differente du cache existant -> recalcul DOE", flush=True)
+            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (config_is_identical -> 0 SOCP DOE)", flush=True)
+            return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
         except Exception as e:
             print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
         return None
     def _save_doe_cache(xt, yt, all_grad):
         try:
-            json.dump({"signature": _doe_cache_sig(),
-                       "xt": np.asarray(xt).tolist(),
+            json.dump({"xt": np.asarray(xt).tolist(),
                        "yt": np.asarray(yt).tolist(),
                        "all_grad": np.asarray(all_grad).tolist()},
                       open(_DOE_CACHE_FILE, "w"), indent=1)
-            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE} (reutilisable au prochain run)", flush=True)
+            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE} (reutilisable si config_is_identical=True)", flush=True)
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
