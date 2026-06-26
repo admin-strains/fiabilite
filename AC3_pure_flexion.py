@@ -75,7 +75,7 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 8                      #nombre de points du plan d'expérience initial (DOE)
+    n0 = 10                     #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
@@ -756,7 +756,11 @@ if __name__ == '__main__':
             return None
         try:
             d = json.load(open(_DOE_CACHE_FILE))
-            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (config_is_identical=True -> 0 SOCP DOE)", flush=True)
+            _n0_cache = d.get('n0', len(d.get('xt', [])))
+            if _n0_cache != n0:
+                print(f"[DOE CACHE] n0 different (cache={_n0_cache}, courant={n0}) -> recalcul DOE", flush=True)
+                return None
+            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0} OK -> 0 SOCP DOE)", flush=True)
             return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
         except Exception as e:
             print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
@@ -764,7 +768,8 @@ if __name__ == '__main__':
 
     def _save_doe_cache(xt, yt, all_grad):
         try:
-            json.dump({"xt": np.asarray(xt).tolist(),
+            json.dump({"n0": n0,
+                       "xt": np.asarray(xt).tolist(),
                        "yt": np.asarray(yt).tolist(),
                        "all_grad": np.asarray(all_grad).tolist()},
                       open(_DOE_CACHE_FILE, "w"), indent=1)
@@ -2576,8 +2581,8 @@ if __name__ == '__main__':
         _xlabel = f'u_{params_names[idx_x]}'
         _ylabel = f'u_{params_names[idx_y]}'
 
-        # --- Fond coloré : surrogate actif ---
-        if g_ot is not None:
+        # --- Fond coloré : surrogate actif (pas en mode HF) ---
+        if g_ot is not None and not do_HF:
             grid_ot = ot.Sample(grid.tolist())
             Z_sur = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
             cf = ax.contourf(UX, UY, Z_sur, levels=20, cmap='RdYlGn', alpha=0.6)
