@@ -75,7 +75,7 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 10                     #nombre de points du plan d'expérience initial (DOE)
+    n0 = 12                     #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
@@ -1723,7 +1723,10 @@ if __name__ == '__main__':
 
             # --- Suivi convergence beta_IS ---
             iter_count += 1
-            _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} mu conv")
+            _fm_eff = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
+            import time as _t_mod; _t0_is = _t_mod.perf_counter()
+            _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} mu conv", fm=_fm_eff)
+            print(f"  [TIMING _form_is_iter] dt={_t_mod.perf_counter()-_t0_is:.2f}s (fm={'oui' if _fm_eff else 'non'})", flush=True)
 
             # --- FORM+IS mid/sup/inf (conditionne par print_Pf) ---
             if print_Pf:
