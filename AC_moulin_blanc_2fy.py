@@ -106,7 +106,7 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement
     do_IS   = True                            #si on veut calculer la proba globale
 
-    n0 = 5                      # nombre de points du plan d'experience initial (DOE)
+    n0 = 8                      # nombre de points du plan d'experience initial (DOE) (aligné flexion : 5 -> 8)
     config_is_identical = False  # False = recalcule le DOE ; True = reutilise doe_cache.json (mettre True apres 1er run OK avec ces params)
     # 2026-06-18 : nb de calculs DOE lances EN PARALLELE (multiprocessing, copies .ds isolees).
     #   1 = sequentiel (comportement d'origine). >1 = N workers concurrents, MKL epingle a 32//N
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     do_multistart = True #multistart : FORM depuis n0 points + [0,0]
     do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
 
-    tol_FORM = 1.0                 # précision acceptée par FORM pour l'état limite
+    tol_FORM = 0.002                 # précision acceptée par FORM pour l'état limite (aligné flexion : 1.0 -> 0.002)
     tol_all_modes = 0.9                           #distance DBSCAN entre deux modes (Semia flexion: 0.9)
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 1e-3                                            # 2026-06-17 : remis a 1e-3 (valeur flexion d'origine ; avait ete teste a 1e-5)
-    tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
+    tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS (aligné flexion : 0.01 -> 0.05)
     tol_BS       = 0.01         # critere BS : |beta_IS - beta_IS_prec| / beta_IS (Semia flexion: 0.005 -> 0.01)
     EFF_criteria = 'BS'           # critere d'arret EFF : 'BB' | 'BS' | 'both' | 'at_least_one' | 'n_points' (BS recommande, cf. guide)
                                   #   'n_points' = on s'arrete apres un NOMBRE FIXE de points EFF (n_eff_target)
