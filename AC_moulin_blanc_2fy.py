@@ -2251,12 +2251,18 @@ if __name__ == '__main__':
         Sauvegarde en PNG dans out_dir_eff sans afficher de fenetre."""
         global hf_2d_grid_fixed
         n_added = len(xt_eff)
+        # transfert3 T3-2 : coupe 2D generique (slice_def). n_var=2 -> idx_x=0, idx_y=1, fixed={} : identique.
+        idx_x, idx_y, fixed = slice_def if slice_def is not None else (0, 1, {})
 
         # --- Grille commune (calculee une seule fois) ---
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = U1.ravel()
+        grid[:, idx_y] = U2.ravel()
+        for _jf, _vf in fixed.items():
+            grid[:, _jf] = _vf
 
         # --- Z_eff, Z_sigma, Z_g (batch vectorise via BLAS multi-thread) ---
         # OPTIM 2026-06-12 : 1 appel batch GEPCK vs 90000 appels sequentiels (gain ~50-200x)
@@ -2274,7 +2280,11 @@ if __name__ == '__main__':
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = U1_hf.ravel()
+                grid_hf[:, idx_y] = U2_hf.ravel()
+                for _jf, _vf in fixed.items():
+                    grid_hf[:, _jf] = _vf
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
                                                 'u2_min': u2_min, 'u2_max': u2_max,
@@ -2284,7 +2294,8 @@ if __name__ == '__main__':
         # --- Figure ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
         _pce_line = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
-        fig.suptitle(f'{modele} — N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_pce_line}', fontsize=10)
+        _fixed_str = ('  [fixe: ' + ', '.join(f'u_{params_names[j]}={v:+.2f}' for j, v in fixed.items()) + ']') if fixed else ''
+        fig.suptitle(f'{modele} — N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_pce_line}{_fixed_str}', fontsize=10)
 
         def _decorate(ax):
             if Z_g is not None:
@@ -2292,17 +2303,17 @@ if __name__ == '__main__':
             if Z_true is not None:
                 _draw_red_curve(ax, hf_2d_grid_fixed)
             if xt is not None:
-                ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
+                ax.scatter(xt[:, idx_x], xt[:, idx_y], c='white', s=40, zorder=5,
                            edgecolors='black', linewidths=0.8, label='DOE')
             if n_added > 0:
                 xt_eff_arr = np.array(xt_eff)
-                ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
+                ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=80, zorder=6,
                            marker='^', label=f'EFF ({n_added} pts)')
                 for i, pt in enumerate(xt_eff_arr):
-                    ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                    ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
                                 xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-            ax.set_xlabel('u1')
-            ax.set_ylabel('u2')
+            ax.set_xlabel(f'u_{params_names[idx_x]}')
+            ax.set_ylabel(f'u_{params_names[idx_y]}')
             ax.set_xlim(u1_min, u1_max)
             ax.set_ylim(u2_min, u2_max)
             ax.legend(loc='best', fontsize=9)
