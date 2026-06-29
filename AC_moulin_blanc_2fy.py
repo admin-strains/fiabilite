@@ -895,6 +895,10 @@ if __name__ == '__main__':
             return None
         try:
             d = json.load(open(_DOE_CACHE_FILE))
+            _n0_cache = d.get('n0', len(d.get('xt', [])))   # transfert3 T3-7 : fallback ancien format
+            if _n0_cache != n0:
+                print(f"[DOE CACHE] n0 different (cache={_n0_cache}, courant={n0}) -> recalcul DOE", flush=True)
+                return None
             print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (config_is_identical -> 0 SOCP DOE)", flush=True)
             return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
         except Exception as e:
@@ -902,7 +906,8 @@ if __name__ == '__main__':
         return None
     def _save_doe_cache(xt, yt, all_grad):
         try:
-            json.dump({"xt": np.asarray(xt).tolist(),
+            json.dump({"n0": n0,
+                       "xt": np.asarray(xt).tolist(),
                        "yt": np.asarray(yt).tolist(),
                        "all_grad": np.asarray(all_grad).tolist()},
                       open(_DOE_CACHE_FILE, "w"), indent=1)
