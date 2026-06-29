@@ -2173,38 +2173,60 @@ if __name__ == '__main__':
 
     # --- Cache sidecar JSON de la grille HF (evite de recalculer les 49 SOCP / ~2h30) ---
     # Fichier dans le dossier .ds du projet -> 1 cache par projet (tablier / diagonal).
-    _HF_CACHE_FILE = os.path.join(_path_ds, "hf_grid_cache.json")
+    _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
+    _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")   # transfert3 T3-4 : coupe slice_def_final
+    hf_2d_grid_fixed_final = None
 
-    def _load_hf_cache(n_grid_hf_local):
+    def _load_hf_cache(n_grid_hf_local, cache_file, sd):
         import json as _j
         if not config_is_identical:
             print("[HF CACHE] config_is_identical=False -> recalcul grille HF", flush=True)
             return None
-        if not os.path.exists(_HF_CACHE_FILE):
+        if not os.path.exists(cache_file):
+            print(f"[HF CACHE] aucun cache ({cache_file}) -> calcul grille HF", flush=True)
             return None
         try:
-            d = _j.load(open(_HF_CACHE_FILE))
-            print(f"[HF CACHE] charge depuis {_HF_CACHE_FILE} (config_is_identical -> 0 calcul SOCP)", flush=True)
+            d = _j.load(open(cache_file))
+            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
+            _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
+            if _sd_cache != _sd_now:
+                print(f"[HF CACHE] coupe differente (cache={_sd_cache}, courant={_sd_now}) -> recalcul", flush=True)
+                return None
+            print(f"[HF CACHE] charge depuis {cache_file} (coupe OK -> 0 SOCP grille)", flush=True)
             return np.array(d['Z'])
         except Exception as e:
             print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
         return None
 
-    def _save_hf_cache(Z, n_grid_hf_local):
+    def _save_hf_cache(Z, n_grid_hf_local, cache_file, sd):
         import json as _j
         try:
-            _j.dump({'Z': Z.tolist()}, open(_HF_CACHE_FILE, 'w'), indent=1)
-            print(f"[HF CACHE] sauve dans {_HF_CACHE_FILE} (reutilisable si config_is_identical=True)", flush=True)
+            _sd = sd if sd is not None else (0, 1, {})
+            _j.dump({'Z': Z.tolist(), 'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
+                    open(cache_file, 'w'), indent=1)
+            print(f"[HF CACHE] sauve dans {cache_file}", flush=True)
         except Exception as e:
             print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
-    def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context=""):
+    def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
+                                        cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
         """Calcule la grille HF point par point avec impression progress + ETA.
         Lecture/ecriture AUTOMATIQUE d'un cache sidecar JSON (plus de copier-coller).
-        Valeurs g BRUTES (= run_HF), AUCUN traitement de divergence (comme AC3 flexion)."""
+        Valeurs g BRUTES (= run_HF), AUCUN traitement de divergence (comme AC3 flexion).
+        cache_file/sd/grid_var_name : defauts _HF_CACHE_FILE / slice_def / 'hf_2d_grid_fixed'."""
+        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
         import time as _time_local
-        cached = _load_hf_cache(n_grid_hf_local)
+        if cache_file is None:
+            cache_file = _HF_CACHE_FILE
+        if sd is None:
+            sd = slice_def
+        cached = _load_hf_cache(n_grid_hf_local, cache_file, sd)
         if cached is not None:
+            _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': cached.tolist()}
+            if grid_var_name == 'hf_2d_grid_fixed_final':
+                hf_2d_grid_fixed_final = _grid_dict
+            else:
+                hf_2d_grid_fixed = _grid_dict
             return cached
         _point_log_phase[0] = "HF"   # les run_HF de la grille courbe rouge sont taggues HF
         n_total = len(grid_hf)
@@ -2220,13 +2242,19 @@ if __name__ == '__main__':
             _t_elapsed = _time_local.perf_counter() - _t_start
             _t_avg = _t_elapsed / (i + 1)
             _t_eta = _t_avg * (n_total - i - 1)
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
+            _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(len(pt)))
+            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  "
                   f"ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
         print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
         Z = np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
-        _save_hf_cache(Z, n_grid_hf_local)
+        _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
+        if grid_var_name == 'hf_2d_grid_fixed_final':
+            hf_2d_grid_fixed_final = _grid_dict
+        else:
+            hf_2d_grid_fixed = _grid_dict
+        _save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
         return Z
 
     def _draw_red_curve(ax, hf_cache, linestyles='-'):
