@@ -23,5 +23,5 @@ word de resultat et comparaison/
 output_*.txt
 C：tmpform_out.txt
 
-# Sessions Claude
-global_resume_session*.md
+# Fichiers Markdown
+*.md

@@ -75,7 +75,7 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 12                     #nombre de points du plan d'expérience initial (DOE)
+    n0 = 8                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 1e-3                                            # critere d'arret EFF
-    tol_BB       = 0.01         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
+    tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     u1_eff_min, u1_eff_max = -7.5, 7.5
