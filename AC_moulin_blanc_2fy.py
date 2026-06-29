@@ -464,6 +464,10 @@ if __name__ == '__main__':
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
+    # transfert3 T3-1 (28481bd guide): coupe 2D par defaut pour les planches EFF (2 premieres vars, reste a 0).
+    # slice_def_final=None -> print_visu la calcule depuis les importances FORM. Pour n_var=2 : (0,1,{}).
+    slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
+    slice_def_final = None
     # garde : pas d'analytique si une variable n'est pas un materiau CAD (ex. variable de charge)
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
         print_ana = False
@@ -1558,8 +1562,7 @@ if __name__ == '__main__':
 
         elif do_GEPCK:
             if xt is None: xt, yt, all_grad = build_DOE()
-            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]},
-                          {'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}]
+            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]} for _ in range(n_var)]
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
             _opts      = {'Mode': 'optimal',
                           'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
@@ -1715,7 +1718,7 @@ if __name__ == '__main__':
                 grad_val = np.array([[grad_ot[i, 0] for i in range(n_var)]])
                 all_grad = np.vstack([all_grad, grad_val])
                 event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
-                starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+                starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
                 modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
         return modes, best_sps
 
@@ -1836,7 +1839,7 @@ if __name__ == '__main__':
         count_valid_both = 0
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
+        bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
         problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -1997,7 +2000,7 @@ if __name__ == '__main__':
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval([u1_eff_min, u2_eff_min], [u1_eff_max, u2_eff_max])
+            bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -2878,11 +2881,11 @@ if __name__ == '__main__':
     _t_log("##### PHASE: FORM_all_modes (multistart) START #####")
     _t0_phase = time.perf_counter()
     if do_warmstart:
-        starting_points = np.array([[0.0, 0.0]])
+        starting_points = np.array([[0.0] * n_var])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
-        starting_points = np.vstack([xt, [[0.0, 0.0]]]) if do_multistart else np.array([[0.0, 0.0]])
+        starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
     _t_log(f"##### PHASE: FORM_all_modes END (n_modes={len(modes)}, n_starts={len(starting_points)}) #####", _t0_phase)
 
