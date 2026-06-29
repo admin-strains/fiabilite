@@ -2339,10 +2339,15 @@ if __name__ == '__main__':
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
         global hf_2d_grid_fixed
+        idx_x, idx_y, fixed = slice_def if slice_def is not None else (0, 1, {})   # transfert3 T3-3a
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = U1.ravel()
+        grid[:, idx_y] = U2.ravel()
+        for _jf, _vf in fixed.items():
+            grid[:, _jf] = _vf
 
         # OPTIM 2026-06-12 : batch vectorise (BLAS multi-thread)
         mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
@@ -2365,7 +2370,11 @@ if __name__ == '__main__':
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = U1_hf.ravel()
+                grid_hf[:, idx_y] = U2_hf.ravel()
+                for _jf, _vf in fixed.items():
+                    grid_hf[:, _jf] = _vf
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
@@ -2373,20 +2382,20 @@ if __name__ == '__main__':
 
         # --- Points DOE ---
         if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
+            ax.scatter(xt[:, idx_x], xt[:, idx_y], c='white', s=40, zorder=5,
                        edgecolors='black', linewidths=0.8, label='DOE')
 
         # --- Points ajoutes par EFF ---
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
+            ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=80, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
             for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
                             xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
+        ax.set_xlabel(f'u_{params_names[idx_x]}')
+        ax.set_ylabel(f'u_{params_names[idx_y]}')
         ax.set_xlim(u1_min, u1_max)
         ax.set_ylim(u2_min, u2_max)
         ax.set_title('Critere EFF')
@@ -2397,10 +2406,15 @@ if __name__ == '__main__':
     def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D de l'ecart-type conditionnel du surrogate."""
         global hf_2d_grid_fixed
+        idx_x, idx_y, fixed = slice_def if slice_def is not None else (0, 1, {})   # transfert3 T3-3a
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = U1.ravel()
+        grid[:, idx_y] = U2.ravel()
+        for _jf, _vf in fixed.items():
+            grid[:, _jf] = _vf
 
         # OPTIM 2026-06-12 : batch vectorise (BLAS multi-thread)
         mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
@@ -2423,26 +2437,30 @@ if __name__ == '__main__':
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = U1_hf.ravel()
+                grid_hf[:, idx_y] = U2_hf.ravel()
+                for _jf, _vf in fixed.items():
+                    grid_hf[:, _jf] = _vf
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
             _draw_red_curve(ax, hf_2d_grid_fixed)
 
         if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
+            ax.scatter(xt[:, idx_x], xt[:, idx_y], c='white', s=40, zorder=5,
                        edgecolors='black', linewidths=0.8, label='DOE')
 
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
+            ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=80, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
             for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
+                ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
                             xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
 
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
+        ax.set_xlabel(f'u_{params_names[idx_x]}')
+        ax.set_ylabel(f'u_{params_names[idx_y]}')
         ax.set_xlim(u1_min, u1_max)
         ax.set_ylim(u2_min, u2_max)
         ax.set_title('Ecart-type surrogate (sigma)')
