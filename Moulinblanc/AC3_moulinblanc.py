@@ -76,8 +76,8 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 1             #nb de SOCP DOE en parallele (1 = sequentiel, moulin_blanc: fichiers .stp non copies)
-    config_is_identical = False   #False = recalcule le DOE (premier run)
+    n_workers_DOE = 3             #nb de SOCP DOE en parallele
+    config_is_identical = True    #True = reutilise doe_cache.json
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = True
+    print_HF = False
     print_fullHF = False             #False pour n_var=2 (grille 2D 7x7=49 suffit)
     print_DOE = True
     print_3D = False
