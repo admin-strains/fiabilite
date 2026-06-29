@@ -2424,25 +2424,10 @@ if __name__ == '__main__':
         Z_sigma = sigma_grid.reshape(n_grid, n_grid)
         Z_g = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
-        # --- Contour g=0 HF (depuis cache ou calcul, une seule fois) ---
-        Z_true, U1_hf, U2_hf = None, None, None
+        # --- Contour g=0 HF (transfert3 T3-5b : cascade _get_hf_slice cache 2D -> full -> recalcul) ---
+        Z_true = None
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
-                grid_hf[:, idx_x] = U1_hf.ravel()
-                grid_hf[:, idx_y] = U2_hf.ravel()
-                for _jf, _vf in fixed.items():
-                    grid_hf[:, _jf] = _vf
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max,
-                                                'u2_min': u2_min, 'u2_max': u2_max,
-                                                'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+            Z_true = _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
 
         # --- Figure ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
@@ -2515,22 +2500,9 @@ if __name__ == '__main__':
             Z_g = mu_grid.reshape(n_grid, n_grid)
             ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
 
-        # --- Contour g=0 HF ---
+        # --- Contour g=0 HF (transfert3 T3-5b : cascade _get_hf_slice) ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
-                grid_hf[:, idx_x] = U1_hf.ravel()
-                grid_hf[:, idx_y] = U2_hf.ravel()
-                for _jf, _vf in fixed.items():
-                    grid_hf[:, _jf] = _vf
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+            _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
             _draw_red_curve(ax, hf_2d_grid_fixed)
 
         # --- Points DOE ---
@@ -2582,22 +2554,9 @@ if __name__ == '__main__':
             Z_g = mu_grid.reshape(n_grid, n_grid)
             ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
 
-        # --- Contour g=0 HF ---
+        # --- Contour g=0 HF (transfert3 T3-5b : cascade _get_hf_slice) ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
-                grid_hf[:, idx_x] = U1_hf.ravel()
-                grid_hf[:, idx_y] = U2_hf.ravel()
-                for _jf, _vf in fixed.items():
-                    grid_hf[:, _jf] = _vf
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
+            _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
             _draw_red_curve(ax, hf_2d_grid_fixed)
 
         if xt is not None:
@@ -2718,23 +2677,10 @@ if __name__ == '__main__':
             Z_krg = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
             ax.contour(U1, U2, Z_krg, levels=[0], colors='purple', linewidths=2, linestyles=':')
 
-        # --- Contour HF grossier ---
+        # --- Contour HF grossier (transfert3 T3-5b : coupe FINALE via _get_hf_slice) ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
-                grid_hf[:, idx_x] = U1_hf.ravel()
-                grid_hf[:, idx_y] = U2_hf.ravel()
-                for _jf, _vf in fixed.items():
-                    grid_hf[:, _jf] = _vf
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
-                hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
-                print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
-            _draw_red_curve(ax, hf_2d_grid_fixed, linestyles='--')
+            _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+            _draw_red_curve(ax, hf_2d_grid_fixed_final, linestyles='--')
 
         # --- LS analytique (depuis flexion_claude) ---
         if print_ana:
