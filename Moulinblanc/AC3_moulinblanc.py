@@ -57,14 +57,14 @@ def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
-    modelname = "test_pure_flexion"
+    modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
-    _path_ds = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
+    _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
     print("=" * 70)
-    print("CALCUL DE FIABILITE -- FLEXION PURE BETON")
+    print("CALCUL DE FIABILITE -- PONT DU MOULIN BLANC -- LM1 TRAFIC")
     print("=" * 70)
     # --------------------------------------------------------------------------- #
     # OPTIONS UTILISATEUR                                                         #
@@ -75,14 +75,17 @@ if __name__ == '__main__':
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 8                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
-    config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
+    n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
+    n_workers_DOE = 1             #nb de SOCP DOE en parallele (1 = sequentiel, moulin_blanc: fichiers .stp non copies)
+    config_is_identical = False   #False = recalcule le DOE (premier run)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
-    n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
-    rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
+    rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
+    n_rebars = len(rebar_names)
+    group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
+    group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
+    print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
@@ -92,7 +95,7 @@ if __name__ == '__main__':
     start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
     n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
 
-    tol_FORM = 0.002                # précision acceptée par FORM pour l'état limite
+    tol_FORM = 0.05                 # précision acceptée par FORM pour l'état limite (moulin_blanc)
     tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
 
@@ -146,14 +149,11 @@ if __name__ == '__main__':
 
     # --- Options de print ---
     print_HF = True
-    print_fullHF = True              #True = calcule la grille HF complete (n_grid_hf^n_var, ~30min en 3D)
+    print_fullHF = False             #False pour n_var=2 (grille 2D 7x7=49 suffit)
     print_DOE = True
     print_3D = False
     
     # --- Print facultatifs, par défaut à False ---
-    print_ana = False    #True que pour pure_flexion (flexion_claude que dans ce cas)
-    # print_ana est force a False si les params ne sont pas tous dans PARAM_CONFIG_CAD
-    # (flexion_claude n'est valide que pour des params materiaux CAD comme fc/fy)
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
 
@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = os.path.join(r'C:\_workingDir\_SF\test flexion\output\png EFF', f'png_EFF_{timestamp}')
+    out_dir_eff = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output\png EFF', f'png_EFF_{timestamp}')
     os.makedirs(out_dir_eff, exist_ok=True)
 
     do_KRG = True if modele == 'KRG' else False
@@ -418,23 +418,19 @@ if __name__ == '__main__':
         return ot.Exponential(1.0 / p['mp'], 0.0)
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    FY_MEAN = 235.0
     PARAM_CONFIG_CAD = {
-        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-               'loi': loi_fy, 'mean': 550, 'cov': None},
-        'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
-               'loi': loi_fc, 'mean': 48, 'cov': 0.12},
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names},
+                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names},
+                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
     }
-    PARAM_CONFIG_LOAD = {
-        'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0"},
-               'loi': loi_F_permanente, 'mean': 1.0, 'cov': 0.05},
-    }
+    PARAM_CONFIG_LOAD = {}
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
-    if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
-        print_ana = False
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
-    slice_def_final = (0, 1, {2: -1.7})   # test : coupe F vs fy a fc=-1.7 (coordonnee du point EFF 2)
+    slice_def_final = None
 
     def dist_jointe():
         return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
@@ -479,7 +475,7 @@ if __name__ == '__main__':
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire)"""
-        path = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
+        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         #MODIF 1 10/04 - on doit tout mettre dans params in SOL. TOUT.
@@ -527,7 +523,7 @@ if __name__ == '__main__':
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+            exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -571,7 +567,11 @@ if __name__ == '__main__':
                 print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
                     for p in params_names:
-                        if PARAM_CONFIG[p]['sens']['param'] in k:
+                        sens = PARAM_CONFIG[p]['sens']
+                        if sens['param'] in k:
+                            if 'rebars' in sens and sens['rebars']:
+                                if sens['rebars'][0] not in k:
+                                    continue
                             SOL[i][f'dg_{p}'] = v
                             break
                     if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
@@ -585,7 +585,7 @@ if __name__ == '__main__':
         T_inv = dist_X.getInverseIsoProbabilisticTransformation() 
         u_point = ot.Point(u)
         x_point = T_inv(u_point)
-        path = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
+        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         params={params_names[i]: x_point[i] for i in range(n_var)}
@@ -632,7 +632,7 @@ if __name__ == '__main__':
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-        exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+        exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
         kwargs["static_params"] = static_params
         kwargs["cinematic_params"] = cinematic_params
         kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -677,7 +677,11 @@ if __name__ == '__main__':
             print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
             for k, v in d['info']['Sensitivity'].items():
                 for p in params_names:
-                    if PARAM_CONFIG[p]['sens']['param'] in k:
+                    sens = PARAM_CONFIG[p]['sens']
+                    if sens['param'] in k:
+                        if 'rebars' in sens and sens['rebars']:
+                            if sens['rebars'][0] not in k:
+                                continue
                         grad_HF_X[params_names.index(p)] = v
                         break
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
@@ -695,7 +699,7 @@ if __name__ == '__main__':
         """Parallelise les SOCP du DOE via subprocesses independants.
         Chaque worker = launcher3.py relance en mode _DOE_WORKER sur une copie .ds isolee."""
         import subprocess as _sp
-        storage = "C:\\workspace\\storage\\admin\\SF\\"
+        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
         base_ds = storage + base_modelname + ".ds"
         npts = len(SOL)
         n_workers = max(1, min(n_workers, npts))
@@ -727,7 +731,7 @@ if __name__ == '__main__':
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_doe_worker.log", "w")
             print(f"    -> worker {w}: points {idxs}", flush=True)
-            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\launcher3.py"],
+            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\Moulinblanc\launcher3.py"],
                           env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         for p, out_file, wlog, w, idxs in procs:
@@ -926,87 +930,6 @@ if __name__ == '__main__':
     # FONCTION ANALYTIQUE DE REFERENCE                                            #
     # --------------------------------------------------------------------------- #
     # FONCTION ANALYTIQUE                                                         #
-    # --- Paramètres du modèle analytique ---
-    Es = 200000
-    ecu = 0.0035
-    eud = 0.045
-    gamma_c_fic = _parse(_cad_txt, 'gamma_c') # fixé à 1.0
-    gamma_s_fic = _parse(_cad_txt, 'gamma_s') # fixé à 1.0
-    
-    # --- Fonction analytique ---
-    class flexion_claude:
-        def __init__(self):
-
-            # --- Lecture du dsCad et dsLoad ---
-            path = os.path.join(r'C:\workspace\storage\admin\SF', modelname + '.ds')
-            with open(os.path.join(path, 'dsCad.txt'), 'r') as f:
-                _cad = f.read()
-            with open(os.path.join(path, 'dsLoad.txt'), 'r') as f:
-                _load = f.read()
-
-            b   = _parse(_cad, 'b')
-            h   = _parse(_cad, 'h')
-            L   = _parse(_cad, 'L')
-            phi = _parse(_cad, 'phi')
-
-            n_bars = len(re.findall(r'REBAR\(', _cad))
-            As = n_bars * math.pi * (phi / 2e3) ** 2
-
-            z_rebar = [float(v) for v in re.findall(
-                r'pts\d+\.append\(POINT\([^,]+,\s*[^,]+,\s*([\d.]+)\)', _cad)]
-            d = h/2 + sum(z_rebar) / len(z_rebar)
-
-            F = abs(float(re.search(r"Z='(-?[\d.]+)'", _load).group(1)))
-            Med = F * L
-
-            # --- Définition de la transformation isoprobabiliste ---
-            self.fym = PARAM_CONFIG['fy']['mean'] if 'fy' in PARAM_CONFIG else 550
-            dist_X     = dist_jointe()
-            self.T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-            self.T     = dist_X.getIsoProbabilisticTransformation()
-
-            # --- Définiton des constantes pour le cas aciers plastifiés ---
-            self.A  = As * d / gamma_s_fic
-            self.B  = - As**2 * gamma_c_fic / (2 * b * gamma_s_fic**2)
-            self.C  = -Med
-
-            # --- Calcul de la limite plastique ---
-            self.Ap = 0.8*d*b / (As*gamma_c_fic*Es*ecu)
-            self.Bp = 0.8*b*d**2 / gamma_c_fic
-            self.Cp = 2*self.Ap*self.C/self.Bp 
-            ap = 1
-            bp = self.Cp - 0.8
-            cp = self.Cp - 0.2
-            Delta_p = bp**2 - 4*ap*cp
-            sol1_s = (-bp + Delta_p**0.5) / (2*ap)
-            sol1_x1 = (sol1_s**2 - 1) / (4*self.Ap)
-            self.u1_lim_plast = self.T(ot.Point([sol1_x1, 0.0]))[0]
-
-            # --- Limite de plasticité ---
-            self.A1 = As*gamma_c_fic*Es*ecu/(0.8*b*d)
-            self.A2 = Es*ecu*gamma_s_fic
-
-        def u2p_LS(self, u1):
-            x_point = self.T_inv(ot.Point([u1, 0.0]))
-            x1 = x_point[0]
-            a  = self.B
-            b  = self.A * x1
-            c  = self.C * x1
-            Delta = b**2 - 4 * a * c
-            fy = (-b + Delta**0.5) / (2 * a)
-            return self.T(ot.Point([0.0, fy]))[1]
-
-        def g(self, u1, u2):
-            x_point = self.T_inv(ot.Point([u1, u2]))
-            x1 = x_point[0]
-            x2 = x_point[1]
-            x1_lim_plast_x2 = self.A1*x2*(self.A2+x2)/self.A2**2
-            if x1 > x1_lim_plast_x2:
-                return (self.A*x2+self.B*x2**2/x1+self.C)/(-self.C)
-            else :
-                s = (1 + 4*self.Ap*x1)**0.5
-                return -1 - (s-1)/self.Cp + 0.8*(s-1)/(self.Cp*(s+1))
-    
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU MODELE HF                                                #
 
@@ -2540,6 +2463,9 @@ if __name__ == '__main__':
         print(f"Imp.         = {[round(v, 4) for v in best_result.getImportanceFactors()]}", flush=True)
         print(f"beta         = {best_result.getHasoferReliabilityIndex():.4f}", flush=True)
         print(f"Pf           = {best_result.getEventProbability():.4e}", flush=True)
+        if g_ot is not None:
+            g_sur_ustar = g_ot(ot.Point(u_star))[0]
+            print(f"g_surrogate(u*) = {g_sur_ustar:.6f}", flush=True)
 
         # --- Erreur FOSM ---
         if g_ot is not None:
@@ -2599,18 +2525,6 @@ if __name__ == '__main__':
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
-
-        # --- LS analytique (depuis flexion_claude) ---
-        if print_ana:
-            calc = flexion_claude()
-            u1_lim_a = calc.u1_lim_plast
-            u2_lim_a = calc.u2p_LS(u1_lim_a)
-            u1_g_a = np.linspace(u1_lim_a, u1_max, n_grid)
-            u2_g_a = np.array([calc.u2p_LS(u) for u in u1_g_a])
-            ax.plot(u1_g_a, u2_g_a, color='green', linestyle='-.', linewidth=2)
-            ax.plot([u1_lim_a, u1_lim_a], [u2_lim_a, u2_max],
-                    color='green', linestyle='-.', linewidth=2)
-            ax.plot(u1_lim_a, u2_lim_a, 'ko', ms=6, zorder=6)
 
         # --- Points ---
         if xt is not None:
@@ -2696,8 +2610,6 @@ if __name__ == '__main__':
             legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label=f'g=0 {modele}'))
         if print_HF:
             legend_lines.append(Line2D([0], [0], color='red',    linestyle='--', linewidth=2, label='g=0 HF'))
-        if print_ana:
-            legend_lines.append(Line2D([0], [0], color='green',  linestyle='-.', linewidth=2, label='g=0 ana'))
 
         ax.legend(handles=ax.legend().legend_handles + legend_lines)
 
@@ -2747,20 +2659,6 @@ if __name__ == '__main__':
         ax.contour(U1_hf, U2_hf, Z, levels=[0], colors='red', linewidths=2,
                    zdir='z', offset=float(Z.min()))
         ax.contour(U1_hf, U2_hf, Z, levels=[0], colors='darkred', linewidths=2)
-
-        # --- Surface analytique g_ana (flexion_claude) ---
-        if print_ana:
-            calc = flexion_claude()
-            u1_a = np.linspace(u1_min, u1_max, n_grid)
-            u2_a = np.linspace(u2_min, u2_max, n_grid)
-            U1_a, U2_a = np.meshgrid(u1_a, u2_a)
-            Z_ana = np.array([calc.g(u1, u2)
-                              for u1, u2 in zip(U1_a.ravel(), U2_a.ravel())]
-                             ).reshape(n_grid, n_grid)
-            ax.plot_surface(U1_a, U2_a, Z_ana, color='blue', alpha=0.3, label='g_ana')
-            ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2,
-                       zdir='z', offset=float(Z.min()))
-            ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2)
 
         if best_sol_modes_fixed is not None:
             for col, (lbl, data) in zip(['blue', 'red', 'green', 'gold'],

@@ -19,6 +19,7 @@ for d in dll_dirs:
 # Add STRAINS to Python path
 sys.path.insert(0, r'C:\workspace\front')
 sys.path.insert(0, r'C:\_workingDir\_SF\fiabilite')
+sys.path.insert(0, r'C:\_workingDir\_SF\test flexion\Moulinblanc')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion\_lib')
 
@@ -27,4 +28,4 @@ sys.path.insert(0, r'C:\_workingDir\_SF\test flexion\_lib')
 import multiprocessing as mp
 if __name__ == "__main__":
     mp.freeze_support()
-    exec(open(r'C:\_workingDir\_SF\test flexion\AC3_pure_flexion.py').read(), {'__name__': '__main__'})
+    exec(open(r'C:\_workingDir\_SF\test flexion\Moulinblanc\AC3_moulinblanc.py').read(), {'__name__': '__main__'})
