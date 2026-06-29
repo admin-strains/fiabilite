@@ -2505,11 +2505,26 @@ if __name__ == '__main__':
 
 
     def print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff):
-        global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed
+        global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
+        # transfert3 T3-3b : coupe finale via slice_def_final (auto-calculee depuis les importances FORM si None)
+        if slice_def_final is None:
+            if best_result is not None:
+                _imp = np.array(best_result.getImportanceFactors())
+                _top2 = list(np.argsort(_imp)[::-1][:2])
+                _u_star = np.array(best_result.getStandardSpaceDesignPoint())
+                slice_def_final = (min(_top2), max(_top2),
+                                   {i: float(_u_star[i]) for i in range(n_var) if i not in _top2})
+            else:
+                slice_def_final = slice_def
+        idx_x, idx_y, fixed = slice_def_final
         u1 = np.linspace(u1_min, u1_max, n_grid)
         u2 = np.linspace(u2_min, u2_max, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = U1.ravel()
+        grid[:, idx_y] = U2.ravel()
+        for _jf, _vf in fixed.items():
+            grid[:, _jf] = _vf
 
         fig, ax = plt.subplots(figsize=(7, 6))
 
@@ -2558,7 +2573,11 @@ if __name__ == '__main__':
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
             else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
+                grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
+                grid_hf[:, idx_x] = U1_hf.ravel()
+                grid_hf[:, idx_y] = U2_hf.ravel()
+                for _jf, _vf in fixed.items():
+                    grid_hf[:, _jf] = _vf
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="courbe rouge ref")
                 hf_2d_grid_fixed = {'params': {'u1_min': u1_min, 'u1_max': u1_max, 'u2_min': u2_min, 'u2_max': u2_max, 'n_grid_hf': n_grid_hf}, 'Z': Z_true.tolist()}
                 print(f"hf_2d_grid_fixed = {hf_2d_grid_fixed!r}", flush=True)
@@ -2578,29 +2597,29 @@ if __name__ == '__main__':
 
         # --- Points ---
         if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='black', s=30, zorder=5, label='DOE')
+            ax.scatter(xt[:, idx_x], xt[:, idx_y], c='black', s=30, zorder=5, label='DOE')
 
         if xt_eff is not None and len(xt_eff) > 0:
             xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=60, zorder=6,
+            ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=60, zorder=6,
                        marker='^', label=f'EFF ({len(xt_eff)} pts)')
 
         ax.scatter(0, 0, c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
 
         if best_sp is not None:
-            ax.scatter(best_sp[0], best_sp[1], c='cyan', s=100, zorder=7, marker='D',
+            ax.scatter(best_sp[idx_x], best_sp[idx_y], c='cyan', s=100, zorder=7, marker='D',
                     label='point de depart best')
 
         if best_result is not None:
             u_star = np.array(best_result.getStandardSpaceDesignPoint())
-            ax.scatter(u_star[0], u_star[1], c='gold', s=200, zorder=8, marker='*',
-                    label=f'u*1 [{u_star[0]:.2f},{u_star[1]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
+            ax.scatter(u_star[idx_x], u_star[idx_y], c='gold', s=200, zorder=8, marker='*',
+                    label=f'u*1 [{u_star[idx_x]:.2f},{u_star[idx_y]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
 
         if len(modes) > 0:
             for k, mode in enumerate(modes[1:], start=2):
                 u_m = np.array(mode.getStandardSpaceDesignPoint())
-                ax.scatter(u_m[0], u_m[1], c='magenta', s=200, zorder=8, marker='*',
-                        label=f'u*{k} [{u_m[0]:.2f},{u_m[1]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
+                ax.scatter(u_m[idx_x], u_m[idx_y], c='magenta', s=200, zorder=8, marker='*',
+                        label=f'u*{k} [{u_m[idx_x]:.2f},{u_m[idx_y]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
 
         # --- Points fixes (run HF précédent) ---
         if best_sol_modes_fixed is not None:
@@ -2608,14 +2627,14 @@ if __name__ == '__main__':
             for col, (lbl, data) in zip(colors_fixed, best_sol_modes_fixed.items()):
                 ustar_f = data['u*']
                 sp_f    = data['sp']
-                ax.scatter(ustar_f[0], ustar_f[1], c=col, s=200, zorder=9, marker='*',
+                ax.scatter(ustar_f[idx_x], ustar_f[idx_y], c=col, s=200, zorder=9, marker='*',
                            label=f'u* {lbl}')
-                ax.scatter(sp_f[0], sp_f[1], c=col, s=100, zorder=9, marker='x',
+                ax.scatter(sp_f[idx_x], sp_f[idx_y], c=col, s=100, zorder=9, marker='x',
                            linewidths=2, label=f'sp {lbl}')
                 if grad_sp_fixed is not None and lbl in grad_sp_fixed:
                     ng = np.array(grad_sp_fixed[lbl]['neg_grad'])
                     ng = ng / np.linalg.norm(ng) * 1.5
-                    ax.quiver(sp_f[0], sp_f[1], ng[0], ng[1], color=col,
+                    ax.quiver(sp_f[idx_x], sp_f[idx_y], ng[idx_x], ng[idx_y], color=col,
                               angles='xy', scale_units='xy', scale=1.0, width=0.005)
 
         # --- Trajectoires FORM hardcodees ---
@@ -2628,27 +2647,27 @@ if __name__ == '__main__':
                 grds = np.array(traj['grads'])
                 all_pts.append(pts)
                 # polyligne
-                ax.plot(pts[:, 0], pts[:, 1], '-', color=col, alpha=0.5, linewidth=1.2)
+                ax.plot(pts[:, idx_x], pts[:, idx_y], '-', color=col, alpha=0.5, linewidth=1.2)
                 # points intermediaires
-                ax.scatter(pts[1:-1, 0], pts[1:-1, 1], c=col, s=12, zorder=7, alpha=0.5)
+                ax.scatter(pts[1:-1, idx_x], pts[1:-1, idx_y], c=col, s=12, zorder=7, alpha=0.5)
                 # depart et arrivee
-                ax.scatter(pts[0, 0],  pts[0, 1],  c=col, s=60,  zorder=8, marker='o')
-                ax.scatter(pts[-1, 0], pts[-1, 1], c=col, s=150, zorder=8, marker='*')
+                ax.scatter(pts[0, idx_x],  pts[0, idx_y],  c=col, s=60,  zorder=8, marker='o')
+                ax.scatter(pts[-1, idx_x], pts[-1, idx_y], c=col, s=150, zorder=8, marker='*')
                 # petites fleches -grad normalise (longueur 0.3)
                 for pt, g in zip(pts, grds):
                     ng = np.array(g)
                     nrm = np.linalg.norm(ng)
                     if nrm > 0:
                         ng = -ng / nrm * 0.3
-                        ax.annotate('', xy=(pt[0]+ng[0], pt[1]+ng[1]), xytext=(pt[0], pt[1]),
+                        ax.annotate('', xy=(pt[idx_x]+ng[idx_x], pt[idx_y]+ng[idx_y]), xytext=(pt[idx_x], pt[idx_y]),
                                     arrowprops=dict(arrowstyle='->', color=col, lw=0.7))
             # zoom sur les trajectoires : mise a jour des variables globales
             all_pts_arr = np.vstack(all_pts)
             margin = 1.0
-            u1_min = float(all_pts_arr[:, 0].min()) - margin
-            u1_max = float(all_pts_arr[:, 0].max()) + margin
-            u2_min = float(all_pts_arr[:, 1].min()) - margin
-            u2_max = float(all_pts_arr[:, 1].max()) + margin
+            u1_min = float(all_pts_arr[:, idx_x].min()) - margin
+            u1_max = float(all_pts_arr[:, idx_x].max()) + margin
+            u2_min = float(all_pts_arr[:, idx_y].min()) - margin
+            u2_max = float(all_pts_arr[:, idx_y].max()) + margin
 
         # --- Légende contours ---
         legend_lines = []
@@ -2670,8 +2689,8 @@ if __name__ == '__main__':
 
         ax.legend(handles=ax.legend().legend_handles + legend_lines)
 
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
+        ax.set_xlabel(f'u_{params_names[idx_x]}')
+        ax.set_ylabel(f'u_{params_names[idx_y]}')
         ax.set_xlim(u1_min, u1_max)
         ax.set_ylim(u2_min, u2_max)
         ax.set_title('FORM et etat limite g=0')
