@@ -2474,6 +2474,108 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [EFF visu] -> {fname}", flush=True)
 
+    def print_globalplanche_EFF(xt, yt, all_grad, xt_eff):
+        """transfert3 T3-6 : planche globale EFF — 3 colonnes (EFF, sigma, g) x N lignes
+        (DOE initial + chaque etape EFF). Refit le surrogate a chaque etape. Coupe slice_def_final.
+        Grille HF calculee une seule fois et reutilisee."""
+        global hf_2d_grid_fixed_final
+        if slice_def_final is None:
+            print("[GLOBAL PLANCHE] slice_def_final est None, skip", flush=True)
+            return
+        idx_x, idx_y, fixed = slice_def_final
+        n_eff = len(xt_eff)
+        n_steps = n_eff + 1   # DOE initial + chaque point EFF
+
+        # --- Grille commune ---
+        ux = np.linspace(u1_min, u1_max, n_grid)
+        uy = np.linspace(u2_min, u2_max, n_grid)
+        UX, UY = np.meshgrid(ux, uy)
+        grid = np.zeros((n_grid * n_grid, n_var))
+        grid[:, idx_x] = UX.ravel()
+        grid[:, idx_y] = UY.ravel()
+        for idx, val in fixed.items():
+            grid[:, idx] = val
+
+        # --- Grille HF (une seule fois) ---
+        Z_true, UX_hf, UY_hf = None, None, None
+        if print_HF:
+            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+            Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+
+        _xlabel = f'u_{params_names[idx_x]}'
+        _ylabel = f'u_{params_names[idx_y]}'
+        _fixed_str = '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
+
+        # --- Figure ---
+        fig, axes = plt.subplots(n_steps, 3, figsize=(21, 6 * n_steps))
+        if n_steps == 1:
+            axes = axes.reshape(1, 3)
+
+        for step in range(n_steps):
+            n_pts = n0 + step
+            xt_k = xt[:n_pts]
+            yt_k = yt[:n_pts]
+            grad_k = all_grad[:n_pts]
+            xt_eff_k = xt_eff[:step]
+
+            # --- Refit surrogate ---
+            g_ot_k, sigma_func_k, _, _, _ = init_g_ot(None, None, xt_k, yt_k, grad_k)
+
+            # --- Evaluer sur la grille ---
+            mu_grid, sigma_grid = _batch_mu_sigma(g_ot_k, sigma_func_k, grid)
+            Z_eff   = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
+            Z_sigma = sigma_grid.reshape(n_grid, n_grid)
+            Z_g     = mu_grid.reshape(n_grid, n_grid)
+
+            ax1, ax2, ax3 = axes[step]
+
+            def _decorate_row(ax):
+                ax.contour(UX, UY, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
+                if Z_true is not None:
+                    ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2)
+                ax.scatter(xt_k[:, idx_x], xt_k[:, idx_y], c='white', s=40, zorder=5,
+                           edgecolors='black', linewidths=0.8)
+                if len(xt_eff_k) > 0:
+                    eff_arr = np.array(xt_eff_k)
+                    ax.scatter(eff_arr[:, idx_x], eff_arr[:, idx_y], c='red', s=80, zorder=6, marker='^')
+                    for i, pt in enumerate(eff_arr):
+                        ax.annotate(str(i+1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
+                                    xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
+                ax.set_xlabel(_xlabel)
+                ax.set_ylabel(_ylabel)
+                ax.set_xlim(u1_min, u1_max)
+                ax.set_ylim(u2_min, u2_max)
+
+            # --- EFF ---
+            cf1 = ax1.contourf(UX, UY, Z_eff, levels=20, cmap='viridis', alpha=0.85)
+            plt.colorbar(cf1, ax=ax1, label='EFF')
+            ax1.set_title(f'EFF  N={n_pts}  ({step} pts EFF)')
+            _decorate_row(ax1)
+
+            # --- sigma ---
+            cf2 = ax2.contourf(UX, UY, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
+            plt.colorbar(cf2, ax=ax2, label='sigma')
+            ax2.set_title(f'sigma  N={n_pts}')
+            _decorate_row(ax2)
+
+            # --- g surrogate ---
+            cf3 = ax3.contourf(UX, UY, Z_g, levels=20, cmap='RdYlGn', alpha=0.6)
+            plt.colorbar(cf3, ax=ax3, label='g surrogate')
+            ax3.contour(UX, UY, Z_g, levels=[0], colors='blue', linewidths=2)
+            ax3.set_title(f'g surrogate  N={n_pts}')
+            _decorate_row(ax3)
+
+            print(f"  [GLOBAL PLANCHE] step {step}/{n_steps-1} (N={n_pts}) OK", flush=True)
+
+        fig.suptitle(f'Evolution EFF - {modele} - {_fixed_str}', fontsize=14, y=1.0)
+        plt.tight_layout()
+        fname = f'globalplanche_EFF_{timestamp}.png'
+        fig.savefig(os.path.join(out_dir_eff, fname), dpi=100, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
+
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
         global hf_2d_grid_fixed
@@ -3064,6 +3166,12 @@ if __name__ == '__main__':
     _t0_phase = time.perf_counter()
     print_visu(best_result, best_sp, xt, g_ot, modes, xt_eff)
     _t_log("##### PHASE: print_visu END #####", _t0_phase)
+
+    if do_EFF and xt_eff:   # transfert3 T3-6 : planche globale evolution EFF
+        _t_log("##### PHASE: print_globalplanche_EFF START #####")
+        _t0_phase = time.perf_counter()
+        print_globalplanche_EFF(xt, yt, all_grad, xt_eff)
+        _t_log("##### PHASE: print_globalplanche_EFF END #####", _t0_phase)
 
     # --- DUMP RESTART : tout sauver pour reprise/regeneration ulterieure (relecture a coder ensuite) ---
     _t_log("##### PHASE: _save_restart_state (dump complet) START #####")
