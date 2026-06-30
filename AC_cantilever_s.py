@@ -213,7 +213,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = True     # 2026-06-18 : courbe rouge ON pour le run complet tablier (49 SOCP HF) -> dump + validation u*
+    print_HF = True     # run complet : courbe rouge ON (grille HF 7x7 = 49 SOCP)
     print_fullHF = False  # transfert3 T3-5 : True = grille HF complete n_grid_hf^n_var (n_var<=3, ~30min en 3D) ; False = coupe 2D directe (identique en n_var=2)
     save_history = True  # True = sauve les fichiers SOCP dans SOCP_history/ (1 sous-dossier par appel) ; False = off
     print_Pf = False     # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) ; False = 1 seul FORM+IS (mu)
@@ -450,9 +450,12 @@ if __name__ == '__main__':
         return dist
 
     # --- Loi de POSITION (charge mobile s) : uniforme sur [S_MIN, S_MAX] ---
-    # s = bord gauche de l'empreinte ; bornes telles que la charge reste sur la poutre
-    # (S_MAX = L - load_len = 4.0 - 0.6 = 3.4). loi_position ignore (mean,cov) -> Uniforme fixe.
-    S_MIN, S_MAX = 0.0, 3.4
+    # 2026-06-30 : s est l'abscisse curviligne NORMALISEE in [0,1] le long du PATH
+    # (archi shift/PATH dans dsCad). La longueur reelle du chemin (L-load_len=3.4 m)
+    # est portee par le PATH ; l'AC reste generique avec Uniform(0,1). Le solveur
+    # renvoie dAlpha/ds p/r a ce s normalise (tangent = vecteur complet D).
+    # loi_position ignore (mean,cov) -> Uniforme fixe.
+    S_MIN, S_MAX = 0.0, 1.0
     def loi_position(*_a):
         return ot.Uniform(float(S_MIN), float(S_MAX))
 
@@ -494,7 +497,7 @@ if __name__ == '__main__':
     print(f"  SIGMA acier = sqrt(19^2+22^2+8^2) = {SIGMA:.4f} MPa (JCSS)", flush=True)
     print(f"  fc : FIXE (COMPRESSIVE_STRENGTH='20.0' dans dsCad, plus une variable de fiabilite)", flush=True)
     print(f"  aciers HAUT variables (fy_top) : {len(top_names)} aciers {top_names}", flush=True)
-    print(f"  position s : Uniforme [{S_MIN}, {S_MAX}] m (bord gauche empreinte)  |  sentinelle YIELD : '{_top_sentinel}'", flush=True)
+    print(f"  position s : Uniforme [{S_MIN}, {S_MAX}] NORMALISE [0,1] le long du PATH (x reel 0..3.4 m)  |  sentinelle YIELD : '{_top_sentinel}'", flush=True)
     try:
         _dsl = open(os.path.join(_path_ds, 'dsLoad.txt'), encoding='utf-8', errors='replace').read()
         _dead_vide = 'DEAD_LOAD_CASES=[]' in _dsl
