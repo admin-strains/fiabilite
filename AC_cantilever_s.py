@@ -195,8 +195,8 @@ if __name__ == '__main__':
     n_eff_target = 10             # nb de points EFF a ajouter quand EFF_criteria=='n_points' (run initial)
     EFF_criteria = os.environ.get("_EFF_CRITERIA") or EFF_criteria          # override env optionnel
     if os.environ.get("_N_EFF_TARGET"): n_eff_target = int(os.environ["_N_EFF_TARGET"])
-    u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
-    u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
+    u1_eff_min, u1_eff_max = -3.0, 3.0    # TEST 2026-07-01 : u_s (position) resserre a +-3
+    u2_eff_min, u2_eff_max = -7.5, 7.5    # fy garde +-7.5 (Normale non bornee)
     def _eff_bounds():
         # Bornes de recherche EFF PAR AXE (axe 0 = s -> u1_eff, axe 1 = fy -> u2_eff, sinon u2_eff).
         # Corrige l'ancien [u1_eff_min]*n_var qui appliquait les bornes de s a TOUS les axes (fy inclus)
@@ -212,9 +212,9 @@ if __name__ == '__main__':
     # PARAMETRES ET OPTIONS DE PRINT                                              #
     
     # Paramètres de print ---
-    u1_max = 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (bornes visu coherentes avec EFF)
+    u1_max = 3.0    # TEST 2026-07-01 : u_s (position) resserre a +-3 (coherent avec u1_eff)
     u2_max = 7.5
-    u1_min = -7.5
+    u1_min = -3.0
     u2_min = -7.5
     n_grid = 300
     n_grid_hf = 7
