@@ -417,6 +417,66 @@ if __name__ == '__main__':
         p = PARAMS.get(usage, PARAMS['office'])
         return ot.Exponential(1.0 / p['mp'], 0.0)
 
+    def loi_uni_approx(a, b, alpha=0.5):
+        """Loi uniforme approchee (fenetre de Tukey normalisee).
+        Support [a, b]. alpha=0 -> uniforme exacte, alpha=1 -> Hann."""
+
+        class TukeyDistribution(ot.PythonDistribution):
+            def __init__(self, a, b, alpha):
+                super().__init__(1)
+                self.a = float(a)
+                self.b = float(b)
+                self.alpha = float(alpha)
+                self.L = self.b - self.a
+                self.C = 1.0 - self.alpha / 2.0  # integrale de w sur [0,1]
+
+            def getRange(self):
+                return ot.Interval([self.a], [self.b])
+
+            def computePDF(self, X):
+                x = X[0]
+                if x < self.a or x > self.b:
+                    return 0.0
+                t = (x - self.a) / self.L          # t in [0, 1]
+                al = self.alpha
+                if al <= 0.0:
+                    w = 1.0
+                elif t < al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                elif t > 1.0 - al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                else:
+                    w = 1.0
+                return w / (self.L * self.C)
+
+            def computeCDF(self, X):
+                x = X[0]
+                if x <= self.a:
+                    return 0.0
+                if x >= self.b:
+                    return 1.0
+                t = (x - self.a) / self.L
+                al = self.alpha
+                if al <= 0.0:
+                    return t
+                if t <= al / 2.0:
+                    F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                elif t <= 1.0 - al / 2.0:
+                    F = t - al / 4.0
+                else:
+                    F = (1.0 - 3.0 * al / 4.0
+                         + (t - 1.0 + al / 2.0) / 2.0
+                         + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                return F / self.C
+
+            def getMean(self):
+                return [(self.a + self.b) / 2.0]
+
+            def isContinuous(self):
+                return True
+
+        return ot.Distribution(TukeyDistribution(a, b, alpha))
+
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {
         'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
