@@ -197,6 +197,13 @@ if __name__ == '__main__':
     if os.environ.get("_N_EFF_TARGET"): n_eff_target = int(os.environ["_N_EFF_TARGET"])
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
+    def _eff_bounds():
+        # Bornes de recherche EFF PAR AXE (axe 0 = s -> u1_eff, axe 1 = fy -> u2_eff, sinon u2_eff).
+        # Corrige l'ancien [u1_eff_min]*n_var qui appliquait les bornes de s a TOUS les axes (fy inclus)
+        # -> empechait un box asymetrique u_s/u_fy.
+        lo = [u1_eff_min if k == 0 else u2_eff_min for k in range(n_var)]
+        hi = [u1_eff_max if k == 0 else u2_eff_max for k in range(n_var)]
+        return ot.Interval(lo, hi)
     n_NLopt_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
     n_max_EFF_points = 30   # plafond DUR du nombre de points EFF ajoutes (securite anti-poursuite infinie)
     print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
@@ -211,6 +218,10 @@ if __name__ == '__main__':
     u2_min = -7.5
     n_grid = 300
     n_grid_hf = 7
+    def _ax_bounds_hf(k):
+        # Bornes par axe pour la grille HF : axe 0 = s (u1), axe 1 = fy (u2), sinon u1.
+        # Permet un box ASYMETRIQUE (u_s resserre, u_fy large) sans que fy herite des bornes de s.
+        return (u1_min, u1_max) if k == 0 else ((u2_min, u2_max) if k == 1 else (u1_min, u1_max))
 
     # --- Options de print ---
     print_HF = True     # run complet : courbe rouge ON (grille HF 7x7 = 49 SOCP)
@@ -1851,7 +1862,7 @@ if __name__ == '__main__':
         count_valid_both = 0
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+        bounds = _eff_bounds()
         problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -2012,7 +2023,7 @@ if __name__ == '__main__':
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+            bounds = _eff_bounds()
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -2305,11 +2316,11 @@ if __name__ == '__main__':
         cached = _load_hf_grid_full()
         if cached is not None:
             _hf_grid_full[0] = cached
-            _hf_grid_full_axes[0] = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
+            _hf_grid_full_axes[0] = [np.linspace(*_ax_bounds_hf(k), n_grid_hf) for k in range(n_var)]
             return cached
         import time as _time_local
         _point_log_phase[0] = "HF_FULL"
-        axes = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
+        axes = [np.linspace(*_ax_bounds_hf(k), n_grid_hf) for k in range(n_var)]
         grids = np.meshgrid(*axes, indexing='ij')
         grid_flat = np.column_stack([g.ravel() for g in grids])
         n_total = len(grid_flat)
