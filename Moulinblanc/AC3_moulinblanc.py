@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
+    config_is_identical = False   #False = recalcule le DOE (params changes F+fy1)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -417,15 +417,102 @@ if __name__ == '__main__':
         p = PARAMS.get(usage, PARAMS['office'])
         return ot.Exponential(1.0 / p['mp'], 0.0)
 
+    def loi_uni_approx(a, b, alpha=0.5):
+        """Loi uniforme approchee (fenetre de Tukey normalisee).
+        Support [a, b]. alpha=0 -> uniforme exacte, alpha=1 -> Hann."""
+
+        class TukeyDistribution(ot.PythonDistribution):
+            def __init__(self, a, b, alpha):
+                super().__init__(1)
+                self.a = float(a)
+                self.b = float(b)
+                self.alpha = float(alpha)
+                self.L = self.b - self.a
+                self.C = 1.0 - self.alpha / 2.0  # integrale de w sur [0,1]
+
+            def getRange(self):
+                return ot.Interval([self.a], [self.b])
+
+            def computePDF(self, X):
+                x = X[0]
+                if x < self.a or x > self.b:
+                    return 0.0
+                t = (x - self.a) / self.L          # t in [0, 1]
+                al = self.alpha
+                if al <= 0.0:
+                    w = 1.0
+                elif t < al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                elif t > 1.0 - al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                else:
+                    w = 1.0
+                return w / (self.L * self.C)
+
+            def computeCDF(self, X):
+                x = X[0]
+                if x <= self.a:
+                    return 0.0
+                if x >= self.b:
+                    return 1.0
+                t = (x - self.a) / self.L
+                al = self.alpha
+                if al <= 0.0:
+                    return t
+                if t <= al / 2.0:
+                    F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                elif t <= 1.0 - al / 2.0:
+                    F = t - al / 4.0
+                else:
+                    F = (1.0 - 3.0 * al / 4.0
+                         + (t - 1.0 + al / 2.0) / 2.0
+                         + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                return F / self.C
+
+            def getMean(self):
+                return [(self.a + self.b) / 2.0]
+
+            def computeScalarQuantile(self, p, tail=False):
+                if tail:
+                    p = 1.0 - p
+                al = self.alpha
+                if al <= 0.0:
+                    return self.a + p * self.L
+                F_left  = (al / 4.0) / self.C
+                F_right = (1.0 - 3.0 * al / 4.0) / self.C
+                if p <= F_left:
+                    t = al / 4.0
+                    for _ in range(20):
+                        F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(0.0, min(t, al / 2.0))
+                elif p <= F_right:
+                    t = p * self.C + al / 4.0
+                else:
+                    t = 1.0 - al / 4.0
+                    for _ in range(20):
+                        F = (1.0 - 3.0 * al / 4.0
+                             + (t - 1.0 + al / 2.0) / 2.0
+                             + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(1.0 - al / 2.0, min(t, 1.0))
+                return self.a + t * self.L
+
+            def isContinuous(self):
+                return True
+
+        return ot.Distribution(TukeyDistribution(a, b, alpha))
+
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    FY_MEAN = 235.0
-    PARAM_CONFIG_CAD = {
-        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names},
-                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
-        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names},
-                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+    PARAM_CONFIG_CAD = {}
+    PARAM_CONFIG_LOAD = {
+        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi"},
+                     'loi': loi_F_permanente, 'args': (1.0, 0.15)},
+        's_convoi': {'sens': {"param": "LOAD_POSITION"},
+                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.5)},
     }
-    PARAM_CONFIG_LOAD = {}
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
@@ -433,7 +520,7 @@ if __name__ == '__main__':
     slice_def_final = None
 
     def dist_jointe():
-        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
+        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
                                      for p in params_names])
 
     # --- APPELS STRAINS ---
@@ -472,13 +559,22 @@ if __name__ == '__main__':
         print(f"  [SOCP HISTORY] {prefix_tag}{coords_str} : {n_saved} fichiers sauves "
               f"({total_size/1024/1024:.1f} MB) dans {sub_dir}", flush=True)
 
+    def _sens_key_to_param(k):
+        """Mappe une cle de sensibilite STRAINS vers le nom de variable dans params_names.
+        Version simplifiee : matching par sens['param'] uniquement.
+        Fonctionne tant que chaque variable a un param different (LIVE_LOAD, LOAD_POSITION, etc.).
+        Pour 2 variables du meme param (ex: 2 YIELD_STRENGTH), il faudra region_key."""
+        for p in params_names:
+            if PARAM_CONFIG[p]['sens']['param'] in k:
+                return p
+        return None
+
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire)"""
         path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
-        #MODIF 1 10/04 - on doit tout mettre dans params in SOL. TOUT.
         for i in range (len(SOL)): 
             patch_params(path, **SOL[i]) #à cette étape SOL ne contient que 'fc': ,'fy':
             model = MODEL() #ici model n'est pas encore rempli
@@ -566,15 +662,10 @@ if __name__ == '__main__':
             if sensitivity and 'Sensitivity' in d['info']:
                 print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
-                    for p in params_names:
-                        sens = PARAM_CONFIG[p]['sens']
-                        if sens['param'] in k:
-                            if 'rebars' in sens and sens['rebars']:
-                                if sens['rebars'][0] not in k:
-                                    continue
-                            SOL[i][f'dg_{p}'] = v
-                            break
-                    if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
+                    p = _sens_key_to_param(k)
+                    if p is not None:
+                        SOL[i][f'dg_{p}'] = v
+                    if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
                         break
         return SOL
 
@@ -676,14 +767,9 @@ if __name__ == '__main__':
         if sensitivity and 'Sensitivity' in d['info']:
             print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
             for k, v in d['info']['Sensitivity'].items():
-                for p in params_names:
-                    sens = PARAM_CONFIG[p]['sens']
-                    if sens['param'] in k:
-                        if 'rebars' in sens and sens['rebars']:
-                            if sens['rebars'][0] not in k:
-                                continue
-                        grad_HF_X[params_names.index(p)] = v
-                        break
+                p = _sens_key_to_param(k)
+                if p is not None:
+                    grad_HF_X[params_names.index(p)] = v
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
                     break
             J_Tinv = T_inv.gradient(u)
