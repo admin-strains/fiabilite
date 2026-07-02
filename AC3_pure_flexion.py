@@ -472,6 +472,34 @@ if __name__ == '__main__':
             def getMean(self):
                 return [(self.a + self.b) / 2.0]
 
+            def computeScalarQuantile(self, p, tail=False):
+                if tail:
+                    p = 1.0 - p
+                al = self.alpha
+                if al <= 0.0:
+                    return self.a + p * self.L
+                F_left  = (al / 4.0) / self.C
+                F_right = (1.0 - 3.0 * al / 4.0) / self.C
+                if p <= F_left:
+                    t = al / 4.0
+                    for _ in range(20):
+                        F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(0.0, min(t, al / 2.0))
+                elif p <= F_right:
+                    t = p * self.C + al / 4.0
+                else:
+                    t = 1.0 - al / 4.0
+                    for _ in range(20):
+                        F = (1.0 - 3.0 * al / 4.0
+                             + (t - 1.0 + al / 2.0) / 2.0
+                             + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(1.0 - al / 2.0, min(t, 1.0))
+                return self.a + t * self.L
+
             def isContinuous(self):
                 return True
 
@@ -480,13 +508,13 @@ if __name__ == '__main__':
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {
         'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
-               'loi': loi_fy, 'mean': 550, 'cov': None},
+               'loi': loi_fy, 'args': (550, None)},
         'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
-               'loi': loi_fc, 'mean': 48, 'cov': 0.12},
+               'loi': loi_fc, 'args': (48, 0.12)},
     }
     PARAM_CONFIG_LOAD = {
         'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0"},
-               'loi': loi_F_permanente, 'mean': 1.0, 'cov': 0.05},
+               'loi': loi_F_permanente, 'args': (1.0, 0.05)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
@@ -497,7 +525,7 @@ if __name__ == '__main__':
     slice_def_final = (0, 1, {2: -1.7})   # test : coupe F vs fy a fc=-1.7 (coordonnee du point EFF 2)
 
     def dist_jointe():
-        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
+        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
                                      for p in params_names])
 
     # --- APPELS STRAINS ---
@@ -1020,7 +1048,7 @@ if __name__ == '__main__':
             Med = F * L
 
             # --- Définition de la transformation isoprobabiliste ---
-            self.fym = PARAM_CONFIG['fy']['mean'] if 'fy' in PARAM_CONFIG else 550
+            self.fym = PARAM_CONFIG['fy']['args'][0] if 'fy' in PARAM_CONFIG else 550
             dist_X     = dist_jointe()
             self.T_inv = dist_X.getInverseIsoProbabilisticTransformation()
             self.T     = dist_X.getIsoProbabilisticTransformation()
