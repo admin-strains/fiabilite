@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
+    config_is_identical = False   #False = recalcule le DOE (params changes q+s_convoi)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -576,28 +576,33 @@ if __name__ == '__main__':
 
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
-        Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire)"""
+        Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
+        Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
+        SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
         path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
-        for i in range (len(SOL)): 
-            patch_params(path, **SOL[i]) #à cette étape SOL ne contient que 'fc': ,'fy':
-            model = MODEL() #ici model n'est pas encore rempli
+        dist_X = dist_jointe()
+        T = dist_X.getIsoProbabilisticTransformation()
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        for i in range (len(SOL)):
+            patch_params(path, **{p: SOL[i][p] for p in params_names})
+            model = MODEL()
             SET_CONTEXT(model, path)
-            fileName = os.path.join(path, AnalysisName + ".dscad") #on crée le chemin du fichier disque .dscad lisible par C. C va tout faire et on renverra les info plus tard (.load)
+            fileName = os.path.join(path, AnalysisName + ".dscad")
 
             cadfile = open(path + '\\dsCad.txt', 'r')
-            cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
-            exec(cadscript, globals()) # ici on modifie le modèle (C, cython) et donc les variables (on exécute le script de dsCad.txt ce qui modifie les variables - rien dans .dscad, tout dans var. en mémoire)
-            model.Save(fileName) # ici on créé dscad et on enregistre les modifs des variables dans .dscad
-            print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
+            cadscript = cadfile.read()
+            exec(cadscript, globals())
+            model.Save(fileName)
+            print(model.GETERRORS())
 
             loadfile = open(path + '\\dsLoad.txt', 'r')
             loadscript = loadfile.read()
-            with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
-                exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
+            with CetLOAD.LOAD_MODEL(model, path):
+                exec(loadscript, globals())
 
-            Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
+            Meshkwargs = {
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
                 "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
                 "global_physical_size": global_size,
@@ -623,8 +628,8 @@ if __name__ == '__main__':
             Meshkwargs["model_handle"] = model.GETHANDLEPTR()
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
-            kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-            exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+            kwargs = {"scaling": 1, "write_debug_files": "true"}
+            exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals())
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -650,28 +655,44 @@ if __name__ == '__main__':
                 )
 
             kwargs["model_handle"] = model.GETHANDLEPTR()
-            CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
+            CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs)
 
             # Lire le resultat
-            metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares") #on extrait l'addresse du fichier pour définir f
-            with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
-                d = json.load(f) #chargement du fichier .dsmetares
+            metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares")
+            with open(metares_path, 'r') as f:
+                d = json.load(f)
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
             if save_history:
                 _socp_call_counter[0] += 1
                 _save_socp_outputs(path, AnalysisName,
                                    prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
                                    p_vals=[float(SOL[i][p]) for p in params_names])
-            for p in params_names:
-                SOL[i][f'dg_{p}'] = None
+            # --- Lecture sensibilites et conversion X -> U ---
+            grad_X = [None] * n_var
             if sensitivity and 'Sensitivity' in d['info']:
-                print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
+                print(f"les sensibilites sont calculees pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
                     p = _sens_key_to_param(k)
                     if p is not None:
-                        SOL[i][f'dg_{p}'] = v
-                    if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
+                        grad_X[params_names.index(p)] = v
+                    if all(g is not None for g in grad_X):
                         break
+            # Conversion en espace U
+            x_point = ot.Point([float(SOL[i][p]) for p in params_names])
+            u_point = T(x_point)
+            SOL[i]['_u'] = [float(u_point[j]) for j in range(n_var)]
+            if sensitivity and all(g is not None for g in grad_X):
+                J_Tinv = T_inv.gradient(u_point)
+                J_Tinv_T = J_Tinv.transpose()
+                grad_U = J_Tinv_T * ot.Point(grad_X)
+                for j, p in enumerate(params_names):
+                    SOL[i][f'dg_{p}'] = float(grad_U[j])
+            else:
+                for p in params_names:
+                    SOL[i][f'dg_{p}'] = None
+            # --- Sauvegarde incrementale du cache DOE ---
+            _n_done = sum(1 for s in SOL if 'g' in s)
+            _save_doe_cache_incremental(SOL, _n_done)
         return SOL
 
     def run_HF(u):
@@ -855,7 +876,10 @@ if __name__ == '__main__':
             if _n0_cache != n0:
                 print(f"[DOE CACHE] n0 different (cache={_n0_cache}, courant={n0}) -> recalcul DOE", flush=True)
                 return None
-            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0} OK -> 0 SOCP DOE)", flush=True)
+            if not d.get('complet', False):
+                print(f"[DOE CACHE] cache incomplet (complet=False) -> recalcul DOE", flush=True)
+                return None
+            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0}, complet -> 0 SOCP DOE)", flush=True)
             return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
         except Exception as e:
             print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
@@ -863,14 +887,28 @@ if __name__ == '__main__':
 
     def _save_doe_cache(xt, yt, all_grad):
         try:
-            json.dump({"n0": n0,
+            json.dump({"n0": n0, "complet": True,
                        "xt": np.asarray(xt).tolist(),
                        "yt": np.asarray(yt).tolist(),
                        "all_grad": np.asarray(all_grad).tolist()},
                       open(_DOE_CACHE_FILE, "w"), indent=1)
-            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE}", flush=True)
+            print(f"[DOE CACHE] sauve (complet) dans {_DOE_CACHE_FILE}", flush=True)
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    def _save_doe_cache_incremental(SOL, n_done):
+        """Sauvegarde incrementale : ecrit les n_done premiers points de SOL.
+        Gradients deja en U (converties par run_one_SOL). Pas de cle 'complet'."""
+        try:
+            _xt = [SOL[i]['_u'] for i in range(n_done)]
+            _yt = [[SOL[i]['g']] for i in range(n_done)]
+            _ag = [[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_done)]
+            json.dump({"n0": n0, "complet": False, "n_completed": n_done,
+                       "xt": _xt, "yt": _yt, "all_grad": _ag},
+                      open(_DOE_CACHE_FILE, "w"), indent=1)
+            print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)
 
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():
@@ -976,16 +1014,9 @@ if __name__ == '__main__':
                 SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
             else:
                 SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
+            # run_one_SOL a deja converti les gradients en U
             yt = np.array([SOL[i]['g'] for i in range(n_doe)]).reshape(-1, 1)
-            all_grad = np.zeros((n_doe, n_var))
-            for i in range (n_doe):
-                J_Tinv = T_inv.gradient(U_doe[i])
-                J_Tinv_T = J_Tinv.transpose()
-                grad_X_g = ot.Point([SOL[i][f'dg_{p}'] for p in params_names])
-                grad_U_g = J_Tinv_T * grad_X_g
-                for j in range (n_var):
-                    all_grad[i][j]= grad_U_g[j]
-                    SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
+            all_grad = np.array([[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_doe)])
             for i in range(n_doe):
                 _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
@@ -2111,10 +2142,39 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
+    def _save_hf_cache_partial(Z_flat, n_total, cache_file, sd):
+        """Sauvegarde incrementale de la grille HF (Z_flat peut contenir des None)."""
+        try:
+            _sd = sd if sd is not None else (0, 1, {})
+            json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
+                       'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
+                      open(cache_file + '.partial', 'w'), indent=1)
+        except Exception as e:
+            print(f"[HF CACHE PARTIAL] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    def _load_hf_cache_partial(cache_file, sd, n_total):
+        """Charge le cache partiel. Retourne une liste Z_flat (avec None) ou None."""
+        partial_file = cache_file + '.partial'
+        if not os.path.exists(partial_file):
+            return None
+        try:
+            d = json.load(open(partial_file))
+            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
+            _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
+            if _sd_cache != _sd_now or d.get('n_total') != n_total:
+                return None
+            z = d['Z_flat']
+            n_done = sum(1 for v in z if v is not None)
+            print(f"[HF CACHE PARTIAL] reprise : {n_done}/{n_total} points deja calcules", flush=True)
+            return z
+        except Exception:
+            return None
+
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
                                         cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
         """Calcule la grille HF point par point avec progress + ETA.
         Lecture/ecriture automatique d'un cache sidecar JSON.
+        Sauvegarde incrementale dans cache_file.partial (reprise apres crash).
         Retourne Z (n_grid_hf x n_grid_hf)."""
         global hf_2d_grid_fixed, hf_2d_grid_fixed_final
         if cache_file is None:
@@ -2132,29 +2192,44 @@ if __name__ == '__main__':
         import time as _time_local
         _point_log_phase[0] = "HF"
         n_total = len(grid_hf)
-        Z_flat = []
+        # Charger le cache partiel (reprise apres crash)
+        Z_flat = _load_hf_cache_partial(cache_file, sd, n_total)
+        if Z_flat is None:
+            Z_flat = [None] * n_total
+        _n_skipped = sum(1 for v in Z_flat if v is not None)
+        _n_to_compute = n_total - _n_skipped
         _t_start = _time_local.perf_counter()
-        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context}) #####", flush=True)
+        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context})"
+              f" [skip {_n_skipped}, calcul {_n_to_compute}] #####", flush=True)
+        _n_computed = 0
         for i, pt in enumerate(grid_hf):
+            if Z_flat[i] is not None:
+                continue
             _t_pt0 = _time_local.perf_counter()
             g_val = run_HF(pt)[0]
-            Z_flat.append(g_val)
+            Z_flat[i] = g_val
+            _n_computed += 1
+            _save_hf_cache_partial(Z_flat, n_total, cache_file, sd)
             _t_pt = _time_local.perf_counter() - _t_pt0
             _t_elapsed = _time_local.perf_counter() - _t_start
-            _t_avg = _t_elapsed / (i + 1)
-            _t_eta = _t_avg * (n_total - i - 1)
+            _t_avg = _t_elapsed / _n_computed
+            _t_eta = _t_avg * (_n_to_compute - _n_computed)
             _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(len(pt)))
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
+            print(f"  [HF GRID {_n_skipped + _n_computed:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
-        Z = np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({_n_computed} appels STRAINS, {_n_skipped} skip) #####\n", flush=True)
+        Z = np.array(Z_flat, dtype=float).reshape(n_grid_hf_local, n_grid_hf_local)
         _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
         if grid_var_name == 'hf_2d_grid_fixed_final':
             hf_2d_grid_fixed_final = _grid_dict
         else:
             hf_2d_grid_fixed = _grid_dict
         _save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
+        # supprimer le cache partiel
+        _partial_file = cache_file + '.partial'
+        if os.path.exists(_partial_file):
+            os.remove(_partial_file)
         return Z
 
     # --- HF GRILLE FULL (n_var-D) ---
