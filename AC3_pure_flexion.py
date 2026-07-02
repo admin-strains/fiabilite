@@ -507,18 +507,21 @@ if __name__ == '__main__':
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {
-        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names},
+        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names, "region_key": "fy"},
                'loi': loi_fy, 'args': (550, None)},
-        'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"]},
+        'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"], "region_key": "fc"},
                'loi': loi_fc, 'args': (48, 0.12)},
     }
     PARAM_CONFIG_LOAD = {
-        'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0"},
+        'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0", "region_key": "F"},
                'loi': loi_F_permanente, 'args': (1.0, 0.05)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
+    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
+    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
+    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
         print_ana = False
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
@@ -563,6 +566,15 @@ if __name__ == '__main__':
                     print(f"  [SOCP HISTORY] copy failed for {f} : {e}", flush=True)
         print(f"  [SOCP HISTORY] {prefix_tag}{coords_str} : {n_saved} fichiers sauves "
               f"({total_size/1024/1024:.1f} MB) dans {sub_dir}", flush=True)
+
+    def _sens_key_to_param(k):
+        """Mappe une cle de sensibilite STRAINS vers le nom de variable dans params_names.
+        Correspondance EXACTE 'param:region_key'. General (tous types), robuste."""
+        for p in params_names:
+            sens = PARAM_CONFIG[p]['sens']
+            if k == sens['param'] + ':' + sens['region_key']:
+                return p
+        return None
 
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
@@ -658,11 +670,10 @@ if __name__ == '__main__':
             if sensitivity and 'Sensitivity' in d['info']:
                 print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
-                    for p in params_names:
-                        if PARAM_CONFIG[p]['sens']['param'] in k:
-                            SOL[i][f'dg_{p}'] = v
-                            break
-                    if all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
+                    p = _sens_key_to_param(k)
+                    if p is not None:
+                        SOL[i][f'dg_{p}'] = v
+                    if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
                         break
         return SOL
 
@@ -764,10 +775,9 @@ if __name__ == '__main__':
         if sensitivity and 'Sensitivity' in d['info']:
             print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
             for k, v in d['info']['Sensitivity'].items():
-                for p in params_names:
-                    if PARAM_CONFIG[p]['sens']['param'] in k:
-                        grad_HF_X[params_names.index(p)] = v
-                        break
+                p = _sens_key_to_param(k)
+                if p is not None:
+                    grad_HF_X[params_names.index(p)] = v
                 if all(grad_HF_X[i] is not None for i in range(n_var)):
                     break
             J_Tinv = T_inv.gradient(u)
