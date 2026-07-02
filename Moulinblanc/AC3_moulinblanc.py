@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = False   #False = recalcule le DOE (params changes F+fy1)
+    config_is_identical = True    #True = reutilise doe_cache.json
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -160,6 +160,7 @@ if __name__ == '__main__':
     # --- Résultats fixés ---
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
+    hf_custom_points = None   # liste de [u_var1, u_var2, g] ou None ; si rempli, griddata remplace _get_hf_slice
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
@@ -1269,6 +1270,51 @@ if __name__ == '__main__':
     #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
 
     # --------------------------------------------------------------------------- #
+    # PROJECTION DU SURROGATE SUR LES VARIABLES NON-POSITION                     #
+
+    def projection_surrogate(g_ot):
+        """Si LOAD_POSITION dans PARAM_CONFIG, retourne un g_ot projete
+        g_proj(u_other) = min_p g_ot(u_full) sur la variable de position.
+        Sinon retourne g_ot inchange."""
+        from scipy.optimize import minimize_scalar
+
+        idx_pos = None
+        for i, p in enumerate(params_names):
+            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
+                idx_pos = i
+                break
+
+        if idx_pos is None:
+            return g_ot
+
+        idx_other = [i for i in range(n_var) if i != idx_pos]
+        n_proj = len(idx_other)
+
+        class ProjectedSurrogateFunction(ot.OpenTURNSPythonFunction):
+            def __init__(self):
+                super().__init__(n_proj, 1)
+
+            def _exec(self, u_reduced):
+                def _obj(u_pos):
+                    u_full = [0.0] * n_var
+                    for k, idx in enumerate(idx_other):
+                        u_full[idx] = float(u_reduced[k])
+                    u_full[idx_pos] = u_pos
+                    return float(g_ot(ot.Point(u_full))[0])
+                # grille grossiere puis affinage (robuste pour W multi-creux)
+                u_grid = np.linspace(-5.0, 5.0, 30)
+                g_grid = [_obj(u) for u in u_grid]
+                u_best = u_grid[np.argmin(g_grid)]
+                res = minimize_scalar(_obj,
+                                      bounds=(max(-5.0, u_best - 0.5),
+                                              min(5.0, u_best + 0.5)),
+                                      method='bounded',
+                                      options={'xatol': 1e-4, 'maxiter': 200})
+                return [res.fun]
+
+        return ot.Function(ProjectedSurrogateFunction())
+
+    # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU KRG                                                      #
 
     def build_metamodel_KRG(xt, yt):
@@ -2193,6 +2239,20 @@ if __name__ == '__main__':
         Z = interp(pts).reshape(n_grid_hf, n_grid_hf)
         return Z
 
+    def _hf_from_custom_points(sd):
+        """Interpole Z_true depuis hf_custom_points (griddata) sur une grille reguliere.
+        Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
+        if hf_custom_points is None:
+            return None, None, None
+        from scipy.interpolate import griddata
+        idx_x, idx_y, fixed = sd
+        pts = np.array(hf_custom_points)
+        ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+        uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+        Z_true = griddata(pts[:, :2], pts[:, 2], (UX_hf, UY_hf), method='linear')
+        return Z_true, UX_hf, UY_hf
+
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
         """Retourne Z_true (n_grid_hf x n_grid_hf) pour une coupe sd.
         Cascade : cache 2D memoire -> cache 2D disque -> grille full -> recalcul 2D."""
@@ -2262,11 +2322,13 @@ if __name__ == '__main__':
 
         # --- Contour g=0 HF ---
         Z_true, UX_hf, UY_hf = None, None, None
-        if print_HF:
+        _sd = slice_def if slice_def is not None else (0, 1, {})
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(_sd)
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            _sd = slice_def if slice_def is not None else (0, 1, {})
             Z_true = _get_hf_slice(_sd, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
 
         # --- Figure ---
@@ -2351,7 +2413,9 @@ if __name__ == '__main__':
 
         # --- Grille HF (une seule fois) ---
         Z_true, UX_hf, UY_hf = None, None, None
-        if print_HF:
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
@@ -2609,7 +2673,11 @@ if __name__ == '__main__':
             ax.contour(UX, UY, Z_sur, levels=[0], colors='blue', linewidths=2)
 
         # --- Contour HF grossier ---
-        if print_HF:
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            if Z_true is not None:
+                ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
@@ -2800,6 +2868,49 @@ if __name__ == '__main__':
         algo.run()
         return algo.getResult()
 
+    def run_IS_proj(modes, event_proj):
+        """IS sur le surrogate projete (sans la variable LOAD_POSITION).
+        Extrait u* et Pf des modes FORM (n_var dims), enleve la composante position,
+        et fait l'IS en dimension reduite sur event_proj.
+        Si pas de LOAD_POSITION, equivalent a run_IS."""
+        idx_pos = None
+        for i, p in enumerate(params_names):
+            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
+                idx_pos = i
+                break
+
+        idx_other = [i for i in range(n_var) if i != idx_pos] if idx_pos is not None else list(range(n_var))
+        n_proj = len(idx_other)
+
+        # extraire u* et Pf de chaque mode, projeter u*
+        u_stars_proj = []
+        pf_weights = []
+        for m in modes:
+            u_full = list(m.getStandardSpaceDesignPoint())
+            u_proj = [u_full[i] for i in idx_other]
+            u_stars_proj.append(u_proj)
+            pf_weights.append(m.getEventProbability())
+
+        if len(modes) == 1:
+            g_imp = ot.Normal(n_proj)
+            g_imp.setMu(u_stars_proj[0])
+            importance_dist = g_imp
+        else:
+            gaussians = []
+            for u_proj in u_stars_proj:
+                g_i = ot.Normal(n_proj)
+                g_i.setMu(u_proj)
+                gaussians.append(g_i)
+            importance_dist = ot.Mixture(gaussians, pf_weights)
+
+        experiment = ot.ImportanceSamplingExperiment(importance_dist, n_IS)
+        std_event  = ot.StandardEvent(event_proj)
+        algo = ot.ProbabilitySimulationAlgorithm(std_event, experiment)
+        algo.setMaximumCoefficientOfVariation(cov_IS)
+        algo.setMaximumOuterSampling(n_IS)
+        algo.run()
+        return algo.getResult()
+
     def print_results_IS(result_IS):
         pf   = result_IS.getProbabilityEstimate()
         cov  = result_IS.getCoefficientOfVariation()
@@ -2927,6 +3038,23 @@ if __name__ == '__main__':
     if do_IS and modes:
         result_IS = run_IS(modes, event)
         print_results_IS(result_IS)
+    # --- IS sur surrogate projete (enveloppe position) ---
+    g_proj = projection_surrogate(g_ot)
+    if g_proj is not g_ot and do_IS and modes:
+        idx_pos = None
+        for _i, _p in enumerate(params_names):
+            if PARAM_CONFIG[_p]['sens']['param'] == 'LOAD_POSITION':
+                idx_pos = _i
+                break
+        _idx_other = [_i for _i in range(n_var) if _i != idx_pos]
+        n_proj = len(_idx_other)
+        dist_proj = ot.JointDistribution([ot.Normal(0, 1)] * n_proj)
+        X_proj = ot.RandomVector(dist_proj)
+        Y_proj = ot.CompositeRandomVector(g_proj, X_proj)
+        event_proj = ot.ThresholdEvent(Y_proj, ot.Less(), 0.0)
+        print("=== IS sur surrogate projete (enveloppe position) ===", flush=True)
+        result_IS_proj = run_IS_proj(modes, event_proj)
+        print_results_IS(result_IS_proj)
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
     if do_EFF and xt_eff:
         print_globalplanche_EFF(xt, yt, all_grad, xt_eff)
