@@ -506,16 +506,21 @@ if __name__ == '__main__':
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    PARAM_CONFIG_CAD = {}
+    FY_MEAN = 235.0
+    PARAM_CONFIG_CAD = {
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
+    }
     PARAM_CONFIG_LOAD = {
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi"},
-                     'loi': loi_F_permanente, 'args': (1.0, 0.15)},
-        's_convoi': {'sens': {"param": "LOAD_POSITION"},
-                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.5)},
+        's_convoi': {'sens': {"param": "LOAD_POSITION", "region_key": "s_convoi"},
+                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
+    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
+    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
+    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 
@@ -561,11 +566,10 @@ if __name__ == '__main__':
 
     def _sens_key_to_param(k):
         """Mappe une cle de sensibilite STRAINS vers le nom de variable dans params_names.
-        Version simplifiee : matching par sens['param'] uniquement.
-        Fonctionne tant que chaque variable a un param different (LIVE_LOAD, LOAD_POSITION, etc.).
-        Pour 2 variables du meme param (ex: 2 YIELD_STRENGTH), il faudra region_key."""
+        Correspondance EXACTE 'param:region_key'. General (tous types), robuste."""
         for p in params_names:
-            if PARAM_CONFIG[p]['sens']['param'] in k:
+            sens = PARAM_CONFIG[p]['sens']
+            if k == sens['param'] + ':' + sens['region_key']:
                 return p
         return None
 
