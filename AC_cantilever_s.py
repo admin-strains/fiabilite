@@ -132,22 +132,15 @@ if __name__ == '__main__':
     _top_sentinel = top_names[0]
 
     def _sens_key_to_param(k):
-        """Mappe une cle de sensibilite STRAINS vers un nom de params_names, GENERIQUE
-        depuis PARAM_CONFIG (defini plus bas ; resolu a l'appel). Matching ROBUSTE :
-        - le 'param' (YIELD_STRENGTH / COMPRESSIVE_STRENGTH / LIVE_LOAD...) doit etre dans la cle ;
-        - si la region a des 'rebars', la sentinelle (1er rebar) doit apparaitre BORNEE PAR
-          VIRGULES (',nom,') -> evite les faux-positifs de sous-chaine (HA_5_1 vs HA_5_10).
-        On garde ce bornage plutot que le 'in' brut de l'option B du guide transfert2."""
+        """Mappe une cle de sensibilite STRAINS -> nom de params_names.
+        UNIQUE mecanisme : correspondance EXACTE 'param:region_key'. General
+        (tous types : YIELD_STRENGTH, LIVE_LOAD, DEAD_LOAD, LOAD_POSITION),
+        robuste (aucun raisonnement par sous-chaine / nom d'entite). region_key
+        OBLIGATOIRE pour chaque variable (verifie a la construction de PARAM_CONFIG)."""
         for p in params_names:
             sens = PARAM_CONFIG[p]['sens']
-            if sens['param'] not in k:
-                continue
-            rebars = sens.get('rebars')
-            if rebars:
-                namelist = ',' + k.split(':', 1)[1].rstrip(',') + ',' if ':' in k else ''
-                if (',' + rebars[0] + ',') not in namelist:
-                    continue
-            return p
+            if k == sens['param'] + ':' + sens['region_key']:
+                return p
         return None
 
 
@@ -473,16 +466,20 @@ if __name__ == '__main__':
 
     # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
     PARAM_CONFIG_CAD = {
-        'fy_top': {'sens': {"param": "YIELD_STRENGTH", "rebars": top_names},
+        'fy_top': {'sens': {"param": "YIELD_STRENGTH", "rebars": top_names, "region_key": "fy_top"},
                    'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
     }
     PARAM_CONFIG_LOAD = {
-        's': {'sens': {"param": "LOAD_POSITION"},          # pas de 'rebars' -> _sens_key_to_param generique
+        's': {'sens': {"param": "LOAD_POSITION", "region_key": "s"},   # region_key -> cle courte "LOAD_POSITION:s"
               'loi': loi_position, 'mean': (S_MIN + S_MAX) / 2.0, 'cov': None},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
+    # region_key OBLIGATOIRE + UNIQUE (matching exact _sens_key_to_param ; echoue clair si oubli).
+    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
+    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
+    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
     # transfert3 T3-1 (28481bd guide): coupe 2D par defaut pour les planches EFF (2 premieres vars, reste a 0).
     # slice_def_final=None -> print_visu la calcule depuis les importances FORM. Pour n_var=2 : (0,1,{}).
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
