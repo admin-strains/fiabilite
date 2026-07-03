@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = False   #False = recalcule le DOE (params changes q+s_convoi)
+    config_is_identical = True    #True = reutilise doe_cache.json
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     n_grid_hf = 7
 
     # --- Options de print ---
-    print_HF = False
+    print_HF = True
     print_fullHF = False             #False pour n_var=2 (grille 2D 7x7=49 suffit)
     print_DOE = True
     print_3D = False
@@ -160,7 +160,17 @@ if __name__ == '__main__':
     # --- Résultats fixés ---
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
-    hf_custom_points = None   # liste de [u_var1, u_var2, g] ou None ; si rempli, griddata remplace _get_hf_slice
+    # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
+    do_custom_hf = True
+    _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output', 'custom_hf_grid.json')
+    if do_custom_hf and os.path.exists(_custom_grid_file):
+        hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
+        print(f"[HF CUSTOM] grille chargee : {len(hf_custom_points)} points depuis {_custom_grid_file}", flush=True)
+    else:
+        hf_custom_points = None
+        if do_custom_hf:
+            print(f"[HF CUSTOM] fichier introuvable ({_custom_grid_file}) -> grille standard", flush=True)
+            do_custom_hf = False
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
@@ -860,6 +870,67 @@ if __name__ == '__main__':
                     SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
             print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
         return SOL
+
+    # --- HF GRILLE PARALLELE ---
+    def run_HF_grid_parallel(u_points, n_workers=3):
+        """Calcule g sur une liste de points U en parallele via subprocesses.
+        Meme mecanisme que run_DOE_parallel (workers _DOE_WORKER).
+        Retourne une liste de g (meme ordre que u_points)."""
+        import subprocess as _sp
+        dist_X = dist_jointe()
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        # Convertir U -> X pour chaque point
+        SOL = []
+        for u in u_points:
+            x = T_inv(ot.Point(list(u)))
+            SOL.append({p: float(x[j]) for j, p in enumerate(params_names)})
+        npts = len(SOL)
+        n_workers = max(1, min(n_workers, npts))
+        threads_per = max(1, 32 // n_workers)
+        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
+        base_ds = storage + modelname + ".ds"
+        batches = [[] for _ in range(n_workers)]
+        for i in range(npts):
+            batches[i % n_workers].append(i)
+        print(f"  [HF GRID PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per})", flush=True)
+        procs = []
+        for w, idxs in enumerate(batches):
+            if not idxs:
+                continue
+            wname = modelname + ".ds\\_hf_workers\\hfw%d" % w
+            wds = storage + wname + ".ds"
+            os.makedirs(wds, exist_ok=True)
+            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
+            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
+            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
+            task_file = wds + "\\_doe_task.json"
+            out_file = wds + "\\_doe_out.json"
+            with open(task_file, "w") as _f:
+                json.dump(task, _f)
+            if os.path.exists(out_file):
+                os.remove(out_file)
+            env = dict(os.environ,
+                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
+                       _DOE_MAIN_DS=base_ds,
+                       _FIAB_LOG_REDIRECTED="1",
+                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
+            wlog = open(wds + "\\_hf_worker.log", "w")
+            print(f"    -> hf_worker {w}: {len(idxs)} points", flush=True)
+            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\Moulinblanc\launcher3.py"],
+                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
+            procs.append((p, out_file, wlog, w, idxs))
+        g_results = [None] * npts
+        for p, out_file, wlog, w, idxs in procs:
+            rc = p.wait(); wlog.close()
+            print(f"    <- hf_worker {w} fini (rc={rc})", flush=True)
+        for p, out_file, wlog, w, idxs in procs:
+            if not os.path.exists(out_file):
+                raise RuntimeError(f"[HF GRID PARALLELE] worker {w} sans sortie (voir _hf_worker.log)")
+            res = json.load(open(out_file))
+            for i_str, d in res.items():
+                g_results[int(i_str)] = d['g']
+            print(f"    collecte hf_worker {w}: {len(idxs)} pts", flush=True)
+        return g_results
 
     # --- DOE cache ---
     _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
@@ -2314,18 +2385,81 @@ if __name__ == '__main__':
         Z = interp(pts).reshape(n_grid_hf, n_grid_hf)
         return Z
 
+    _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
+
     def _hf_from_custom_points(sd):
-        """Interpole Z_true depuis hf_custom_points (griddata) sur une grille reguliere.
+        """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
+        puis interpole (griddata) sur une grille reguliere.
+        Cache incremental : sauve apres chaque point, reprend apres crash.
         Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
         if hf_custom_points is None:
             return None, None, None
         from scipy.interpolate import griddata
+        import time as _time_local
         idx_x, idx_y, fixed = sd
-        pts = np.array(hf_custom_points)
+        pts = np.array(hf_custom_points)   # (N, 2) : coordonnees U
+        n_total = len(pts)
+
+        # Charger cache partiel (reprise)
+        _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
+        g_vals = [None] * n_total
+        if os.path.exists(_partial_file):
+            try:
+                _d = json.load(open(_partial_file))
+                if _d.get('n_total') == n_total:
+                    g_vals = _d['g_vals']
+            except Exception:
+                pass
+        _n_skipped = sum(1 for v in g_vals if v is not None)
+        _n_to_compute = n_total - _n_skipped
+        print(f"[HF CUSTOM] {n_total} points, {_n_skipped} deja calcules, {_n_to_compute} a faire", flush=True)
+
+        # Calculer g sur les points manquants
+        _idx_todo = [i for i in range(n_total) if g_vals[i] is None]
+        if _idx_todo:
+            _pts_todo = [list(pts[i]) for i in _idx_todo]
+            if n_workers_DOE and n_workers_DOE > 1 and len(_pts_todo) > 1:
+                _g_todo = run_HF_grid_parallel(_pts_todo, n_workers=n_workers_DOE)
+            else:
+                _point_log_phase[0] = "HF_CUSTOM"
+                _g_todo = []
+                _t_start = _time_local.perf_counter()
+                for _k, pt in enumerate(_pts_todo):
+                    g_val = run_HF(pt)[0]
+                    _g_todo.append(g_val)
+                    # Save incremental
+                    g_vals[_idx_todo[_k]] = g_val
+                    try:
+                        json.dump({'n_total': n_total, 'g_vals': g_vals},
+                                  open(_partial_file, 'w'), indent=1)
+                    except Exception:
+                        pass
+                    _t_elapsed = _time_local.perf_counter() - _t_start
+                    _t_avg = _t_elapsed / (_k + 1)
+                    _t_eta = _t_avg * (len(_pts_todo) - _k - 1)
+                    print(f"  [HF CUSTOM {_n_skipped + _k + 1}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
+                          f"ETA={_t_eta/60:.1f}min", flush=True)
+            # Remplir g_vals depuis les resultats (parallele ou sequentiel)
+            for _k, i in enumerate(_idx_todo):
+                if g_vals[i] is None:
+                    g_vals[i] = _g_todo[_k]
+            print(f"[HF CUSTOM] {len(_idx_todo)} points calcules ({_n_skipped} skip)", flush=True)
+
+        # Supprimer le cache partiel, sauver le cache final
+        g_arr = np.array(g_vals, dtype=float)
+        try:
+            json.dump({'n_total': n_total, 'pts': pts.tolist(), 'g_vals': g_vals, 'complet': True},
+                      open(_HF_CUSTOM_CACHE_FILE, 'w'), indent=1)
+            if os.path.exists(_partial_file):
+                os.remove(_partial_file)
+        except Exception:
+            pass
+
+        # Griddata sur grille reguliere
         ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
         uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-        Z_true = griddata(pts[:, :2], pts[:, 2], (UX_hf, UY_hf), method='linear')
+        Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
         return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
