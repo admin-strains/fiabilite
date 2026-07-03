@@ -160,6 +160,17 @@ if __name__ == '__main__':
     # --- Résultats fixés ---
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
+    # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
+    do_custom_hf = False
+    _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\output', 'custom_hf_grid.json')
+    if do_custom_hf and os.path.exists(_custom_grid_file):
+        hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
+        print(f"[HF CUSTOM] grille chargee : {len(hf_custom_points)} points depuis {_custom_grid_file}", flush=True)
+    else:
+        hf_custom_points = None
+        if do_custom_hf:
+            print(f"[HF CUSTOM] fichier introuvable ({_custom_grid_file}) -> grille standard", flush=True)
+            do_custom_hf = False
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
@@ -578,29 +589,33 @@ if __name__ == '__main__':
 
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
-        Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire)"""
+        Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
+        Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
+        SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
         path = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
-        #MODIF 1 10/04 - on doit tout mettre dans params in SOL. TOUT.
-        for i in range (len(SOL)): 
-            patch_params(path, **SOL[i]) #à cette étape SOL ne contient que 'fc': ,'fy':
-            model = MODEL() #ici model n'est pas encore rempli
+        dist_X = dist_jointe()
+        T = dist_X.getIsoProbabilisticTransformation()
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        for i in range (len(SOL)):
+            patch_params(path, **{p: SOL[i][p] for p in params_names})
+            model = MODEL()
             SET_CONTEXT(model, path)
-            fileName = os.path.join(path, AnalysisName + ".dscad") #on crée le chemin du fichier disque .dscad lisible par C. C va tout faire et on renverra les info plus tard (.load)
+            fileName = os.path.join(path, AnalysisName + ".dscad")
 
             cadfile = open(path + '\\dsCad.txt', 'r')
-            cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
-            exec(cadscript, globals()) # ici on modifie le modèle (C, cython) et donc les variables (on exécute le script de dsCad.txt ce qui modifie les variables - rien dans .dscad, tout dans var. en mémoire)
-            model.Save(fileName) # ici on créé dscad et on enregistre les modifs des variables dans .dscad
-            print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
+            cadscript = cadfile.read()
+            exec(cadscript, globals())
+            model.Save(fileName)
+            print(model.GETERRORS())
 
             loadfile = open(path + '\\dsLoad.txt', 'r')
             loadscript = loadfile.read()
-            with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
-                exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
+            with CetLOAD.LOAD_MODEL(model, path):
+                exec(loadscript, globals())
 
-            Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
+            Meshkwargs = {
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
                 "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
                 "global_physical_size": global_size,
@@ -626,8 +641,8 @@ if __name__ == '__main__':
             Meshkwargs["model_handle"] = model.GETHANDLEPTR()
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
-            kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+            kwargs = {"scaling": 1, "write_debug_files": "true"}
+            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals())
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -653,28 +668,44 @@ if __name__ == '__main__':
                 )
 
             kwargs["model_handle"] = model.GETHANDLEPTR()
-            CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
+            CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs)
 
             # Lire le resultat
-            metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares") #on extrait l'addresse du fichier pour définir f
-            with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
-                d = json.load(f) #chargement du fichier .dsmetares
+            metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares")
+            with open(metares_path, 'r') as f:
+                d = json.load(f)
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
             if save_history:
                 _socp_call_counter[0] += 1
                 _save_socp_outputs(path, AnalysisName,
                                    prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
                                    p_vals=[float(SOL[i][p]) for p in params_names])
-            for p in params_names:
-                SOL[i][f'dg_{p}'] = None
+            # --- Lecture sensibilites et conversion X -> U ---
+            grad_X = [None] * n_var
             if sensitivity and 'Sensitivity' in d['info']:
-                print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
+                print(f"les sensibilites sont calculees pour les elements : {d['info']['Sensitivity'].items()}")
                 for k, v in d['info']['Sensitivity'].items():
                     p = _sens_key_to_param(k)
                     if p is not None:
-                        SOL[i][f'dg_{p}'] = v
-                    if all(SOL[i].get(f'dg_{q}') is not None for q in params_names):
+                        grad_X[params_names.index(p)] = v
+                    if all(g is not None for g in grad_X):
                         break
+            # Conversion en espace U
+            x_point = ot.Point([float(SOL[i][p]) for p in params_names])
+            u_point = T(x_point)
+            SOL[i]['_u'] = [float(u_point[j]) for j in range(n_var)]
+            if sensitivity and all(g is not None for g in grad_X):
+                J_Tinv = T_inv.gradient(u_point)
+                J_Tinv_T = J_Tinv.transpose()
+                grad_U = J_Tinv_T * ot.Point(grad_X)
+                for j, p in enumerate(params_names):
+                    SOL[i][f'dg_{p}'] = float(grad_U[j])
+            else:
+                for p in params_names:
+                    SOL[i][f'dg_{p}'] = None
+            # --- Sauvegarde incrementale du cache DOE ---
+            _n_done = sum(1 for s in SOL if 'g' in s)
+            _save_doe_cache_incremental(SOL, _n_done)
         return SOL
 
     def run_HF(u):
@@ -843,6 +874,66 @@ if __name__ == '__main__':
             print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
         return SOL
 
+    # --- HF GRILLE PARALLELE ---
+    def run_HF_grid_parallel(u_points, n_workers=3):
+        """Calcule g sur une liste de points U en parallele via subprocesses.
+        Meme mecanisme que run_DOE_parallel (workers _DOE_WORKER).
+        Retourne une liste de g (meme ordre que u_points)."""
+        import subprocess as _sp
+        dist_X = dist_jointe()
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        SOL = []
+        for u in u_points:
+            x = T_inv(ot.Point(list(u)))
+            SOL.append({p: float(x[j]) for j, p in enumerate(params_names)})
+        npts = len(SOL)
+        n_workers = max(1, min(n_workers, npts))
+        threads_per = max(1, 32 // n_workers)
+        storage = "C:\\workspace\\storage\\admin\\SF\\"
+        base_ds = storage + modelname + ".ds"
+        batches = [[] for _ in range(n_workers)]
+        for i in range(npts):
+            batches[i % n_workers].append(i)
+        print(f"  [HF GRID PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per})", flush=True)
+        procs = []
+        for w, idxs in enumerate(batches):
+            if not idxs:
+                continue
+            wname = modelname + ".ds\\_hf_workers\\hfw%d" % w
+            wds = storage + wname + ".ds"
+            os.makedirs(wds, exist_ok=True)
+            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
+            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
+            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
+            task_file = wds + "\\_doe_task.json"
+            out_file = wds + "\\_doe_out.json"
+            with open(task_file, "w") as _f:
+                json.dump(task, _f)
+            if os.path.exists(out_file):
+                os.remove(out_file)
+            env = dict(os.environ,
+                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
+                       _DOE_MAIN_DS=base_ds,
+                       _FIAB_LOG_REDIRECTED="1",
+                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
+            wlog = open(wds + "\\_hf_worker.log", "w")
+            print(f"    -> hf_worker {w}: {len(idxs)} points", flush=True)
+            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\launcher3.py"],
+                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
+            procs.append((p, out_file, wlog, w, idxs))
+        g_results = [None] * npts
+        for p, out_file, wlog, w, idxs in procs:
+            rc = p.wait(); wlog.close()
+            print(f"    <- hf_worker {w} fini (rc={rc})", flush=True)
+        for p, out_file, wlog, w, idxs in procs:
+            if not os.path.exists(out_file):
+                raise RuntimeError(f"[HF GRID PARALLELE] worker {w} sans sortie (voir _hf_worker.log)")
+            res = json.load(open(out_file))
+            for i_str, d in res.items():
+                g_results[int(i_str)] = d['g']
+            print(f"    collecte hf_worker {w}: {len(idxs)} pts", flush=True)
+        return g_results
+
     # --- DOE cache ---
     _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
 
@@ -858,7 +949,10 @@ if __name__ == '__main__':
             if _n0_cache != n0:
                 print(f"[DOE CACHE] n0 different (cache={_n0_cache}, courant={n0}) -> recalcul DOE", flush=True)
                 return None
-            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0} OK -> 0 SOCP DOE)", flush=True)
+            if not d.get('complet', False):
+                print(f"[DOE CACHE] cache incomplet (complet=False) -> recalcul DOE", flush=True)
+                return None
+            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0}, complet -> 0 SOCP DOE)", flush=True)
             return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
         except Exception as e:
             print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
@@ -866,14 +960,28 @@ if __name__ == '__main__':
 
     def _save_doe_cache(xt, yt, all_grad):
         try:
-            json.dump({"n0": n0,
+            json.dump({"n0": n0, "complet": True,
                        "xt": np.asarray(xt).tolist(),
                        "yt": np.asarray(yt).tolist(),
                        "all_grad": np.asarray(all_grad).tolist()},
                       open(_DOE_CACHE_FILE, "w"), indent=1)
-            print(f"[DOE CACHE] sauve dans {_DOE_CACHE_FILE}", flush=True)
+            print(f"[DOE CACHE] sauve (complet) dans {_DOE_CACHE_FILE}", flush=True)
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    def _save_doe_cache_incremental(SOL, n_done):
+        """Sauvegarde incrementale : ecrit les n_done premiers points de SOL.
+        Gradients deja en U (converties par run_one_SOL). Pas de cle 'complet'."""
+        try:
+            _xt = [SOL[i]['_u'] for i in range(n_done)]
+            _yt = [[SOL[i]['g']] for i in range(n_done)]
+            _ag = [[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_done)]
+            json.dump({"n0": n0, "complet": False, "n_completed": n_done,
+                       "xt": _xt, "yt": _yt, "all_grad": _ag},
+                      open(_DOE_CACHE_FILE, "w"), indent=1)
+            print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)
 
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():
@@ -979,16 +1087,9 @@ if __name__ == '__main__':
                 SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
             else:
                 SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
+            # run_one_SOL a deja converti les gradients en U
             yt = np.array([SOL[i]['g'] for i in range(n_doe)]).reshape(-1, 1)
-            all_grad = np.zeros((n_doe, n_var))
-            for i in range (n_doe):
-                J_Tinv = T_inv.gradient(U_doe[i])
-                J_Tinv_T = J_Tinv.transpose()
-                grad_X_g = ot.Point([SOL[i][f'dg_{p}'] for p in params_names])
-                grad_U_g = J_Tinv_T * grad_X_g
-                for j in range (n_var):
-                    all_grad[i][j]= grad_U_g[j]
-                    SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
+            all_grad = np.array([[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_doe)])
             for i in range(n_doe):
                 _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
@@ -2195,10 +2296,39 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
+    def _save_hf_cache_partial(Z_flat, n_total, cache_file, sd):
+        """Sauvegarde incrementale de la grille HF (Z_flat peut contenir des None)."""
+        try:
+            _sd = sd if sd is not None else (0, 1, {})
+            json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
+                       'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
+                      open(cache_file + '.partial', 'w'), indent=1)
+        except Exception as e:
+            print(f"[HF CACHE PARTIAL] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+
+    def _load_hf_cache_partial(cache_file, sd, n_total):
+        """Charge le cache partiel. Retourne une liste Z_flat (avec None) ou None."""
+        partial_file = cache_file + '.partial'
+        if not os.path.exists(partial_file):
+            return None
+        try:
+            d = json.load(open(partial_file))
+            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
+            _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
+            if _sd_cache != _sd_now or d.get('n_total') != n_total:
+                return None
+            z = d['Z_flat']
+            n_done = sum(1 for v in z if v is not None)
+            print(f"[HF CACHE PARTIAL] reprise : {n_done}/{n_total} points deja calcules", flush=True)
+            return z
+        except Exception:
+            return None
+
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
                                         cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
         """Calcule la grille HF point par point avec progress + ETA.
         Lecture/ecriture automatique d'un cache sidecar JSON.
+        Sauvegarde incrementale dans cache_file.partial (reprise apres crash).
         Retourne Z (n_grid_hf x n_grid_hf)."""
         global hf_2d_grid_fixed, hf_2d_grid_fixed_final
         if cache_file is None:
@@ -2216,29 +2346,44 @@ if __name__ == '__main__':
         import time as _time_local
         _point_log_phase[0] = "HF"
         n_total = len(grid_hf)
-        Z_flat = []
+        # Charger le cache partiel (reprise apres crash)
+        Z_flat = _load_hf_cache_partial(cache_file, sd, n_total)
+        if Z_flat is None:
+            Z_flat = [None] * n_total
+        _n_skipped = sum(1 for v in Z_flat if v is not None)
+        _n_to_compute = n_total - _n_skipped
         _t_start = _time_local.perf_counter()
-        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context}) #####", flush=True)
+        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context})"
+              f" [skip {_n_skipped}, calcul {_n_to_compute}] #####", flush=True)
+        _n_computed = 0
         for i, pt in enumerate(grid_hf):
+            if Z_flat[i] is not None:
+                continue
             _t_pt0 = _time_local.perf_counter()
             g_val = run_HF(pt)[0]
-            Z_flat.append(g_val)
+            Z_flat[i] = g_val
+            _n_computed += 1
+            _save_hf_cache_partial(Z_flat, n_total, cache_file, sd)
             _t_pt = _time_local.perf_counter() - _t_pt0
             _t_elapsed = _time_local.perf_counter() - _t_start
-            _t_avg = _t_elapsed / (i + 1)
-            _t_eta = _t_avg * (n_total - i - 1)
+            _t_avg = _t_elapsed / _n_computed
+            _t_eta = _t_avg * (_n_to_compute - _n_computed)
             _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(len(pt)))
-            print(f"  [HF GRID {i+1:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
+            print(f"  [HF GRID {_n_skipped + _n_computed:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
-        Z = np.array(Z_flat).reshape(n_grid_hf_local, n_grid_hf_local)
+        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({_n_computed} appels STRAINS, {_n_skipped} skip) #####\n", flush=True)
+        Z = np.array(Z_flat, dtype=float).reshape(n_grid_hf_local, n_grid_hf_local)
         _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
         if grid_var_name == 'hf_2d_grid_fixed_final':
             hf_2d_grid_fixed_final = _grid_dict
         else:
             hf_2d_grid_fixed = _grid_dict
         _save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
+        # supprimer le cache partiel
+        _partial_file = cache_file + '.partial'
+        if os.path.exists(_partial_file):
+            os.remove(_partial_file)
         return Z
 
     # --- HF GRILLE FULL (n_var-D) ---
@@ -2323,6 +2468,83 @@ if __name__ == '__main__':
         Z = interp(pts).reshape(n_grid_hf, n_grid_hf)
         return Z
 
+    _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
+
+    def _hf_from_custom_points(sd):
+        """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
+        puis interpole (griddata) sur une grille reguliere.
+        Cache incremental : sauve apres chaque point, reprend apres crash.
+        Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
+        if hf_custom_points is None:
+            return None, None, None
+        from scipy.interpolate import griddata
+        import time as _time_local
+        idx_x, idx_y, fixed = sd
+        pts = np.array(hf_custom_points)   # (N, 2) : coordonnees U
+        n_total = len(pts)
+
+        # Charger cache partiel (reprise)
+        _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
+        g_vals = [None] * n_total
+        if os.path.exists(_partial_file):
+            try:
+                _d = json.load(open(_partial_file))
+                if _d.get('n_total') == n_total:
+                    g_vals = _d['g_vals']
+            except Exception:
+                pass
+        _n_skipped = sum(1 for v in g_vals if v is not None)
+        _n_to_compute = n_total - _n_skipped
+        print(f"[HF CUSTOM] {n_total} points, {_n_skipped} deja calcules, {_n_to_compute} a faire", flush=True)
+
+        # Calculer g sur les points manquants
+        _idx_todo = [i for i in range(n_total) if g_vals[i] is None]
+        if _idx_todo:
+            _pts_todo = [list(pts[i]) for i in _idx_todo]
+            if n_workers_DOE and n_workers_DOE > 1 and len(_pts_todo) > 1:
+                _g_todo = run_HF_grid_parallel(_pts_todo, n_workers=n_workers_DOE)
+            else:
+                _point_log_phase[0] = "HF_CUSTOM"
+                _g_todo = []
+                _t_start = _time_local.perf_counter()
+                for _k, pt in enumerate(_pts_todo):
+                    g_val = run_HF(pt)[0]
+                    _g_todo.append(g_val)
+                    # Save incremental
+                    g_vals[_idx_todo[_k]] = g_val
+                    try:
+                        json.dump({'n_total': n_total, 'g_vals': g_vals},
+                                  open(_partial_file, 'w'), indent=1)
+                    except Exception:
+                        pass
+                    _t_elapsed = _time_local.perf_counter() - _t_start
+                    _t_avg = _t_elapsed / (_k + 1)
+                    _t_eta = _t_avg * (len(_pts_todo) - _k - 1)
+                    print(f"  [HF CUSTOM {_n_skipped + _k + 1}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
+                          f"ETA={_t_eta/60:.1f}min", flush=True)
+            # Remplir g_vals depuis les resultats (parallele ou sequentiel)
+            for _k, i in enumerate(_idx_todo):
+                if g_vals[i] is None:
+                    g_vals[i] = _g_todo[_k]
+            print(f"[HF CUSTOM] {len(_idx_todo)} points calcules ({_n_skipped} skip)", flush=True)
+
+        # Sauver cache final, supprimer partiel
+        g_arr = np.array(g_vals, dtype=float)
+        try:
+            json.dump({'n_total': n_total, 'pts': pts.tolist(), 'g_vals': g_vals, 'complet': True},
+                      open(_HF_CUSTOM_CACHE_FILE, 'w'), indent=1)
+            if os.path.exists(_partial_file):
+                os.remove(_partial_file)
+        except Exception:
+            pass
+
+        # Griddata sur grille reguliere
+        ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
+        uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+        Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+        return Z_true, UX_hf, UY_hf
+
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
         """Retourne Z_true (n_grid_hf x n_grid_hf) pour une coupe sd.
         Cascade : cache 2D memoire -> cache 2D disque -> grille full -> recalcul 2D."""
@@ -2392,11 +2614,13 @@ if __name__ == '__main__':
 
         # --- Contour g=0 HF ---
         Z_true, UX_hf, UY_hf = None, None, None
-        if print_HF:
+        _sd = slice_def if slice_def is not None else (0, 1, {})
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(_sd)
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            _sd = slice_def if slice_def is not None else (0, 1, {})
             Z_true = _get_hf_slice(_sd, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
 
         # --- Figure ---
@@ -2481,7 +2705,9 @@ if __name__ == '__main__':
 
         # --- Grille HF (une seule fois) ---
         Z_true, UX_hf, UY_hf = None, None, None
-        if print_HF:
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
@@ -2559,114 +2785,6 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
 
-    def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
-        """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
-        global hf_2d_grid_fixed
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
-
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        cf = ax.contourf(U1, U2, Z_eff, levels=20, cmap='viridis', alpha=0.85)
-        plt.colorbar(cf, ax=ax, label='EFF')
-
-        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
-        if g_ot is not None:
-            Z_g = mu_grid.reshape(n_grid, n_grid)
-            ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
-
-        # --- Contour g=0 HF ---
-        if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_EFF")
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
-
-        # --- Points DOE ---
-        if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
-                       edgecolors='black', linewidths=0.8, label='DOE')
-
-        # --- Points ajoutes par EFF ---
-        if xt_eff is not None and len(xt_eff) > 0:
-            xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
-                       marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
-        ax.set_title('Critere EFF')
-        ax.legend(loc='best', fontsize=9)
-        plt.tight_layout()
-        plt.show(block=False)
-
-    def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
-        """Carte 2D de l'ecart-type conditionnel du surrogate."""
-        global hf_2d_grid_fixed
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
-
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        Z_sigma = sigma_grid.reshape(n_grid, n_grid)
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        cf = ax.contourf(U1, U2, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
-        plt.colorbar(cf, ax=ax, label='sigma (ecart-type surrogate)')
-
-        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
-        if g_ot is not None:
-            Z_g = mu_grid.reshape(n_grid, n_grid)
-            ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
-
-        # --- Contour g=0 HF ---
-        if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_sigma")
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
-
-        if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
-                       edgecolors='black', linewidths=0.8, label='DOE')
-
-        if xt_eff is not None and len(xt_eff) > 0:
-            xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
-                       marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
-        ax.set_title('Ecart-type surrogate (sigma)')
-        ax.legend(loc='best', fontsize=9)
-        plt.tight_layout()
-        plt.show(block=False)
-
     def print_results(best_result, g_ot):
         _point_log_phase[0] = "USTAR"
         u_star = best_result.getStandardSpaceDesignPoint()
@@ -2736,7 +2854,11 @@ if __name__ == '__main__':
             ax.contour(UX, UY, Z_sur, levels=[0], colors='blue', linewidths=2)
 
         # --- Contour HF grossier ---
-        if print_HF:
+        if hf_custom_points is not None:
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            if Z_true is not None:
+                ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
+        elif print_HF:
             ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
             uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
