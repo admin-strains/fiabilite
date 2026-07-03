@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
+    config_is_identical = False   #False = recalcule le DOE (params changes q+s_convoi)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -518,14 +518,12 @@ if __name__ == '__main__':
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    FY_MEAN = 235.0
-    PARAM_CONFIG_CAD = {
-        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-                'loi': loi_fy, 'args': (FY_MEAN, None)},
-    }
+    PARAM_CONFIG_CAD = {}
     PARAM_CONFIG_LOAD = {
         's_convoi': {'sens': {"param": "LOAD_POSITION", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
+        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
+                     'loi': loi_F_permanente, 'args': (0.35, 0.15)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
