@@ -2400,6 +2400,23 @@ if __name__ == '__main__':
         pts = np.array(hf_custom_points)   # (N, 2) : coordonnees U
         n_total = len(pts)
 
+        # Charger cache final complet (skip tout le calcul)
+        if os.path.exists(_HF_CUSTOM_CACHE_FILE):
+            try:
+                _dc = json.load(open(_HF_CUSTOM_CACHE_FILE))
+                if _dc.get('complet') and _dc.get('n_total') == n_total:
+                    print(f"[HF CUSTOM] cache complet charge ({n_total} pts) -> 0 SOCP", flush=True)
+                    g_arr = np.array(_dc['g_vals'], dtype=float)
+                    _margin = 0.1
+                    _n_interp = 50
+                    ux_hf = np.linspace(pts[:, 0].min() - _margin, pts[:, 0].max() + _margin, _n_interp)
+                    uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
+                    UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+                    Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+                    return Z_true, UX_hf, UY_hf
+            except Exception:
+                pass
+
         # Charger cache partiel (reprise)
         _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
         g_vals = [None] * n_total
@@ -2455,9 +2472,11 @@ if __name__ == '__main__':
         except Exception:
             pass
 
-        # Griddata sur grille reguliere
-        ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-        uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+        # Griddata sur grille reguliere adaptee aux bornes des custom points
+        _margin = 0.1
+        _n_interp = 50
+        ux_hf = np.linspace(pts[:, 0].min() - _margin, pts[:, 0].max() + _margin, _n_interp)
+        uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
         Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
         return Z_true, UX_hf, UY_hf
