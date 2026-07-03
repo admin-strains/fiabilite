@@ -219,9 +219,9 @@ def run_config(cfg, workdir=None, keep=False):
         txt = open(logf, encoding="latin-1").read()
     except Exception:
         txt = ""
-    for m in re.finditer(r"\[PointLoad-CONSERV\] ipl=(\d+) SUM\(w\)=([\-0-9.eE+]+)\s+F=\(([^)]+)\)\s+SUM\(w\*F\)=\(([^)]+)\)", txt):
-        sw = float(m.group(2))
-        res["conserv"].append({"ipl": int(m.group(1)), "sumw": sw, "err_sumw": abs(sw - 1.0)})
+    for m in re.finditer(r"\[PointLoad-CONSERV\] ipl=(\d+) nw=(\d+) SUM\(w\)=([\-0-9.eE+]+)\s+F=\(([^)]+)\)\s+SUM\(w\*F\)=\(([^)]+)\)", txt):
+        sw = float(m.group(3))
+        res["conserv"].append({"ipl": int(m.group(1)), "nw": int(m.group(2)), "sumw": sw, "err_sumw": abs(sw - 1.0)})
     for m in re.finditer(r"\[PointLoad\] p=\(([^)]+)\) (-> tetra \d+|hors maillage -> PROJETE|HORS maillage.*IGNORE|FAST-PATH)", txt):
         tag = m.group(2)
         kind = ("located" if tag.startswith("-> tetra") else
