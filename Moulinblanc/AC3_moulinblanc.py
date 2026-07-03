@@ -98,6 +98,7 @@ if __name__ == '__main__':
     tol_FORM = 0.05                 # précision acceptée par FORM pour l'état limite (moulin_blanc)
     tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
     tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
+    do_FORM_filter = True           #True = rejeter les u* FORM hors eff_bounds avant DBSCAN
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES IS                                                               #
@@ -127,8 +128,8 @@ if __name__ == '__main__':
     tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
-    u1_eff_min, u1_eff_max = -7.5, 7.5
-    u2_eff_min, u2_eff_max = -7.5, 7.5
+    eff_bounds_min = [-2.0, -7.5]     # bornes inf de la recherche EFF [s_convoi, fy1]
+    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
@@ -1643,6 +1644,17 @@ if __name__ == '__main__':
                 print(f"  [sp={[round(v,3) for v in np.array(sp)]}, "
                     f"ECHEC ({type(e).__name__})]", flush=True)
 
+        # --- Filtrer les u* hors bornes EFF ---
+        if do_FORM_filter:
+            _filtered = [(u, r, s) for u, r, s in zip(all_u_star, all_results, all_sp)
+                         if all(eff_bounds_min[j] <= u[j] <= eff_bounds_max[j] for j in range(n_var))]
+            _n_rejected = len(all_u_star) - len(_filtered)
+            if _n_rejected > 0:
+                print(f"  [FORM FILTER] {_n_rejected} u* hors bornes EFF rejetes", flush=True)
+            all_u_star  = [x[0] for x in _filtered]
+            all_results = [x[1] for x in _filtered]
+            all_sp      = [x[2] for x in _filtered]
+
         if not all_u_star:
             return [], []
 
@@ -1813,7 +1825,7 @@ if __name__ == '__main__':
         count_valid_both = 0
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+        bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
         problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -1974,7 +1986,7 @@ if __name__ == '__main__':
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+            bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
