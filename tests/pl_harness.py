@@ -130,9 +130,12 @@ def _gen_dsload(cfg):
         if name in moving:
             mv = moving[name]
             path = mv["path"]
-            lines.append("    MOVING_LOAD(path=[(%.6f,%.6f,%.6f),(%.6f,%.6f,%.6f)], position=%.6f, unit='%s')"
+            # 2026-07-04 (MM) : variable= optionnelle -> groupe de position PARTAGE entre
+            # plusieurs load cases (meme variable) ; absente -> groupe = nom du LC.
+            _var = ", variable='%s'" % mv["variable"] if mv.get("variable") else ""
+            lines.append("    MOVING_LOAD(path=[(%.6f,%.6f,%.6f),(%.6f,%.6f,%.6f)], position=%.6f, unit='%s'%s)"
                          % (path[0][0], path[0][1], path[0][2], path[1][0], path[1][1], path[1][2],
-                            mv.get("position", 0.5), mv.get("unit", "absolute")))
+                            mv.get("position", 0.5), mv.get("unit", "absolute"), _var))
         lines.append("")
 
     for i, name in enumerate(all_live):
