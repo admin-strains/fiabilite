@@ -13,7 +13,7 @@ static_params = [
 ]                                                            
 cinematic_params = [
     {"value": 0,        "table": "IPARM0","indices": [20]},          # 1=Rankine HV MOSEK, 2= Rankine MA MOSEK, 
-    {"value": 3,        "table": "IPARM0","indices": [21]},          # PT INT (1 = MKL PARDISO, 3 = MUMPS, 4 = CuDss)
+    {"value": 4,        "table": "IPARM0","indices": [21]},          # PT INT (1 = MKL PARDISO, 3 = MUMPS, 4 = CuDss)
     {"value": 0,        "table": "IPARM0","indices": [22]},          # WriteLog Pt Int
     {"value": 50,      "table": "IPARM0","indices": [23]},          # Max iterations number
     {"value":2,        "table": "IPARM0","indices": [24]},          # 0 = Aucune condensation Pt Int activée ; 1 = sans glams mais gvar ; 2 = gvar et glam
