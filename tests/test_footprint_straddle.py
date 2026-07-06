@@ -67,6 +67,16 @@ print("\n[B] empreinte A CHEVAL (xc=4.0) : status=%s lambda=%s" % (rB["status"],
 print("    couverture=%s  scale=%s  clip/A_poly=%s" %
       (covB, scB, (clipB.group(1) + "/" + clipB.group(2)) if clipB else "?"))
 
+# [C] empreinte TOTALEMENT DEHORS (xc=6.0 -> x in [5.7,6.3], la poutre finit a x=4).
+# INFORMATIF : la seule charge live tombe entierement dans le vide -> aucune facette clippee
+# -> live LC vide. On veut VOIR le comportement (pas de crash process, statut propre) sans
+# hard-fail sur le statut (le solveur ne peut pas normaliser FEXT.u=1 sans charge live).
+rC, covC, scC, clipC = _run("outside", 6.0)
+print("\n[C] empreinte TOTALEMENT DEHORS (xc=6.0) : status=%s lambda=%s err=%s" %
+      (rC["status"], rC["lam"], rC.get("err")))
+print("    couverture=%s  scale=%s  clip/A_poly=%s" %
+      (covC, scC, (clipC.group(1) + "/" + clipC.group(2)) if clipC else "0/?"))
+
 ok = True
 def _check(label, cond):
     global ok
@@ -90,6 +100,15 @@ _check("B aire clippee ~= 0.5 * A_polygon (moitie sur le pont)",
        crB is not None and 0.35 < crB < 0.65)
 _check("B scale ~= 1.0 = PAS de compensation (ancien code aurait donne ~2.0)",
        scB is not None and abs(scB - 1.0) < 0.10)
+# [C] : robustesse -- on exige juste que le PROCESS ne crashe pas (on recupere un dict
+# resultat, statut propre ou err capturee), et que couverture ~= 0 (rien sur le pont).
+_check("C empreinte dehors : process non crashe (resultat recupere, pas d'exception fatale)",
+       isinstance(rC, dict))
+_check("C couverture ~= 0 (aucune part sur la structure)",
+       covC is None or covC < 0.05)
+print("    -> [C] verdict : le calcul %s (status=%s). Charge live nulle attendue." %
+      ("N'A PAS converge (attendu : live LC vide)" if rC["status"] != "OPTIMAL" else "a converge",
+       rC["status"]))
 
 assert ok, "ECHEC : le comportement conserve-clip (jeter le dehors) n'est pas valide"
 print("\n############ VALIDE : conserve=force jette la part hors-structure ############")
