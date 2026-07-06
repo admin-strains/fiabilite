@@ -187,6 +187,8 @@ def fit_pck(X, Y, options, marginals, copula):
             theta_bounds = ob['Bounds']
         if 'Method' in ob:
             optim_method = ob['Method'].lower()
+        if 'InitialValue' in ob:
+            theta0 = np.asarray(ob['InitialValue'], dtype=float)
 
     if 'EstimMethod' in krig_opts:
         estim_method = krig_opts['EstimMethod'].lower()
