@@ -660,6 +660,11 @@ if __name__ == '__main__':
         path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
+        # transfert5 T5-1 (2026-07-06) : transfo iso-probabiliste pour convertir les gradients
+        # X->U ICI (au lieu de build_DOE) + stocker _u -> permet le cache DOE incremental.
+        _distX_sol = dist_jointe()
+        _T_sol     = _distX_sol.getIsoProbabilisticTransformation()
+        _Tinv_sol  = _distX_sol.getInverseIsoProbabilisticTransformation()
         #MODIF 1 10/04 - on doit tout mettre dans params in SOL. TOUT.
         for i in range (len(SOL)):
             _t_iter = _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} START params={SOL[i]} ===")
@@ -782,6 +787,21 @@ if __name__ == '__main__':
                 _dgs = "  ".join(f"dg/d{q}={SOL[i].get(f'dg_{q}')}" for q in params_names)
                 print(f"  [SENSIBILITES 2-fy] pObj={SOL[i]['g']+1:.5f}  g={SOL[i]['g']:+.5f}  |  {_dgs}", flush=True)
             _t_log(f"  read .dsmetares + sensibilites (g={SOL[i]['g']:.4f})", _t0)
+            # transfert5 T5-1/T5-3b (2026-07-06) : conversion gradients X->U ICI + stockage _u
+            # + sauvegarde incrementale du cache DOE. dg_p passe en espace U (build_DOE le lit tel
+            # quel, plus de boucle jacobienne). En mode worker -> ecrit dans le dir du worker.
+            _x_pt = ot.Point([float(SOL[i][p]) for p in params_names])
+            _u_pt = _T_sol(_x_pt)
+            SOL[i]['_u'] = [float(_u_pt[j]) for j in range(n_var)]
+            if sensitivity and all(SOL[i].get(f'dg_{p}') is not None for p in params_names):
+                _JTi = _Tinv_sol.gradient(_u_pt).transpose()
+                _gradU = _JTi * ot.Point([float(SOL[i][f'dg_{p}']) for p in params_names])
+                for j, p in enumerate(params_names):
+                    SOL[i][f'dg_{p}'] = float(_gradU[j])
+            try:
+                _save_doe_cache_incremental(SOL, sum(1 for s in SOL if 'g' in s))
+            except Exception:
+                pass
             _t_log(f"=== run_one_SOL iter {i+1}/{len(SOL)} END (g={SOL[i]['g']:.4f}) ===", _t_iter)
         return SOL
 
@@ -1084,6 +1104,22 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
+    def _save_doe_cache_incremental(SOL, n_done):
+        """transfert5 T5-3b (2026-07-06) : sauvegarde incrementale apres chaque point DOE
+        (crash-resilience). Gradients DEJA en U (converties par run_one_SOL). Cle complet=False
+        -> _load_doe_cache rejette un cache incomplet. En mode worker, ecrit dans le dir du
+        worker (filet de securite, jamais relu par le process principal)."""
+        try:
+            _xt = [SOL[i]['_u'] for i in range(n_done)]
+            _yt = [[SOL[i]['g']] for i in range(n_done)]
+            _ag = [[float(SOL[i].get(f'dg_{p}') or 0.0) for p in params_names] for i in range(n_done)]
+            json.dump({"n0": n0, "complet": False, "n_completed": n_done,
+                       "xt": _xt, "yt": _yt, "all_grad": _ag},
+                      open(_DOE_CACHE_FILE, "w"), indent=1)
+            print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
+        except Exception as e:
+            print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)
+
     # --- DUMP RESTART COMPLET (2026-06-18) -----------------------------------
     # Ecrit TOUT ce qu'il faut pour ULTERIEUREMENT (partie a coder ensuite) :
     #   (a) relire le set d'entrainement ENRICHI complet (DOE + points EFF) et refit le surrogate
@@ -1207,15 +1243,11 @@ if __name__ == '__main__':
             else:
                 SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
             yt = np.array([SOL[i]['g'] for i in range(n0)]).reshape(-1, 1)
-            all_grad = np.zeros((n0, n_var))
-            for i in range (n0):
-                J_Tinv = T_inv.gradient(U_doe[i])
-                J_Tinv_T = J_Tinv.transpose()
-                grad_X_g = ot.Point([SOL[i][f'dg_{p}'] for p in params_names])
-                grad_U_g = J_Tinv_T * grad_X_g
-                for j in range (n_var):
-                    all_grad[i][j]= grad_U_g[j]
-                    SOL[i][f'dg_u{j+1}'] = grad_U_g[j]
+            # transfert5 T5-2 (2026-07-06) : gradients DEJA convertis en U par run_one_SOL
+            # (SOL[i]['dg_p'] = espace U, y compris via les workers paralleles). Plus de
+            # boucle jacobienne ici -- elle a ete deplacee dans run_one_SOL.
+            all_grad = np.array([[float(SOL[i].get(f'dg_{p}') or 0.0) for p in params_names]
+                                 for i in range(n0)])
             for i in range(n0):   # log incremental des points DOE (u-space U_doe, x-space X_doe, g)
                 _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
