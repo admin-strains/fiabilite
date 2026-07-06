@@ -12,7 +12,7 @@
 # =====================================================================
 import os, sys, json, re, shutil, tempfile, io, contextlib
 
-FRONT = r"C:\workspace\front_mohamad"
+FRONT = os.environ.get("PL_FRONT", r"C:\workspace\front_mohamad")   # 2026-07-06 (MM) : surchargeable pour tester le core partage
 CAT = FRONT if os.path.isdir(os.path.join(FRONT, "STRAINS", "common", "Catalog")) else r"C:\workspace\front"
 for d in [os.path.join(FRONT, r"STRAINS\rupt\core\bin"), os.path.join(FRONT, r"STRAINS\rupt\core"),
           os.path.join(FRONT, r"STRAINS\common\Dll"), os.path.join(FRONT, r"STRAINS\rupt\core\bin\meshgems"),
