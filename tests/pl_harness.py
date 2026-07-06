@@ -165,8 +165,10 @@ def _capture_cstdout(path):
     finally:
         sys.stdout.flush(); os.dup2(old, 1); os.close(old)
 
-def run_config(cfg, workdir=None, keep=False):
-    """Execute une CONFIG. Renvoie dict {status, lam, sens, conserv, located, npts, err}."""
+def run_config(cfg, workdir=None, keep=False, write_debug=False):
+    """Execute une CONFIG. Renvoie dict {status, lam, sens, conserv, located, npts, err}.
+    write_debug=True -> write_debug_files='true' au solve (doGmsh) -> ecrit PL_cin_out.msh
+    (mecanisme u*) dans le workdir. 2026-07-06 (MM), additif : defaut inchange."""
     _init_catalog()
     base = r"C:\workspace\storage\admin\Moulin_Blanc\Test_point_load.ds"
     if workdir is None:
@@ -198,7 +200,7 @@ def run_config(cfg, workdir=None, keep=False):
                   "write_debug_files":"false","is_iso":"true","coeff_on_error":0.01,"remesh_type":1,
                   "old_size_factor":0.0,"model_handle":model.GETHANDLEPTR()}
             CetMESH.ANISO_MESH(AN, 0, PATH, **Mk)
-            kwargs = {"scaling":1,"write_debug_files":"false"}
+            kwargs = {"scaling":1,"write_debug_files":("true" if write_debug else "false")}
             exec(open(r"C:\workspace\fiabilite\InitSolver.py").read(), globals())
             kwargs.update(static_params=static_params, cinematic_params=cinematic_params,
                           MKLPardiso_params=MKLPardiso_params, MyPardiso_params=MyPardiso_params,
