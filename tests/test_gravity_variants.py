@@ -66,7 +66,7 @@ open(os.path.join(PATH, 'dsCad.txt'), 'w').write(_cad)
 _GRAV = "with LOAD_CASE('LC_poids', VALUE=-9.81, DIR=\"ZAxis\"):\n    pass\n\n"
 _TRAF_SUP = ("with LOAD_CASE('LC_trafic'):\n"
              "    SUPPORT(BOUNDARY='Fixed', MEAN=False, RIGID=False, X=True, Y=True, Z=True)\n"
-             "    LOAD(POLYGON='Load', NORMAL=str(-q))\n\n")
+             "    LOAD(POLYGON='Load', Z=str(-q))\n\n")   # Z explicite (pas NORMAL)
 
 DSLOADS = {
  "A_grav_live": "q = 0.15\n\n" + _GRAV + _TRAF_SUP +
