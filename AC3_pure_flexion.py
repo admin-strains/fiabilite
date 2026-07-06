@@ -77,12 +77,8 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
-    config_is_identical = False   #True = reutilise doe_cache.json si present (0 SOCP DOE)
+    config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
-    # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
-
-    n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
-    rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
@@ -125,10 +121,9 @@ if __name__ == '__main__':
     tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
-    eff_bounds_min = [-7.5] * n_var   # bornes inf de la recherche EFF par variable
-    eff_bounds_max = [+7.5] * n_var   # bornes sup de la recherche EFF par variable
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
+    n_batch_EFF = 2                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
@@ -519,6 +514,8 @@ if __name__ == '__main__':
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
+    rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
     PARAM_CONFIG_CAD = {
         'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names, "region_key": "fy"},
                'loi': loi_fy, 'args': (550, None)},
@@ -540,6 +537,8 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = (0, 1, {})           # 2 variables : pas de coupe, plan complet fy vs fc
 
+    eff_bounds_min = [-7.5] * n_var   # bornes inf de la recherche EFF par variable
+    eff_bounds_max = [+7.5] * n_var   # bornes sup de la recherche EFF par variable
     def _is_position_var(sens):
         """Detecte si une region de sensibilite est une variable de position.
         Supporte l'ancienne syntaxe (param='LOAD_POSITION') et la nouvelle (axis='position')."""
@@ -1634,11 +1633,12 @@ if __name__ == '__main__':
     
     # --------------------------------------------------------------------------- #
     # FONCTIONS POUR FORM                                                         #
-    def init_g_ot(g_ot, sigma_func, xt, yt, all_grad):
+    def init_g_ot(g_ot, sigma_func, xt, yt, all_grad, fixed_fm=None):
         """
         Cette fonction génère xt, yt, all_grad si xt n'est pas vide puis
         contruit un metamodele à partir de ces points. Dans le cas HF, elle
         créé uniquement une fonction OT. Retourne g_ot, sigma_func, xt, yt, all_grad.
+        Si fixed_fm est fourni (refit KB) : theta et polynomes fixes du fit precedent.
         """
         global _gepck_pce_label, _gepck_loo, _eff_history_theta
         if do_KRG:
@@ -1680,10 +1680,22 @@ if __name__ == '__main__':
             if xt is None: xt, yt, all_grad = build_DOE()
             _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-            _opts      = {'Mode': 'optimal',
-                          'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+            if fixed_fm is not None:
+                _prev_theta = fixed_fm['Kriging'][0]['theta']
+                _prev_npoly = fixed_fm['NumberOfPoly']
+                _prev_idx   = fixed_fm['idxranking'][0][:_prev_npoly]
+                _prev_poly  = fixed_fm['AllIndices'][0][np.array(_prev_idx), :]
+                _prev_types = fixed_fm['PolyTypes']
+                _opts = {'Mode': 'sequential',
+                         'PolyIndices': _prev_poly,
+                         'PolyTypes': _prev_types,
+                         'Kriging': {'Optim': {'Method': 'none',
+                                               'InitialValue': _prev_theta}}}
+            else:
+                _opts = {'Mode': 'optimal',
+                         'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
             _Y_aug = build_Y_aug(yt, all_grad)
-            print(f"=== GEPCK fit N={len(xt)} ===", flush=True)
+            print(f"=== GEPCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
@@ -1707,9 +1719,21 @@ if __name__ == '__main__':
             if xt is None: xt, yt, all_grad = build_DOE()
             _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-            _opts      = {'Mode': 'optimal',
-                          'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-            print(f"=== PCK fit N={len(xt)} ===", flush=True)
+            if fixed_fm is not None:
+                _prev_theta = fixed_fm['Kriging'][0]['theta']
+                _prev_npoly = int(fixed_fm['NumberOfPoly'][0])
+                _prev_idx   = fixed_fm['idxranking'][0][:_prev_npoly]
+                _prev_poly  = fixed_fm['AllIndices'][0][np.array(_prev_idx), :]
+                _prev_types = fixed_fm['PolyTypes']
+                _opts = {'Mode': 'sequential',
+                         'PolyIndices': _prev_poly,
+                         'PolyTypes': _prev_types,
+                         'Kriging': {'Optim': {'Method': 'none',
+                                               'InitialValue': _prev_theta}}}
+            else:
+                _opts = {'Mode': 'optimal',
+                         'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+            print(f"=== PCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 _fm = fit_pck(xt, yt.ravel(), _opts, _marginals, _copula)
@@ -1890,6 +1914,66 @@ if __name__ == '__main__':
             t3 = (epsilon - muG) / sigmaG
             return [2*muG*norm.cdf(t1) - (epsilon+muG)*norm.cdf(-t2) + (epsilon-muG)*norm.cdf(t3) + sigmaG*(-2*norm.pdf(t1) + norm.pdf(t2) + norm.pdf(t3))]
 
+    def _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad):
+        """Trouve n_batch_EFF points EFF par Kriging Believer.
+        Si n_batch_EFF=1 : equivalent a une seule maximisation EFF (pas de KB).
+        Si n_batch_EFF>1 : maximise EFF, impute mu comme observation fictive,
+        refit le surrogate a theta fixe, re-maximise, etc.
+        Retourne la liste des points (list of ndarray) et la valeur EFF du premier."""
+        # --- Premier point : maximisation EFF standard ---
+        f = ot.Function(EFFFunction(g_ot, sigma_func))
+        bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
+        problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
+        problem.setMinimization(False)
+        algo_opti = ot.NLopt(problem, "GN_DIRECT")
+        algo_opti.setStartingPoint([0.0] * n_var)
+        algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
+        algo_opti.run()
+        u1 = np.array(algo_opti.getResult().getOptimalPoint())
+        eff_val = f(ot.Point(u1.tolist()))[0]
+        batch = [u1]
+
+        if n_batch_EFF <= 1:
+            return batch, eff_val
+
+        # --- Points suivants : Kriging Believer ---
+        xt_kb  = np.copy(xt)
+        yt_kb  = np.copy(yt)
+        ag_kb  = np.copy(all_grad)
+        g_kb   = g_ot
+        s_kb   = sigma_func
+        # recuperer le fm du surrogate courant pour fixer theta + polynomes
+        _fm_kb = getattr(getattr(s_kb, '__self__', None), 'fm', None)
+
+        for k in range(1, n_batch_EFF):
+            # impute mu comme observation fictive
+            u_prev = batch[-1]
+            y_fictif = float(g_kb(ot.Point(u_prev.tolist()))[0])
+            xt_kb = np.vstack([xt_kb, [u_prev]])
+            yt_kb = np.vstack([yt_kb, [[y_fictif]]])
+            # gradient fictif = gradient du surrogate (pour GEPCK) ou zeros (pour PCK/KRG)
+            if do_GEPCK:
+                grad_fictif = np.array([[float(g_kb.gradient(ot.Point(u_prev.tolist()))[i, 0])
+                                         for i in range(n_var)]])
+            else:
+                grad_fictif = np.zeros((1, n_var))
+            ag_kb = np.vstack([ag_kb, grad_fictif])
+            # refit surrogate a theta fixe + polynomes fixes (KB)
+            g_kb, s_kb, xt_kb, yt_kb, ag_kb = init_g_ot(None, None, xt_kb, yt_kb, ag_kb, fixed_fm=_fm_kb)
+            # re-maximise EFF sur le surrogate believer
+            f_kb = ot.Function(EFFFunction(g_kb, s_kb))
+            problem_kb = ot.OptimizationProblem(f_kb, ot.Function(), ot.Function(), bounds)
+            problem_kb.setMinimization(False)
+            algo_kb = ot.NLopt(problem_kb, "GN_DIRECT")
+            algo_kb.setStartingPoint([0.0] * n_var)
+            algo_kb.setMaximumCallsNumber(n_NLopt_EFF)
+            algo_kb.run()
+            u_k = np.array(algo_kb.getResult().getOptimalPoint())
+            batch.append(u_k)
+            print(f"  [KB {k+1}/{n_batch_EFF}] u={list(np.round(u_k, 3))}  EFF={f_kb(ot.Point(u_k.tolist()))[0]:.6f}", flush=True)
+
+        return batch, eff_val
+
     def run_EFF(g_ot, sigma_func, xt, yt, all_grad):
         """
         Cette fonction reçoit le métamodele et ses paramètres, et l'améliore jusqu'à vérifier le critère EFF puis
@@ -1972,21 +2056,15 @@ if __name__ == '__main__':
         count_valid_BB   = 0
         count_valid_BS   = 0
         count_valid_both = 0
-        # --- On résoud u = argmax(EFF) ---
+        # --- On résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
+        _batch_pts, _eff_val_init = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
+        u_opt = ot.Point(_batch_pts[0].tolist())
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
-        problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
-        problem.setMinimization(False)
-        algo_opti = ot.NLopt(problem, "GN_DIRECT")
-        algo_opti.setStartingPoint([0.0] * n_var)
-        algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
-        algo_opti.run()
-        u_opt = algo_opti.getResult().getOptimalPoint()
         _sigG = sigma_func(u_opt)
         _muG  = g_ot(ot.Point(u_opt))[0]
         _eps  = epsilon_factor * _sigG
         print(f"  EFF debug u_opt={list(np.round(np.array(u_opt),3))} : sigmaG={_sigG:.6f}  muG={_muG:.6f}  epsilon={_eps:.6f}", flush=True)
-        print(f"  EFF initial : EFF(u_opt)={f(u_opt)[0]:.6f}, tol={tol_EFF}", flush=True)
+        print(f"  EFF initial : EFF(u_opt)={_eff_val_init:.6f}, tol={tol_EFF}", flush=True)
 
         iter_count = 0
         if EFF_criteria == 'BB':
@@ -2133,16 +2211,10 @@ if __name__ == '__main__':
             _eff_history_beta_IS = list(list_beta_IS)
             _save_restart_state(xt, yt, all_grad, xt_eff, None, None, [], None)
 
-            # --- On re-résoud u = argmax(EFF) ---
+            # --- On re-résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
+            _batch_pts, _ = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
+            u_opt = ot.Point(_batch_pts[0].tolist())
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
-            problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
-            problem.setMinimization(False)
-            algo_opti = ot.NLopt(problem, "GN_DIRECT")
-            algo_opti.setStartingPoint([0.0] * n_var)
-            algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
-            algo_opti.run()
-            u_opt = algo_opti.getResult().getOptimalPoint()
 
         _sigG2 = sigma_func(u_opt)
         _muG2  = g_ot(ot.Point(u_opt))[0]
