@@ -191,13 +191,12 @@ if __name__ == '__main__':
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
     u2_eff_min, u2_eff_max = -7.5, 7.5    # NB: resserrer u_s (test 82ac916 -> +-3) CASSE FORM
                                           #   (critique au bord s=1 -> besoin u_s>3). Garder +-7.5.
+    do_FORM_filter = True   # transfert5 T5-7 (2026-07-06) : rejette les u* FORM hors bornes EFF avant DBSCAN
     def _eff_bounds():
-        # Bornes de recherche EFF PAR AXE (axe 0 = s -> u1_eff, axe 1 = fy -> u2_eff, sinon u2_eff).
-        # Corrige l'ancien [u1_eff_min]*n_var qui appliquait les bornes de s a TOUS les axes (fy inclus)
-        # -> empechait un box asymetrique u_s/u_fy.
-        lo = [u1_eff_min if k == 0 else u2_eff_min for k in range(n_var)]
-        hi = [u1_eff_max if k == 0 else u2_eff_max for k in range(n_var)]
-        return ot.Interval(lo, hi)
+        # transfert5 T5-7 (2026-07-06) : bornes EFF PAR VARIABLE via les vecteurs eff_bounds_min/max
+        # (definis apres n_var). Conserve le box ASYMETRIQUE par axe de 074bebc (axe 0 = s -> u1_eff,
+        # axe 1 = fy -> u2_eff). Les memes vecteurs alimentent do_FORM_filter.
+        return ot.Interval(eff_bounds_min, eff_bounds_max)
     n_NLopt_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
     n_max_EFF_points = 30   # plafond DUR du nombre de points EFF ajoutes (securite anti-poursuite infinie)
     print_EFF_progres = True                  # PNG par iter EFF (comme Semia) - inactif si do_EFF=False
@@ -591,6 +590,10 @@ if __name__ == '__main__':
     # slice_def_final=None -> print_visu la calcule depuis les importances FORM. Pour n_var=2 : (0,1,{}).
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
+    # transfert5 T5-7 (2026-07-06) : bornes EFF PAR VARIABLE (box asymetrique par axe, 074bebc) :
+    # axe 0 = s -> u1_eff, axe 1 = fy -> u2_eff. Consommees par _eff_bounds() ET do_FORM_filter.
+    eff_bounds_min = [u1_eff_min if k == 0 else u2_eff_min for k in range(n_var)]
+    eff_bounds_max = [u1_eff_max if k == 0 else u2_eff_max for k in range(n_var)]
     # garde : pas d'analytique si une variable n'est pas un materiau CAD (ex. variable de charge)
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
         print_ana = False
@@ -1882,6 +1885,17 @@ if __name__ == '__main__':
                     f"ECHEC ({type(e).__name__})]", flush=True)
 
         _t_log(f"  [TIMING FORM_all_modes] TOTAL {n_total} starts (sequentiel)", _t_fam_start)
+        # transfert5 T5-7 (2026-07-06) : rejette les u* hors bornes EFF avant DBSCAN
+        # (un mode FORM parti loin hors du box polluerait le clustering / les modes).
+        if do_FORM_filter and all_u_star:
+            _keep = [all(eff_bounds_min[j] <= u[j] <= eff_bounds_max[j] for j in range(n_var))
+                     for u in all_u_star]
+            _nrej = sum(1 for k in _keep if not k)
+            if _nrej:
+                print(f"  [FORM FILTER] {_nrej}/{len(all_u_star)} u* hors bornes EFF rejetes", flush=True)
+                all_u_star  = [u for u, k in zip(all_u_star, _keep) if k]
+                all_results = [r for r, k in zip(all_results, _keep) if k]
+                all_sp      = [s for s, k in zip(all_sp, _keep) if k]
         if not all_u_star:
             return [], []
 

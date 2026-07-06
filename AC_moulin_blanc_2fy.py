@@ -194,6 +194,9 @@ if __name__ == '__main__':
     EFF_criteria = os.environ.get("_EFF_CRITERIA") or EFF_criteria          # override env optionnel
     if os.environ.get("_N_EFF_TARGET"): n_eff_target = int(os.environ["_N_EFF_TARGET"])
     u1_eff_min, u1_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5 (zone realiste pour EFF)
+    # transfert5 T5-7 (2026-07-06) : do_FORM_filter rejette les u* FORM hors bornes EFF avant
+    # DBSCAN. Les vecteurs eff_bounds_min/max sont definis apres n_var (voir plus bas).
+    do_FORM_filter = True
     u2_eff_min, u2_eff_max = -7.5, 7.5    # Semia flexion: -10/10 -> -7.5/7.5
     n_NLopt_EFF = 30      # 2026-06-17 : 200 -> 30 (avec 200 l'EFF traque sans fin des points inutiles sur la crete u1 inerte ; 30 limite cette poursuite)
     n_max_EFF_points = 30   # plafond DUR du nombre de points EFF ajoutes (securite anti-poursuite infinie)
@@ -572,6 +575,10 @@ if __name__ == '__main__':
     # slice_def_final=None -> print_visu la calcule depuis les importances FORM. Pour n_var=2 : (0,1,{}).
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
+    # transfert5 T5-7 (2026-07-06) : bornes EFF par variable (ici uniforme sur les n_var axes,
+    # identique a l'ancien [u1_eff_min]*n_var). Consommees par run_EFF ET do_FORM_filter.
+    eff_bounds_min = [u1_eff_min] * n_var
+    eff_bounds_max = [u1_eff_max] * n_var
     # garde : pas d'analytique si une variable n'est pas un materiau CAD (ex. variable de charge)
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
         print_ana = False
@@ -1863,6 +1870,17 @@ if __name__ == '__main__':
                     f"ECHEC ({type(e).__name__})]", flush=True)
 
         _t_log(f"  [TIMING FORM_all_modes] TOTAL {n_total} starts (sequentiel)", _t_fam_start)
+        # transfert5 T5-7 (2026-07-06) : rejette les u* hors bornes EFF avant DBSCAN
+        # (un mode FORM parti loin hors du box polluerait le clustering / les modes).
+        if do_FORM_filter and all_u_star:
+            _keep = [all(eff_bounds_min[j] <= u[j] <= eff_bounds_max[j] for j in range(n_var))
+                     for u in all_u_star]
+            _nrej = sum(1 for k in _keep if not k)
+            if _nrej:
+                print(f"  [FORM FILTER] {_nrej}/{len(all_u_star)} u* hors bornes EFF rejetes", flush=True)
+                all_u_star  = [u for u, k in zip(all_u_star, _keep) if k]
+                all_results = [r for r, k in zip(all_results, _keep) if k]
+                all_sp      = [s for s, k in zip(all_sp, _keep) if k]
         if not all_u_star:
             return [], []
 
@@ -2046,7 +2064,7 @@ if __name__ == '__main__':
         count_valid_both = 0
         # --- On résoud u = argmax(EFF) ---
         f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+        bounds = ot.Interval(eff_bounds_min, eff_bounds_max)   # transfert5 T5-7
         problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
         problem.setMinimization(False)
         algo_opti = ot.NLopt(problem, "GN_DIRECT")
@@ -2207,7 +2225,7 @@ if __name__ == '__main__':
 
             # --- On re-résoud u = argmax(EFF) ---
             f = ot.Function(EFFFunction(g_ot, sigma_func))
-            bounds = ot.Interval([u1_eff_min] * n_var, [u1_eff_max] * n_var)
+            bounds = ot.Interval(eff_bounds_min, eff_bounds_max)   # transfert5 T5-7
             problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
             problem.setMinimization(False)
             algo_opti = ot.NLopt(problem, "GN_DIRECT")
