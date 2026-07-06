@@ -447,12 +447,105 @@ if __name__ == '__main__':
         dist = ot.LogNormal(mu_ln, sigma_ln, 0.0)
         return dist
 
+    # transfert4 T4-5 (2026-07-06, guide Semia du 02/07) : loi uniforme approchee (fenetre de
+    # Tukey normalisee) pour les variables de POSITION (charge mobile). Copie conforme de
+    # AC3_pure_flexion.py L433-519. alpha=0 -> uniforme exacte, alpha=1 -> Hann.
+    def loi_uni_approx(a, b, alpha=0.5):
+        """Loi uniforme approchee (fenetre de Tukey normalisee).
+        Support [a, b]. alpha=0 -> uniforme exacte, alpha=1 -> Hann."""
+
+        class TukeyDistribution(ot.PythonDistribution):
+            def __init__(self, a, b, alpha):
+                super().__init__(1)
+                self.a = float(a)
+                self.b = float(b)
+                self.alpha = float(alpha)
+                self.L = self.b - self.a
+                self.C = 1.0 - self.alpha / 2.0  # integrale de w sur [0,1]
+
+            def getRange(self):
+                return ot.Interval([self.a], [self.b])
+
+            def computePDF(self, X):
+                x = X[0]
+                if x < self.a or x > self.b:
+                    return 0.0
+                t = (x - self.a) / self.L          # t in [0, 1]
+                al = self.alpha
+                if al <= 0.0:
+                    w = 1.0
+                elif t < al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                elif t > 1.0 - al / 2.0:
+                    w = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                else:
+                    w = 1.0
+                return w / (self.L * self.C)
+
+            def computeCDF(self, X):
+                x = X[0]
+                if x <= self.a:
+                    return 0.0
+                if x >= self.b:
+                    return 1.0
+                t = (x - self.a) / self.L
+                al = self.alpha
+                if al <= 0.0:
+                    return t
+                if t <= al / 2.0:
+                    F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                elif t <= 1.0 - al / 2.0:
+                    F = t - al / 4.0
+                else:
+                    F = (1.0 - 3.0 * al / 4.0
+                         + (t - 1.0 + al / 2.0) / 2.0
+                         + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                return F / self.C
+
+            def getMean(self):
+                return [(self.a + self.b) / 2.0]
+
+            def computeScalarQuantile(self, p, tail=False):
+                if tail:
+                    p = 1.0 - p
+                al = self.alpha
+                if al <= 0.0:
+                    return self.a + p * self.L
+                F_left  = (al / 4.0) / self.C
+                F_right = (1.0 - 3.0 * al / 4.0) / self.C
+                if p <= F_left:
+                    t = al / 4.0
+                    for _ in range(20):
+                        F = t / 2.0 + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - al / 2.0))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(0.0, min(t, al / 2.0))
+                elif p <= F_right:
+                    t = p * self.C + al / 4.0
+                else:
+                    t = 1.0 - al / 4.0
+                    for _ in range(20):
+                        F = (1.0 - 3.0 * al / 4.0
+                             + (t - 1.0 + al / 2.0) / 2.0
+                             + al / (4.0 * np.pi) * np.sin(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        f = 0.5 * (1.0 + np.cos(2.0 * np.pi / al * (t - 1.0 + al / 2.0)))
+                        t -= (F / self.C - p) / (f / self.C)
+                        t = max(1.0 - al / 2.0, min(t, 1.0))
+                return self.a + t * self.L
+
+            def isContinuous(self):
+                return True
+
+        return ot.Distribution(TukeyDistribution(a, b, alpha))
+
     # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
     PARAM_CONFIG_CAD = {
+        # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
+        # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
         'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
         'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
-                'loi': loi_fy, 'mean': FY_MEAN, 'cov': None},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
     }
     PARAM_CONFIG_LOAD = {}                       # vide (pas de variable de charge pour l'instant)
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
@@ -472,7 +565,7 @@ if __name__ == '__main__':
 
     def dist_jointe():
         """Loi jointe des variables aleatoires, construite depuis PARAM_CONFIG."""
-        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](PARAM_CONFIG[p]['mean'], PARAM_CONFIG[p]['cov'])
+        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
                                      for p in params_names])
 
     # ===================== VALIDATION CONFIG 2-FY (logs detailles) =====================
