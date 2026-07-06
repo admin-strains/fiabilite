@@ -540,6 +540,18 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = (0, 1, {})           # 2 variables : pas de coupe, plan complet fy vs fc
 
+    def _is_position_var(sens):
+        """Detecte si une region de sensibilite est une variable de position.
+        Supporte l'ancienne syntaxe (param='LOAD_POSITION') et la nouvelle (axis='position')."""
+        return sens['param'] == 'LOAD_POSITION' or sens.get('axis') == 'position'
+
+    def _find_position_var_index():
+        """Retourne l'index de la variable de position dans params_names, ou None."""
+        for i, p in enumerate(params_names):
+            if _is_position_var(PARAM_CONFIG[p]['sens']):
+                return i
+        return None
+
     def dist_jointe():
         return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
                                      for p in params_names])
@@ -1491,16 +1503,12 @@ if __name__ == '__main__':
     # PROJECTION DU SURROGATE SUR LES VARIABLES NON-POSITION                     #
 
     def projection_surrogate(g_ot):
-        """Si LOAD_POSITION dans PARAM_CONFIG, retourne un g_ot projete
+        """Si variable de position dans PARAM_CONFIG, retourne un g_ot projete
         g_proj(u_other) = min_p g_ot(u_full) sur la variable de position.
         Sinon retourne g_ot inchange."""
         from scipy.optimize import minimize_scalar
 
-        idx_pos = None
-        for i, p in enumerate(params_names):
-            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = i
-                break
+        idx_pos = _find_position_var_index()
 
         if idx_pos is None:
             return g_ot
@@ -3170,15 +3178,11 @@ if __name__ == '__main__':
         return algo.getResult()
 
     def run_IS_proj(modes, event_proj):
-        """IS sur le surrogate projete (sans la variable LOAD_POSITION).
+        """IS sur le surrogate projete (sans la variable de position).
         Extrait u* et Pf des modes FORM (n_var dims), enleve la composante position,
         et fait l'IS en dimension reduite sur event_proj.
-        Si pas de LOAD_POSITION, equivalent a run_IS."""
-        idx_pos = None
-        for i, p in enumerate(params_names):
-            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = i
-                break
+        Si pas de variable de position, equivalent a run_IS."""
+        idx_pos = _find_position_var_index()
 
         idx_other = [i for i in range(n_var) if i != idx_pos] if idx_pos is not None else list(range(n_var))
         n_proj = len(idx_other)
@@ -3342,11 +3346,7 @@ if __name__ == '__main__':
     # --- IS sur surrogate projete (enveloppe position) ---
     g_proj = projection_surrogate(g_ot)
     if g_proj is not g_ot and do_IS and modes:
-        idx_pos = None
-        for _i, _p in enumerate(params_names):
-            if PARAM_CONFIG[_p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = _i
-                break
+        idx_pos = _find_position_var_index()
         _idx_other = [_i for _i in range(n_var) if _i != idx_pos]
         n_proj = len(_idx_other)
         dist_proj = ot.JointDistribution([ot.Normal(0, 1)] * n_proj)

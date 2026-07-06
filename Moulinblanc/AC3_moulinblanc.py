@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = False   #False = recalcule le DOE (params changes q+s_convoi)
+    config_is_identical = True    #True = reutilise doe_cache.json
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -135,7 +135,11 @@ if __name__ == '__main__':
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
-    save_history = True                       # True = copie les fichiers SOCP dans SOCP_history/
+    save_history = False                      # True = copie les fichiers SOCP dans SOCP_history/
+    # 2026-07-04 (MM) : passe a False pour le run grille HF (q, s_convoi). ~424 MB/appel x 187
+    # SOCP = ~79 GB alors qu'il ne reste que ~24 GB sur C: (SOCP_history pese deja 135 GB) ->
+    # le disque serait plein au 1/4 de la grille (crash + danger pour les AUTRES projets).
+    # A discuter avec Semia : purger/archiver SOCP_history avant de reactiver.
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES ET OPTIONS DE PRINT                                              #
@@ -518,12 +522,14 @@ if __name__ == '__main__':
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    PARAM_CONFIG_CAD = {}
+    FY_MEAN = 235.0
+    PARAM_CONFIG_CAD = {
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
+    }
     PARAM_CONFIG_LOAD = {
         's_convoi': {'sens': {"param": "LOAD_POSITION", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.35, 0.15)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
@@ -533,6 +539,18 @@ if __name__ == '__main__':
     assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
+
+    def _is_position_var(sens):
+        """Detecte si une region de sensibilite est une variable de position.
+        Supporte l'ancienne syntaxe (param='LOAD_POSITION') et la nouvelle (axis='position')."""
+        return sens['param'] == 'LOAD_POSITION' or sens.get('axis') == 'position'
+
+    def _find_position_var_index():
+        """Retourne l'index de la variable de position dans params_names, ou None."""
+        for i, p in enumerate(params_names):
+            if _is_position_var(PARAM_CONFIG[p]['sens']):
+                return i
+        return None
 
     def dist_jointe():
         return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
@@ -1374,16 +1392,12 @@ if __name__ == '__main__':
     # PROJECTION DU SURROGATE SUR LES VARIABLES NON-POSITION                     #
 
     def projection_surrogate(g_ot):
-        """Si LOAD_POSITION dans PARAM_CONFIG, retourne un g_ot projete
+        """Si variable de position dans PARAM_CONFIG, retourne un g_ot projete
         g_proj(u_other) = min_p g_ot(u_full) sur la variable de position.
         Sinon retourne g_ot inchange."""
         from scipy.optimize import minimize_scalar
 
-        idx_pos = None
-        for i, p in enumerate(params_names):
-            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = i
-                break
+        idx_pos = _find_position_var_index()
 
         if idx_pos is None:
             return g_ot
@@ -1882,6 +1896,14 @@ if __name__ == '__main__':
             # --- On reconstruit le modèle ---
             g_val, grad_U, _ = run_HF(np.array(u_opt))
             print(f"[EFF HF] u={[round(float(u_opt[i]),10) for i in range(n_var)]}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]),10) for i in range(n_var)]}", flush=True)
+            if len(xt_eff) == 0:  # premier point EFF seulement
+                try:
+                    import subprocess as _sp_gpu
+                    _gpu = _sp_gpu.run(['nvidia-smi', '--query-gpu=memory.used,memory.total', '--format=csv,noheader,nounits'], capture_output=True, text=True)
+                    _u, _t = _gpu.stdout.strip().split(', ')
+                    print(f"[GPU MEM] {_u} / {_t} MiB", flush=True)
+                except Exception:
+                    pass
             xt = np.vstack([xt, [np.array(u_opt)]])
             yt = np.vstack([yt, [[g_val]]])
             grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
@@ -3107,15 +3129,11 @@ if __name__ == '__main__':
         return algo.getResult()
 
     def run_IS_proj(modes, event_proj):
-        """IS sur le surrogate projete (sans la variable LOAD_POSITION).
+        """IS sur le surrogate projete (sans la variable de position).
         Extrait u* et Pf des modes FORM (n_var dims), enleve la composante position,
         et fait l'IS en dimension reduite sur event_proj.
-        Si pas de LOAD_POSITION, equivalent a run_IS."""
-        idx_pos = None
-        for i, p in enumerate(params_names):
-            if PARAM_CONFIG[p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = i
-                break
+        Si pas de variable de position, equivalent a run_IS."""
+        idx_pos = _find_position_var_index()
 
         idx_other = [i for i in range(n_var) if i != idx_pos] if idx_pos is not None else list(range(n_var))
         n_proj = len(idx_other)
@@ -3279,11 +3297,7 @@ if __name__ == '__main__':
     # --- IS sur surrogate projete (enveloppe position) ---
     g_proj = projection_surrogate(g_ot)
     if g_proj is not g_ot and do_IS and modes:
-        idx_pos = None
-        for _i, _p in enumerate(params_names):
-            if PARAM_CONFIG[_p]['sens']['param'] == 'LOAD_POSITION':
-                idx_pos = _i
-                break
+        idx_pos = _find_position_var_index()
         _idx_other = [_i for _i in range(n_var) if _i != idx_pos]
         n_proj = len(_idx_other)
         dist_proj = ot.JointDistribution([ot.Normal(0, 1)] * n_proj)
