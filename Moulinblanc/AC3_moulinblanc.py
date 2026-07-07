@@ -76,8 +76,8 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 3             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
+    n_workers_DOE = 13            #nb de SOCP DOE en parallele
+    config_is_identical = False   #False = recalcule le DOE (q+s_convoi nouveau path)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -522,14 +522,12 @@ if __name__ == '__main__':
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    FY_MEAN = 235.0
-    PARAM_CONFIG_CAD = {
-        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-                'loi': loi_fy, 'args': (FY_MEAN, None)},
-    }
+    PARAM_CONFIG_CAD = {}
     PARAM_CONFIG_LOAD = {
         's_convoi': {'sens': {"param": "LOAD_POSITION", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
+        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
+                     'loi': loi_F_permanente, 'args': (0.1, 0.15)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
@@ -2328,6 +2326,8 @@ if __name__ == '__main__':
 
     def _load_hf_cache_partial(cache_file, sd, n_total):
         """Charge le cache partiel. Retourne une liste Z_flat (avec None) ou None."""
+        if not config_is_identical:
+            return None
         partial_file = cache_file + '.partial'
         if not os.path.exists(partial_file):
             return None
@@ -2489,6 +2489,7 @@ if __name__ == '__main__':
         return Z
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
+    _hf_custom_result = [None]   # cache memoire (evite relecture JSON a chaque print)
 
     def _hf_from_custom_points(sd):
         """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
@@ -2497,6 +2498,8 @@ if __name__ == '__main__':
         Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
         if hf_custom_points is None:
             return None, None, None
+        if _hf_custom_result[0] is not None:
+            return _hf_custom_result[0]
         from scipy.interpolate import griddata
         import time as _time_local
         idx_x, idx_y, fixed = sd
@@ -2504,7 +2507,7 @@ if __name__ == '__main__':
         n_total = len(pts)
 
         # Charger cache final complet (skip tout le calcul)
-        if os.path.exists(_HF_CUSTOM_CACHE_FILE):
+        if config_is_identical and os.path.exists(_HF_CUSTOM_CACHE_FILE):
             try:
                 _dc = json.load(open(_HF_CUSTOM_CACHE_FILE))
                 if _dc.get('complet') and _dc.get('n_total') == n_total:
@@ -2516,6 +2519,7 @@ if __name__ == '__main__':
                     uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
                     UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
                     Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+                    _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
                     return Z_true, UX_hf, UY_hf
             except Exception:
                 pass
@@ -2523,7 +2527,7 @@ if __name__ == '__main__':
         # Charger cache partiel (reprise)
         _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
         g_vals = [None] * n_total
-        if os.path.exists(_partial_file):
+        if config_is_identical and os.path.exists(_partial_file):
             try:
                 _d = json.load(open(_partial_file))
                 if _d.get('n_total') == n_total:
@@ -2582,6 +2586,7 @@ if __name__ == '__main__':
         uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
         Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+        _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
         return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):

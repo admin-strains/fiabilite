@@ -2461,6 +2461,8 @@ if __name__ == '__main__':
 
     def _load_hf_cache_partial(cache_file, sd, n_total):
         """Charge le cache partiel. Retourne une liste Z_flat (avec None) ou None."""
+        if not config_is_identical:
+            return None
         partial_file = cache_file + '.partial'
         if not os.path.exists(partial_file):
             return None
@@ -2622,6 +2624,7 @@ if __name__ == '__main__':
         return Z
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
+    _hf_custom_result = [None]   # cache memoire (evite relecture JSON a chaque print)
 
     def _hf_from_custom_points(sd):
         """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
@@ -2630,6 +2633,8 @@ if __name__ == '__main__':
         Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
         if hf_custom_points is None:
             return None, None, None
+        if _hf_custom_result[0] is not None:
+            return _hf_custom_result[0]
         from scipy.interpolate import griddata
         import time as _time_local
         idx_x, idx_y, fixed = sd
@@ -2637,7 +2642,7 @@ if __name__ == '__main__':
         n_total = len(pts)
 
         # Charger cache final complet (skip tout le calcul)
-        if os.path.exists(_HF_CUSTOM_CACHE_FILE):
+        if config_is_identical and os.path.exists(_HF_CUSTOM_CACHE_FILE):
             try:
                 _dc = json.load(open(_HF_CUSTOM_CACHE_FILE))
                 if _dc.get('complet') and _dc.get('n_total') == n_total:
@@ -2649,6 +2654,7 @@ if __name__ == '__main__':
                     uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
                     UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
                     Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+                    _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
                     return Z_true, UX_hf, UY_hf
             except Exception:
                 pass
@@ -2656,7 +2662,7 @@ if __name__ == '__main__':
         # Charger cache partiel (reprise)
         _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
         g_vals = [None] * n_total
-        if os.path.exists(_partial_file):
+        if config_is_identical and os.path.exists(_partial_file):
             try:
                 _d = json.load(open(_partial_file))
                 if _d.get('n_total') == n_total:
@@ -2715,6 +2721,7 @@ if __name__ == '__main__':
         uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
         Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
+        _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
         return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
