@@ -2106,14 +2106,37 @@ if __name__ == '__main__':
             _muG  = g_ot(ot.Point(u_opt))[0]
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
             _eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
-            xt_eff.append(np.array(u_opt))
-            # --- On reconstruit le modèle ---
-            g_val, grad_U, _ = run_HF(np.array(u_opt))
-            print(f"[EFF HF] u={[round(float(u_opt[i]),10) for i in range(n_var)]}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]),10) for i in range(n_var)]}", flush=True)
-            xt = np.vstack([xt, [np.array(u_opt)]])
-            yt = np.vstack([yt, [[g_val]]])
-            grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
-            all_grad = np.vstack([all_grad, grad_val])
+
+            # --- Calcul HF des points du batch ---
+            _n_batch_actual = min(n_batch_EFF, n_max_EFF_points - len(xt_eff))
+            _batch_to_eval = _batch_pts[:_n_batch_actual]
+            if len(_batch_to_eval) > 1 and n_workers_DOE > 1:
+                # Parallele : construire SOL, appeler run_DOE_parallel
+                dist_X_eff = dist_jointe()
+                T_inv_eff = dist_X_eff.getInverseIsoProbabilisticTransformation()
+                _SOL_eff = []
+                for _u_pt in _batch_to_eval:
+                    _x_pt = T_inv_eff(ot.Point(list(_u_pt)))
+                    _SOL_eff.append({p: float(_x_pt[j]) for j, p in enumerate(params_names)})
+                _SOL_eff = run_DOE_parallel(modelname, _SOL_eff, params_names, min(n_workers_DOE, len(_batch_to_eval)))
+                for _k, _u_pt in enumerate(_batch_to_eval):
+                    _g_k = _SOL_eff[_k]['g']
+                    _grad_k = [_SOL_eff[_k].get(f'dg_{p}', 0.0) for p in params_names]
+                    xt_eff.append(np.array(_u_pt))
+                    xt = np.vstack([xt, [np.array(_u_pt)]])
+                    yt = np.vstack([yt, [[_g_k]]])
+                    all_grad = np.vstack([all_grad, [_grad_k]])
+                    print(f"[EFF HF {_k+1}/{len(_batch_to_eval)}] u={list(np.round(_u_pt, 4))}  g={_g_k:.6f}  grad_U={[round(v, 6) for v in _grad_k]}", flush=True)
+            else:
+                # Sequentiel : un seul point (ou n_workers=1)
+                for _u_pt in _batch_to_eval:
+                    g_val, grad_U, _ = run_HF(np.array(_u_pt))
+                    xt_eff.append(np.array(_u_pt))
+                    xt = np.vstack([xt, [np.array(_u_pt)]])
+                    yt = np.vstack([yt, [[g_val]]])
+                    grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
+                    all_grad = np.vstack([all_grad, grad_val])
+                    print(f"[EFF HF] u={list(np.round(_u_pt, 10))}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]), 10) for i in range(n_var)]}", flush=True)
             # --- Upgrade max_degree si assez de points ---
             _degree_avant = max_degree
             update_degree(len(xt))
