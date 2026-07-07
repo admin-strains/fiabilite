@@ -76,8 +76,8 @@ if __name__ == '__main__':
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 13            #nb de SOCP DOE en parallele
-    config_is_identical = False   #False = recalcule le DOE (q+s_convoi nouveau path)
+    n_workers_DOE = 6             #nb de SOCP DOE en parallele
+    config_is_identical = True    #True = reutilise doe_cache.json
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
@@ -524,7 +524,8 @@ if __name__ == '__main__':
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {}
     PARAM_CONFIG_LOAD = {
-        's_convoi': {'sens': {"param": "LOAD_POSITION", "region_key": "s_convoi"},
+        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
+                              "axis": "position", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
         'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
                      'loi': loi_F_permanente, 'args': (0.1, 0.15)},
@@ -542,9 +543,8 @@ if __name__ == '__main__':
     eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
     def _is_position_var(sens):
-        """Detecte si une region de sensibilite est une variable de position.
-        Supporte l'ancienne syntaxe (param='LOAD_POSITION') et la nouvelle (axis='position')."""
-        return sens['param'] == 'LOAD_POSITION' or sens.get('axis') == 'position'
+        """Detecte si une region de sensibilite est une variable de position (axis='position')."""
+        return sens.get('axis') == 'position'
 
     def _find_position_var_index():
         """Retourne l'index de la variable de position dans params_names, ou None."""

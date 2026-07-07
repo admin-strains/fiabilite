@@ -540,9 +540,8 @@ if __name__ == '__main__':
     eff_bounds_min = [-7.5] * n_var   # bornes inf de la recherche EFF par variable
     eff_bounds_max = [+7.5] * n_var   # bornes sup de la recherche EFF par variable
     def _is_position_var(sens):
-        """Detecte si une region de sensibilite est une variable de position.
-        Supporte l'ancienne syntaxe (param='LOAD_POSITION') et la nouvelle (axis='position')."""
-        return sens['param'] == 'LOAD_POSITION' or sens.get('axis') == 'position'
+        """Detecte si une region de sensibilite est une variable de position (axis='position')."""
+        return sens.get('axis') == 'position'
 
     def _find_position_var_index():
         """Retourne l'index de la variable de position dans params_names, ou None."""
