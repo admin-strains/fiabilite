@@ -123,7 +123,7 @@ if __name__ == '__main__':
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 2                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes

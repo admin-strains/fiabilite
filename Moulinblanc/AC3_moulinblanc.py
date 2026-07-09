@@ -78,7 +78,7 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
@@ -124,18 +124,18 @@ if __name__ == '__main__':
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = 1e-3                                            # critere d'arret EFF
+    tol_EFF = -1                                              # critere d'arret EFF
     tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
 
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
-    n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    n_max_EFF_points = 180                       # plafond de points EFF ajoutes (arret force si atteint)
+    n_batch_EFF = 6                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
-    save_history = False                      # True = copie les fichiers SOCP dans SOCP_history/
+    save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
     # 2026-07-04 (MM) : passe a False pour le run grille HF (q, s_convoi). ~424 MB/appel x 187
     # SOCP = ~79 GB alors qu'il ne reste que ~24 GB sur C: (SOCP_history pese deja 135 GB) ->
     # le disque serait plein au 1/4 de la grille (crash + danger pour les AUTRES projets).
@@ -528,7 +528,7 @@ if __name__ == '__main__':
                               "axis": "position", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
         'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.1, 0.15)},
+                     'loi': loi_F_permanente, 'args': (0.1, 0.30)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
@@ -539,7 +539,7 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 
-    eff_bounds_min = [-2.0, -7.5]     # bornes inf de la recherche EFF [s_convoi, fy1]
+    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
     eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
     def _is_position_var(sens):
@@ -561,22 +561,20 @@ if __name__ == '__main__':
     _socp_call_counter = [0]
 
     def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p_vals=None):
-        """Copie les fichiers de sortie SOCP dans un sous-dossier de SOCP_history/.
+        """Copie le dsmed cinematique dans SOCP_history/.
         Un sous-dossier par appel SOCP, nomme prefix_tag + coords."""
         files_to_save = [
-            f"{AnalysisName}_0_PL_cin_out.msh",
             f"{AnalysisName}_0_kine.dsmed",
-            f"{AnalysisName}_0_kine.dslog",
-            f"{AnalysisName}_0_kine.dsmetares",
-            f"{AnalysisName}_0_stat.dsmed",
+            "dsCad.txt",
+            "dsLoad.txt",
         ]
+        import datetime as _dt_save
+        _ts = _dt_save.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         coords_str = ""
-        if u1 is not None and u2 is not None:
-            coords_str = f"_u1{u1:+.3f}_u2{u2:+.3f}"
         if p_vals is not None:
-            coords_str += "_" + "_".join(f"{params_names[i]}{p_vals[i]:.1f}" for i in range(len(p_vals)))
+            coords_str = "_" + "_".join(f"{params_names[i]}{p_vals[i]:.6f}" for i in range(len(p_vals)))
         _socp_root = os.environ.get("_DOE_MAIN_DS") or path
-        sub_dir = os.path.join(_socp_root, "SOCP_history", f"{prefix_tag}{coords_str}")
+        sub_dir = os.path.join(_socp_root, "SOCP_history", f"{prefix_tag}_{_ts}{coords_str}")
         os.makedirs(sub_dir, exist_ok=True)
         n_saved = 0
         total_size = 0
