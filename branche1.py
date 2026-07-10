@@ -271,6 +271,7 @@ def fit_gepck(X, Y_aug, options, marginals, copula):
     krig_opts    = internal.get('Kriging', {})
     theta_bounds = None
     theta0       = None
+    prev_theta   = None
     optim_method = 'gradbased'
     estim_method = 'ml'
     CorrOptions  = None
@@ -283,6 +284,8 @@ def fit_gepck(X, Y_aug, options, marginals, copula):
             optim_method = ob['Method'].lower()
         if 'InitialValue' in ob:
             theta0 = np.asarray(ob['InitialValue'], dtype=float)
+        if 'PrevTheta' in ob:
+            prev_theta = np.asarray(ob['PrevTheta'], dtype=float)
 
     if 'EstimMethod' in krig_opts:
         estim_method = krig_opts['EstimMethod'].lower()
@@ -304,6 +307,7 @@ def fit_gepck(X, Y_aug, options, marginals, copula):
         theta0=theta0,
         optim_method=optim_method,
         estim_method=estim_method,
+        prev_theta=prev_theta,
     )
 
 

@@ -1640,6 +1640,12 @@ if __name__ == '__main__':
         Si fixed_fm est fourni (refit KB) : theta et polynomes fixes du fit precedent.
         """
         global _gepck_pce_label, _gepck_loo, _eff_history_theta
+        # Recuperer le theta du fit precedent pour multi-start (GEPCK uniquement)
+        _prev_fm_theta = None
+        if do_GEPCK and fixed_fm is None:
+            _prev_fm_obj = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
+            if _prev_fm_obj is not None:
+                _prev_fm_theta = _prev_fm_obj['Kriging'][0]['theta']
         if do_KRG:
             if xt is None: xt, yt, all_grad = build_DOE()
             g_ot, result = build_metamodel_KRG(xt, yt)
@@ -1693,8 +1699,10 @@ if __name__ == '__main__':
             else:
                 _opts = {'Mode': 'optimal',
                          'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+                if _prev_fm_theta is not None:
+                    _opts['Kriging'] = {'Optim': {'PrevTheta': _prev_fm_theta}}
             _Y_aug = build_Y_aug(yt, all_grad)
-            print(f"=== GEPCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
+            print(f"=== GEPCK fit N={len(xt)}{' [KB]' if fixed_fm else ''}{' [MS]' if _prev_fm_theta is not None else ''} ===", flush=True)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
