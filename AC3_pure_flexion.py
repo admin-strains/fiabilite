@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'PCK'                      #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement
     do_IS   = True                            #si on veut calculer la proba globale
 
@@ -124,6 +124,7 @@ if __name__ == '__main__':
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    eps_taylor = 0.1                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
@@ -2137,6 +2138,15 @@ if __name__ == '__main__':
                     grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
                     all_grad = np.vstack([all_grad, grad_val])
                     print(f"[EFF HF] u={list(np.round(_u_pt, 10))}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]), 10) for i in range(n_var)]}", flush=True)
+                    # --- Points virtuels Taylor ordre 1 (PCK uniquement) ---
+                    if do_PCK and eps_taylor > 0 and n_batch_EFF <= 1:
+                        for _i_dim in range(n_var):
+                            _u_virt = np.array(_u_pt) + eps_taylor * np.eye(n_var)[_i_dim]
+                            _y_virt = g_val + eps_taylor * float(grad_U[_i_dim])
+                            xt = np.vstack([xt, [_u_virt]])
+                            yt = np.vstack([yt, [[_y_virt]]])
+                            all_grad = np.vstack([all_grad, grad_val])
+                            print(f"[EFF Taylor] u={list(np.round(_u_virt, 10))}  y_taylor={_y_virt:.10f}  (eps={eps_taylor}, dim={_i_dim})", flush=True)
             # --- Upgrade max_degree si assez de points ---
             _degree_avant = max_degree
             update_degree(len(xt))
