@@ -1012,8 +1012,7 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
                                      theta_bounds=None,
                                      theta0=None,
                                      optim_method='gradbased',
-                                     estim_method='ml',
-                                     prev_theta=None):
+                                     estim_method='ml'):
     """
     Fit a GEPCK metamodel (sortie unique).
 
@@ -1201,17 +1200,6 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
                 CorrOptions, theta_bounds, theta_current,
                 estim_method=estim_method,
                 optim_method=optim_method)
-
-            # Multi-start : a chaque etape LARS, tester aussi L-BFGS-B
-            # depuis prev_theta et garder le meilleur J
-            if prev_theta is not None:
-                fitted_prev = fit_kriging_gepck(
-                    U_train, Y_aug, F_global_handle,
-                    CorrOptions, theta_bounds, np.asarray(prev_theta).copy(),
-                    estim_method=estim_method,
-                    optim_method=optim_method)
-                if fitted_prev['J_opt'] < fitted['J_opt']:
-                    fitted = fitted_prev
 
             theta_current = fitted['theta']
 
