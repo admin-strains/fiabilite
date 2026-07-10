@@ -102,7 +102,11 @@ if __name__ == '__main__':
     # Attendu : dAlpha/ds_norm = dAlpha/dx_m * L_PATH ~ -0.863 * 3.4 ~ -2.93.
     L_PATH = 4.0 - 0.6
     S0 = 2.0 / L_PATH
-    for DELTA in (0.10 / L_PATH, 0.05 / L_PATH):
+    # Balayage de Delta (en METRES de deplacement reel de l'empreinte, convertis en
+    # s normalise /L_PATH) pour etudier la convergence FD -> analytique. Petits Delta
+    # = plus precis en theorie mais domines par le bruit FP du SOCP (cf. 0.01 m).
+    DELTAS_M = (0.10, 0.08, 0.05, 0.01)
+    for DELTA in (dm / L_PATH for dm in DELTAS_M):
         print("\n" + "=" * 70, flush=True)
         print(f"J6 FD  --  fy_top={FY}  s0={S0:.6f} (x={S0*L_PATH:.3f} m)  "
               f"Delta={DELTA:.6f} (={DELTA*L_PATH:.3f} m)  L_PATH={L_PATH}", flush=True)
