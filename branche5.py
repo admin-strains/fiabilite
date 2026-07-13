@@ -1240,9 +1240,9 @@ def uq_assemble_global_Kernel(X1, X2, theta, family):
     R_tilde = np.empty((N_rows, N_cols))
 
     for rb in range(m + 1):
-        dp  = rb - 1 if rb > 0 else None
+        der = rb - 1 if rb > 0 else None
         for cb in range(m + 1):
-            der = cb - 1 if cb > 0 else None
+            dp  = cb - 1 if cb > 0 else None
             f   = kernel_deriv_factory(family, der, dp)
             R_tilde[rb*n1 : (rb+1)*n1,
                     cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
@@ -1285,10 +1285,8 @@ def uq_assemble_deriv_global_Kernel(X1, X2, theta, family, der_var):
     dr0 = np.empty((n1, n2 * (m + 1)))
 
     for cb in range(m + 1):
-        if cb == 0:
-            f = kernel_deriv_factory(family, der_var, None)
-        else:
-            f = kernel_second_deriv_factory(family, der_var, cb - 1)
+        dp = cb - 1 if cb > 0 else None
+        f  = kernel_deriv_factory(family, der_var, dp)
         dr0[:, cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
 
     return dr0
@@ -1378,7 +1376,7 @@ def uq_eval_global_Kernel(X1, X2, theta, options):
         # Propriete : r0_tilde(X_train) = R_tilde[:N_train, :] -> interpolation exacte.
         r0_tilde = np.empty((n1, n2 * (m + 1)))
         for cb in range(m + 1):
-            der = cb - 1 if cb > 0 else None
-            f   = kernel_deriv_factory(family, der, None)
+            dp  = cb - 1 if cb > 0 else None
+            f   = kernel_deriv_factory(family, None, dp)
             r0_tilde[:, cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
         return r0_tilde
