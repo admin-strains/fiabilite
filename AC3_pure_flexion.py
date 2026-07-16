@@ -1116,6 +1116,16 @@ if __name__ == '__main__':
                     print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
                 print("]", flush=True)
             _save_doe_cache(xt, yt, all_grad)
+            if do_PCK and eps_taylor > 0:
+                _n_real = len(xt)
+                for _i_pt in range(_n_real):
+                    for _i_dim in range(n_var):
+                        _u_virt = xt[_i_pt] + eps_taylor * np.eye(n_var)[_i_dim]
+                        _y_virt = yt[_i_pt, 0] + eps_taylor * all_grad[_i_pt, _i_dim]
+                        xt = np.vstack([xt, [_u_virt]])
+                        yt = np.vstack([yt, [[_y_virt]]])
+                        all_grad = np.vstack([all_grad, [all_grad[_i_pt]]])
+                print(f"  [Taylor DOE] {_n_real} HF + {_n_real * n_var} virtuels = {len(xt)} pts", flush=True)
             return xt, yt, all_grad
         return xt
 
