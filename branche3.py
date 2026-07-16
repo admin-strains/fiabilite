@@ -847,7 +847,8 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
 
     if trend_method == 'pce':
         pce_opts   = pck_config.get('PCE', {})
-        max_degree = max(pce_opts.get('Degree', [1, 2, 3]))
+        _deg_list  = pce_opts.get('Degree', [1, 2, 3])
+        max_degree = max(_deg_list) if _deg_list else 0
 
         # Build full multi-index set up to max_degree
         FullIndices = pce_multi_indices(Mred, max_degree)   # (P_full, Mred)
@@ -1091,7 +1092,8 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
 
     if trend_method == 'pce':
         pce_opts   = pck_config.get('PCE', {})
-        max_degree = max(pce_opts.get('Degree', [1, 2, 3]))
+        _deg_list  = pce_opts.get('Degree', [1, 2, 3])
+        max_degree = max(_deg_list) if _deg_list else 0
 
         FullIndices = pce_multi_indices(Mred, max_degree)
         PolyTypes   = PolyTypes_all
