@@ -79,6 +79,7 @@ if __name__ == '__main__':
     n_workers_DOE = 3             #nb de SOCP DOE en parallele (1 = sequentiel)
     config_is_identical = True    #True = reutilise doe_cache.json si present (0 SOCP DOE)
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
+    # do_test = False               #True = evaluer un DOE fixe (Sobol) et sauver xt/yt/all_grad, puis exit
 
     # --------------------------------------------------------------------------- #
     # PARAMETRES FORM                                                             #
@@ -3378,6 +3379,37 @@ if __name__ == '__main__':
         # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
         xt_eff = None
+
+    # --- Mode test : DOE Sobol fixe, evaluer HF, sauver, sortir ---
+    # if do_test:
+    #     from scipy.stats.qmc import Sobol
+    #     _test_n0 = int(os.environ.get("_TEST_N0", "16"))
+    #     _sobol = Sobol(d=n_var, scramble=True, seed=42)
+    #     _sobol_u01 = _sobol.random(16)                         # 16 pts dans [0,1]^n_var
+    #     _sobol_std = -7.5 + 15.0 * _sobol_u01                 # -> uniforme [-7.5, 7.5]^n_var
+    #     xt = _sobol_std[:_test_n0]                             # premiers _test_n0 points
+    #     dist_X = dist_jointe()
+    #     T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+    #     SOL = [{} for _ in range(_test_n0)]
+    #     for i in range(_test_n0):
+    #         x_pt = T_inv(ot.Point(list(xt[i])))
+    #         for j, p in enumerate(params_names):
+    #             SOL[i][p] = float(x_pt[j])
+    #     if n_workers_DOE > 1 and _test_n0 > 1:
+    #         SOL = run_DOE_parallel(modelname, SOL, params_names, min(n_workers_DOE, _test_n0))
+    #     else:
+    #         SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True)
+    #     yt = np.array([SOL[i]['g'] for i in range(_test_n0)]).reshape(-1, 1)
+    #     all_grad = np.array([[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(_test_n0)])
+    #     print(f"[TEST DOE] n0={_test_n0}, xt shape={xt.shape}", flush=True)
+    #     print("xt_test = ["); [print(f"    [{', '.join(f'{v:.16f}' for v in row)}],") for row in xt]; print("]")
+    #     print("yt_test = ["); [print(f"    {yt[i,0]:.16f},") for i in range(_test_n0)]; print("]")
+    #     print("all_grad_test = ["); [print(f"    [{', '.join(f'{v:.10f}' for v in row)}],") for row in all_grad]; print("]")
+    #     _test_out = os.path.join(r'C:\_workingDir\_SF\test flexion\output', f'doe_sobol_n0_{_test_n0}.json')
+    #     json.dump({"n0": _test_n0, "xt": xt.tolist(), "yt": yt.tolist(), "all_grad": all_grad.tolist()},
+    #               open(_test_out, "w"), indent=1)
+    #     print(f"[TEST DOE] sauve dans {_test_out}", flush=True)
+    #     sys.exit(0)
 
     if print_3D:
         print_3D_HF()
