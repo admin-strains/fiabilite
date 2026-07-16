@@ -1709,16 +1709,6 @@ if __name__ == '__main__':
 
         elif do_PCK:
             if xt is None: xt, yt, all_grad = build_DOE()
-            if eps_taylor > 0 and fixed_fm is None:
-                _n_real = len(xt)
-                for _i_pt in range(_n_real):
-                    for _i_dim in range(n_var):
-                        _u_virt = np.array(xt[_i_pt]) + eps_taylor * np.eye(n_var)[_i_dim]
-                        _y_virt = yt[_i_pt, 0] + eps_taylor * all_grad[_i_pt, _i_dim]
-                        xt = np.vstack([xt, [_u_virt]])
-                        yt = np.vstack([yt, [[_y_virt]]])
-                        all_grad = np.vstack([all_grad, [all_grad[_i_pt]]])
-                print(f"  [PCK Taylor DOE] {_n_real} pts HF + {_n_real * n_var} pts virtuels (eps={eps_taylor}) = {len(xt)} pts total", flush=True)
             _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
             if fixed_fm is not None:
