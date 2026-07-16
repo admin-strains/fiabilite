@@ -119,7 +119,7 @@ if __name__ == '__main__':
     # 2. PCE
     seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
-    max_degree = 0     # (init 0, varie en fonction de n0) degre max base candidats
+    max_degree = 2     # (fixe) degre max base candidats — LARS gere P > N
     max_of_maxdegree = 2                                # (fixe) degre max autorisé
 
     # 3. EFF
@@ -1179,16 +1179,7 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU MODELE PCE                                               #
-    def n0_min(n_var, p):
-        """Taille minimale du DOE pour PCE de degre p en n_var variables.
-        n0_min = C(n_var+p, p) + 1 = (n_var+p)! / (n_var! * p!) + 1"""
-        return comb(n_var + p, p) + 1
-    
-    def update_degree(new_n0):
-        global max_degree
-        while new_n0 >= n0_min(n_var, max_degree+1) and max_degree+1 <= max_of_maxdegree:
-            max_degree += 1
-        print(f'On passe à max_degree = {max_degree} car le DOE est de {new_n0} >= n0_min({max_degree}) = {n0_min(n_var, max_degree)}')
+    # n0_min et update_degree supprimes : LARS gere P > N, max_degree fixe des le depart
 
     def build_metamodel_PCE(xt, y_hf):
         # 1. INITIALISATION : DOE ET DISTRIBUTION
@@ -1996,10 +1987,6 @@ if __name__ == '__main__':
                     grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
                     all_grad = np.vstack([all_grad, grad_val])
                     print(f"[EFF HF] u={list(np.round(_u_pt, 10))}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]), 10) for i in range(n_var)]}", flush=True)
-            # --- Upgrade max_degree si assez de points ---
-            _degree_avant = max_degree
-            update_degree(len(xt))
-            degree_upgraded = (max_degree != _degree_avant)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
             # --- Suivi convergence beta_IS ---
@@ -2084,8 +2071,7 @@ if __name__ == '__main__':
                 list_beta_IS.append(_b_mid)
 
             # --- Visu intermediaire apres ajout de point ---
-            _about_to_upgrade = (len(xt) + 1 > n0_min(n_var, max_degree + 1) and max_degree + 1 <= max_of_maxdegree)
-            if print_EFF_progres or degree_upgraded or _about_to_upgrade:
+            if print_EFF_progres:
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
 
             # --- Dump restart incremental (kill-safe) ---
@@ -3310,7 +3296,7 @@ if __name__ == '__main__':
         print(f"[RESTART] charge {len(xt)} pts (dont {len(_restart_xt_eff)} EFF) "
               f"depuis {_RESTART_STATE_FILE} (round {_enrich_round})", flush=True)
 
-        update_degree(len(xt))
+        # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func = None, None, None
         xt_eff = None
     else:
@@ -3318,7 +3304,7 @@ if __name__ == '__main__':
         open(_POINT_LOG_FILE, "w").close()
         print(f"[POINT LOG] reset -> {_POINT_LOG_FILE}", flush=True)
 
-        update_degree(n0)
+        # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
         xt_eff = None
 
