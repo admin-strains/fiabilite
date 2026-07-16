@@ -1077,7 +1077,7 @@ if __name__ == '__main__':
         dist_X   = dist_jointe()
         T     = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        dist_U = dist_X.getStandardDistribution()
+        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
         lhs    = ot.LHSExperiment(dist_U, n_doe)
         sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         U_doe  = sa.generate()
