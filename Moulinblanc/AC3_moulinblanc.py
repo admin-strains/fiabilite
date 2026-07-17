@@ -2640,8 +2640,8 @@ if __name__ == '__main__':
         n_added = len(xt_eff)
 
         # --- Grille commune (coupe 2D dans l'espace n_var-D) ---
-        ux = np.linspace(u1_min, u1_max, n_grid)
-        uy = np.linspace(u2_min, u2_max, n_grid)
+        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
+        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -2661,8 +2661,8 @@ if __name__ == '__main__':
         if hf_custom_points is not None:
             Z_true, UX_hf, UY_hf = _hf_from_custom_points(_sd)
         elif print_HF:
-            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             Z_true = _get_hf_slice(_sd, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
 
@@ -2694,8 +2694,8 @@ if __name__ == '__main__':
                                 xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
             ax.set_xlabel(_xlabel)
             ax.set_ylabel(_ylabel)
-            ax.set_xlim(u1_min, u1_max)
-            ax.set_ylim(u2_min, u2_max)
+            ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
+            ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
             ax.legend(loc='best', fontsize=9)
 
         # --- Ax1 : EFF ---
@@ -2737,8 +2737,8 @@ if __name__ == '__main__':
         n_steps = n_eff + 1   # DOE initial + chaque point EFF
 
         # --- Grille commune ---
-        ux = np.linspace(u1_min, u1_max, n_grid)
-        uy = np.linspace(u2_min, u2_max, n_grid)
+        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
+        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -2751,8 +2751,8 @@ if __name__ == '__main__':
         if hf_custom_points is not None:
             Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
         elif print_HF:
-            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
 
@@ -2797,8 +2797,8 @@ if __name__ == '__main__':
                                     xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
                 ax.set_xlabel(_xlabel)
                 ax.set_ylabel(_ylabel)
-                ax.set_xlim(u1_min, u1_max)
-                ax.set_ylim(u2_min, u2_max)
+                ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
+                ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
 
             # --- EFF ---
             cf1 = ax1.contourf(UX, UY, Z_eff, levels=20, cmap='viridis', alpha=0.85)
@@ -2831,8 +2831,8 @@ if __name__ == '__main__':
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
         global hf_2d_grid_fixed
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
+        u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
+        u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
@@ -2850,8 +2850,8 @@ if __name__ == '__main__':
 
         # --- Contour g=0 HF ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+            u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
@@ -2876,8 +2876,8 @@ if __name__ == '__main__':
 
         ax.set_xlabel('u1')
         ax.set_ylabel('u2')
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
+        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
+        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
         ax.set_title('Critere EFF')
         ax.legend(loc='best', fontsize=9)
         plt.tight_layout()
@@ -2886,8 +2886,8 @@ if __name__ == '__main__':
     def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D de l'ecart-type conditionnel du surrogate."""
         global hf_2d_grid_fixed
-        u1 = np.linspace(u1_min, u1_max, n_grid)
-        u2 = np.linspace(u2_min, u2_max, n_grid)
+        u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
+        u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
         grid = np.column_stack([U1.ravel(), U2.ravel()])
 
@@ -2905,8 +2905,8 @@ if __name__ == '__main__':
 
         # --- Contour g=0 HF ---
         if print_HF:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+            u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
             if hf_2d_grid_fixed is not None:
                 Z_true = np.array(hf_2d_grid_fixed['Z'])
@@ -2929,8 +2929,8 @@ if __name__ == '__main__':
 
         ax.set_xlabel('u1')
         ax.set_ylabel('u2')
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
+        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
+        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
         ax.set_title('Ecart-type surrogate (sigma)')
         ax.legend(loc='best', fontsize=9)
         plt.tight_layout()
@@ -2986,8 +2986,8 @@ if __name__ == '__main__':
                 slice_def_final = slice_def
         idx_x, idx_y, fixed = slice_def_final
 
-        ux = np.linspace(u1_min, u1_max, n_grid)
-        uy = np.linspace(u2_min, u2_max, n_grid)
+        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
+        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -3013,8 +3013,8 @@ if __name__ == '__main__':
             if Z_true is not None:
                 ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
         elif print_HF:
-            ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
+            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
@@ -3108,8 +3108,8 @@ if __name__ == '__main__':
 
         ax.set_xlabel(_xlabel)
         ax.set_ylabel(_ylabel)
-        ax.set_xlim(u1_min, u1_max)
-        ax.set_ylim(u2_min, u2_max)
+        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
+        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
         _fixed_str = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
         ax.set_title(f'FORM et etat limite g=0{_fixed_str}')
         plt.tight_layout()
