@@ -78,7 +78,7 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
@@ -1084,7 +1084,7 @@ if __name__ == '__main__':
         dist_X   = dist_jointe()
         T     = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
+        dist_U = ot.JointDistribution([ot.Uniform(eff_bounds_min[i], eff_bounds_max[i]) for i in range(n_var)])
         lhs    = ot.LHSExperiment(dist_U, n_doe)
         sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         U_doe  = sa.generate()
@@ -1127,7 +1127,7 @@ if __name__ == '__main__':
         return xt
 
     def build_starting_points():
-        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
+        dist_U = ot.JointDistribution([ot.Uniform(eff_bounds_min[i], eff_bounds_max[i]) for i in range(n_var)])
         lhs = ot.LHSExperiment(dist_U, n_sp)
         sa = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         return np.array(sa.generate())  # shape (n_sp, n_var)
