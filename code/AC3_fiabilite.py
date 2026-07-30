@@ -1,5 +1,5 @@
 """
-CODE FIABILITE - VERSION AVEC DEFINITION DE FONCTIONS
+CODE FIABILITE UTILISATEUR 
 """
 import os
 import json
@@ -57,111 +57,126 @@ def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
+    print("=" * 70)
+    print("CALCUL DE FIABILITE -- UTILISATEUR")
+    print("=" * 70)
+    """
+    1. Renseignez le nom du modèle, et adaptez les 2 path (voir guide d'utilisation). Modifiez aussi path_dir dans le launcher.
+    """
     modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
-    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
     path_dir = r"C:\_workingDir\dir_fiabilite"
+    
+    #Ne pas modifier ces lignes ------------------------------------# 
+    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
-
-    print("=" * 70)
-    print("CALCUL DE FIABILITE -- PONT DU MOULIN BLANC -- LM1 TRAFIC")
-    print("=" * 70)
-    # --------------------------------------------------------------------------- #
-    # OPTIONS UTILISATEUR                                                         #
-    # --------------------------------------------------------------------------- #
-    # --------------------------------------------------------------------------- #
-    # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
-    do_EFF = True                              #si on veut enrichir progressivement 
-    do_IS   = True                            #si on veut calculer la proba globale 
-
-    n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 6             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
-    # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
-
+    # --------------------------------------------------------------#
+    """
+    2. Choix des variables globales (les options de remplissage sont commentées + voir guide d'utilisation)
+    """
+    modele = 'GEPCK'                    # type de modèle d'approximation - options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    n0 = 5                              #nombre de points du plan d'expérience initial (DOE)
+    tol_FORM = 0.05                     # précision acceptée par FORM pour l'état limite
+    tol_all_modes = 0.9                 #distance DBSCAN entre deux modes
+    n_workers_DOE = 6                   #nb de SOCP DOE en parallele
+    """
+    3. Définition de PARAM_CONFIG
+    """
+    """
+    3.1. Lecture d'informations dans le dsCad si besoin. 
+    
+    Cette partie est spécifique au cas du moulin blanc. 
+    On prédéfinit une liste de régions qu'on donne à param_config.
+    Vous pouvez la remplacer par vos besoins spécifiques ou la supprimer.
+    """
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
     group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
     group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES FORM                                                             #
-    n_max_FORM = 50
-    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
-    do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
-    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
-    n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
+    """
+    3.2. Définition de param_config (voir guide d'utilisation)
+    """
 
-    tol_FORM = 0.05                 # précision acceptée par FORM pour l'état limite (moulin_blanc)
-    tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
-    tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
-    do_FORM_filter = True           #True = rejeter les u* FORM hors eff_bounds avant DBSCAN
 
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES IS                                                               #
-    n_IS    = 10000                                       # taille échantillon IS
-    cov_IS  = 0.05                                             # critère d'arrêt COV
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES MESH                                                             #
-    global_size     = 0.05   # global_physical_size (0.05 = rapide FORM, 0.007 = très fin)
-    geo_min_approx  = 4      # geometric_approximation_min (4 = fin, 35 = grossier)
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES GEK/ PCE/ EFF                                                    #
-    # 1. GEK
-    do_analytic_grad = False
-    reduc_PLS = 0
-
-    # 2. PCE
-    seuil_pce = 0.90                              # seuil de validation de l'erreur
-    q = 0.75                                              # tri base poly candidats
-    max_degree = 2     # (fixe) degre max base candidats — LARS gere P > N
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
-
-    # 3. EFF
-    epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = -1                                              # critere d'arret EFF
-    tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
-    tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
-
-    n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
-    n_max_EFF_points = 360                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 6                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
-    print_EFF_progres = True                  # True = prints debug EFF a chaque iter
-    print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
-    print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
-    save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
-    # 2026-07-04 (MM) : passe a False pour le run grille HF (q, s_convoi). ~424 MB/appel x 187
-    # SOCP = ~79 GB alors qu'il ne reste que ~24 GB sur C: (SOCP_history pese deja 135 GB) ->
-    # le disque serait plein au 1/4 de la grille (crash + danger pour les AUTRES projets).
-    # A discuter avec Semia : purger/archiver SOCP_history avant de reactiver.
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES ET OPTIONS DE PRINT                                              #
     
-    # Paramètres de print ---
+    
+    
+    """
+    4. Pour calculer la grille HF
+    """
+    print_HF = True 
+    print_fullHF = False             #Très déconseillé de mettre True : ca calcule une grille en R^d! nombre d'appels HF: 7x7x ...x7 
+    n_grid_hf = 7                    # nombre de points par axe 
+
+    """
+    5. Pour repartir d'un état précédent
+    """
+    config_is_identical = True    #True = reutiliser les caches si présents
+    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
+    """
+    6. Paramètres à laisser par défaut sauf cas particulier (voir guide d'utilisation)
+    """
+    # 6.1 Sur les polynomes
+    max_degree = 2                         # (fixe) degre max base candidats — LARS gere P > N
+    
+    # 6.2 Sur le critère d'enrichissement
+    n_max_EFF_points = 200                # plafond de points EFF ajoutes (arret force si atteint)
+    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
+    tol_EFF = 0.002                 # Arret par max(EFF) < tol_EFF
+    tol_BB       = 0.05             # Arret BB si |beta_IS_sup - beta_IS_inf| / beta_IS < tol_BB
+    tol_BS       = 0.01             # Arre BS si |beta_IS - beta_IS_prec| / beta_IS < tol_BS
+
+    # 6.3 Sur l'affichage
     u1_max = 7.5
     u2_max = 7.5
     u1_min = -7.5
     u2_min = -7.5
     n_grid = 300
-    n_grid_hf = 7
 
-    # --- Options de print ---
-    print_HF = True
-    print_fullHF = False             #False pour n_var=2 (grille 2D 7x7=49 suffit)
+    # 6.4 Pour enregistrer l'historique des résultats 
+    save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
+
+    """
+    Transférer vers config.py
+    """
+    # --------------------------------------------------------------------------- #
+    # OPTIONS PAR DEFAUT                                                          #
+    do_EFF = True                              #si on veut enrichir progressivement 
+    do_IS   = True                            #si on veut calculer la proba globale 
+
+    # --------------------------------------------------------------------------- #
+    # PARAMETRES PAR DEFAUT FORM                                                  #
+    n_max_FORM = 50
+    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
+    do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
+    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
+    n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
+    do_FORM_filter = True           #True = rejeter les u* FORM hors eff_bounds avant DBSCAN
+    # --------------------------------------------------------------------------- #
+    # PARAMETRES PAR DEFAUT IS                                                    #
+    n_IS    = 10000                                       # taille échantillon IS
+    cov_IS  = 0.05                                        # critère d'arrêt COV
+    # --------------------------------------------------------------------------- #
+    # PARAMETRES PAR DEFAUT PCE/ EFF                                         #
+    # 1. PCE
+    q = 0.75                                  # tri base poly candidats
+    # 2. EFF
+    epsilon_factor = 2                        # paramètre fonction EFF, voir guide technique - eps = epsilon_factor * sigma
+    n_NLopt_EFF = 30                          # budget evaluations NLopt GN_DIRECT par recherche EFF
+    n_batch_EFF = n_workers_DOE               # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    print_EFF_progres = True                  # True = prints debug EFF a chaque iter
+    print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
+    print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
+    # --------------------------------------------------------------------------- #
+    # PARAMETRES ET OPTIONS DE PRINT PAR DEFAUT                                   #
     print_DOE = True
     print_3D = False
-    
+
     # --- Print facultatifs, par défaut à False ---
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
-
 
     # --- Résultats fixés ---
     hf_3d_grid_fixed = None
@@ -337,6 +352,10 @@ if __name__ == '__main__':
     do_GEPCK     = True if modele == 'GEPCK'     else False
     do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
     do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
+
+
+
+
 
     # --------------------------------------------------------------------------- #
     # DEFINTION DE FONCTIONS                                                      #
@@ -632,14 +651,14 @@ if __name__ == '__main__':
             Meshkwargs = {
                 "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
                 "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
-                "global_physical_size": global_size,
+                "global_physical_size": 0.05,
                 "max_size": 0.05,
                 "min_size": "-1",
                 "gradation": 1.5,
                 "volume_gradation": 1.5,
                 "optimisation_level": "standard",
                 "anisotropic_ratio": "10",
-                "geometric_approximation_min": str(geo_min_approx),
+                "geometric_approximation_min": "4",
                 "geometric_approximation_max": "25",
                 "geometric_approximation_on_edge": "false",
                 "geometric_approximation_on_face": "true",
@@ -1008,7 +1027,6 @@ if __name__ == '__main__':
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():
         return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
-
     # --- DUMP RESTART ---
     _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state.json")
     def _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS):
@@ -1722,7 +1740,7 @@ if __name__ == '__main__':
         return modes, best_sps
     
     # --- Warm-start FORM depuis les points du DOE ---
-    def FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad):
+    def FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad, tol=0.2):
         """
         Cette fonction reçoit des résultats FORM et le DOE utilisé, et déclenche warm_start si besoin 
         - elle renvoie la liste de modes/ best_sps mise à jour mais ne renvoie pas le nouveau DOE pour 
@@ -1732,7 +1750,7 @@ if __name__ == '__main__':
             u_star = modes[0].getStandardSpaceDesignPoint()
             g_val = g_ot(ot.Point(u_star))[0] if g_ot is not None else None
 
-            if g_val is not None and abs(g_val) > tol_warmstart:
+            if g_val is not None and abs(g_val) > tol:
                 # -- on fait warm start uniquement si on est au dessus de 0.2, sinon, on accepte le résultat. --
                 xt = np.vstack([xt, [np.array(u_star)]])
                 yt = np.vstack([yt, [[g_val]]])
