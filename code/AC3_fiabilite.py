@@ -66,7 +66,8 @@ if __name__ == '__main__':
     1. Définir modelname, _path_ds, path_dir ici + mettre le même path_dir dans le launcher
     """
     modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
-    _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+    storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
+    _path_ds = storage + modelname + ".ds"
     path_dir = r"C:\_workingDir\dir_fiabilite"
     
     #Ne pas modifier ces lignes ------------------------------------# 
@@ -125,7 +126,7 @@ if __name__ == '__main__':
 
 
     """
-    3.3. Pour plus de 2 variables, l'affichage est déterminé par ces deux variables. Voir guide utilisateur. 
+    4. Paramétrer l'affichage
     """
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
@@ -133,22 +134,20 @@ if __name__ == '__main__':
     eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
     eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
-    
-    
     """
-    4. Pour calculer la grille HF
+    5. Pour calculer la grille HF
     """
     print_HF = True 
     print_fullHF = False             #Très déconseillé de mettre True : ca calcule une grille en R^d! nombre d'appels HF: 7x7x ...x7 
     n_grid_hf = 7                    # nombre de points par axe 
 
     """
-    5. Pour repartir d'un état précédent
+    6. Pour repartir d'un état précédent
     """
     config_is_identical = True    #True = reutiliser les caches si présents
     restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     """
-    6. Paramètres à laisser par défaut sauf cas particulier (voir guide d'utilisation)
+    7. Paramètres à laisser par défaut sauf cas particulier (voir guide d'utilisation)
     """
     # 6.1 Sur les polynomes
     max_degree = 2                         # (fixe) degre max base candidats — LARS gere P > N
@@ -455,7 +454,7 @@ if __name__ == '__main__':
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
         Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
         SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
-        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+        path = storage + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         dist_X = dist_jointe()
@@ -581,7 +580,7 @@ if __name__ == '__main__':
         T_inv = dist_X.getInverseIsoProbabilisticTransformation() 
         u_point = ot.Point(u)
         x_point = T_inv(u_point)
-        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+        path = storage + modelname + ".ds"
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         params={params_names[i]: x_point[i] for i in range(n_var)}
@@ -694,7 +693,6 @@ if __name__ == '__main__':
         """Parallelise les SOCP du DOE via subprocesses independants.
         Chaque worker = launcher3.py relance en mode _DOE_WORKER sur une copie .ds isolee."""
         import subprocess as _sp
-        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
         base_ds = storage + base_modelname + ".ds"
         npts = len(SOL)
         n_workers = max(1, min(n_workers, npts))
@@ -760,7 +758,6 @@ if __name__ == '__main__':
         npts = len(SOL)
         n_workers = max(1, min(n_workers, npts))
         threads_per = max(1, 32 // n_workers)
-        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
         base_ds = storage + modelname + ".ds"
         batches = [[] for _ in range(n_workers)]
         for i in range(npts):
