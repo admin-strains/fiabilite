@@ -63,7 +63,7 @@ if __name__ == '__main__':
     print("CALCUL DE FIABILITE -- UTILISATEUR")
     print("=" * 70)
     """
-    1. Renseignez le nom du modèle, et adaptez les 2 path (voir guide d'utilisation). Modifiez aussi path_dir dans le launcher.
+    1. Définir modelname, _path_ds, path_dir ici + mettre le même path_dir dans le launcher
     """
     modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
     _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
@@ -74,23 +74,25 @@ if __name__ == '__main__':
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
     # --------------------------------------------------------------#
+    
     """
-    2. Choix des variables globales (les options de remplissage sont commentées + voir guide d'utilisation)
+    2. Definir les variables globales modele, n0, tol_FORM, tol_all_modes et n_workers_DOE ci dessous en s'aidant du guide d'utilisation / des commentaires
     """
     modele = 'GEPCK'                    # type de modèle d'approximation - options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     n0 = 5                              #nombre de points du plan d'expérience initial (DOE)
     tol_FORM = 0.05                     # précision acceptée par FORM pour l'état limite
     tol_all_modes = 0.9                 #distance DBSCAN entre deux modes
     n_workers_DOE = 6                   #nb de SOCP DOE en parallele
+    
     """
     3. Définition de PARAM_CONFIG
     """
     """
-    3.1. Lecture d'informations dans le dsCad si besoin. 
+    3.1. Préliminaire : Si besoin, définir la liste d'éléments concernés par param_config ici. Partie à modifier ou effacer. 
     
-    Cette partie est spécifique au cas du moulin blanc. 
-    On prédéfinit une liste de régions qu'on donne à param_config.
-    Vous pouvez la remplacer par vos besoins spécifiques ou la supprimer.
+    (Cette partie est spécifique au cas du moulin blanc. 
+    On prédéfinit une liste de régions en lisant le dsCad qu'on donne à param_config.
+    Vous pouvez la remplacer par vos besoins spécifiques ou la supprimer.)
     """
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
@@ -99,10 +101,37 @@ if __name__ == '__main__':
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
     """
-    3.2. Définition de param_config (voir guide d'utilisation)
+    3.2. Définir les variables PARAM_CONFIG_CAD et PARAM_CONFIG_LOAD ci-dessous
     """
+    PARAM_CONFIG_CAD = {}
+    PARAM_CONFIG_LOAD = {
+        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
+                              "axis": "position", "region_key": "s_convoi"},
+                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
+        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
+                     'loi': loi_F_permanente, 'args': (0.1, 0.30)},
+    }
+    
+    
+    #Ne pas modifier ces lignes ------------------------------------# 
+    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
+    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
+    n_var = len(params_names)
+    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
+    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
+    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
+    # --------------------------------------------------------------#
 
 
+
+    """
+    3.3. Pour plus de 2 variables, l'affichage est déterminé par ces deux variables. Voir guide utilisateur. 
+    """
+    slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
+    slice_def_final = None
+
+    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
+    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
     
     
@@ -142,7 +171,7 @@ if __name__ == '__main__':
     save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
 
     """
-    Transférer vers config.py
+    PAS BESOIN DE LIRE OU DE MODIFIER LA SUITE 
     """
     # --------------------------------------------------------------------------- #
     # OPTIONS PAR DEFAUT                                                          #
@@ -355,36 +384,13 @@ if __name__ == '__main__':
     do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
     do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
 
-
-
-
-
     # --------------------------------------------------------------------------- #
     # DEFINTION DE FONCTIONS                                                      #
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # FONCTION D'APPEL STRAINS ET DOE                                             #
-
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    PARAM_CONFIG_CAD = {}
-    PARAM_CONFIG_LOAD = {
-        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
-                              "axis": "position", "region_key": "s_convoi"},
-                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.1, 0.30)},
-    }
-    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
-    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
-    n_var = len(params_names)
-    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
-    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
-    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
-    slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
-    slice_def_final = None
 
-    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
-    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
     def _is_position_var(sens):
         """Detecte si une region de sensibilite est une variable de position (axis='position')."""
