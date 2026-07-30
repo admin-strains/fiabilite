@@ -17,12 +17,13 @@ for d in dll_dirs:
         os.add_dll_directory(d)
 
 # Add STRAINS to Python path
+path_dir = r"C:\_workingDir\dir_fiabilite"
 sys.path.insert(0, r'C:\workspace\front')
-sys.path.insert(0, r'C:\_workingDir\dir_fiabilite\lib')
+sys.path.insert(0, os.path.join(path_dir, 'lib'))
 
 # Run the target script — guard __main__ + freeze_support pour que les
 # subprocesses DOE paralleles (Windows spawn) ne re-executent pas tout.
 import multiprocessing as mp
 if __name__ == "__main__":
     mp.freeze_support()
-    exec(open(r'C:\_workingDir\dir_fiabilite\code\AC3_fiabilite.py').read(), {'__name__': '__main__'})
+    exec(open(os.path.join(path_dir, 'code', 'AC3_fiabilite.py')).read(), {'__name__': '__main__'})
