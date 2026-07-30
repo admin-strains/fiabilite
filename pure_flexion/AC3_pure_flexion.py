@@ -60,6 +60,7 @@ if __name__ == '__main__':
     modelname = "test_pure_flexion"
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
     _path_ds = "C:\\workspace\\storage\\admin\\SF\\" + modelname + ".ds"
+    path_dir = r"C:\_workingDir\_SF\test flexion\pure_flexion"
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
@@ -71,7 +72,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'PCK'                      #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'GEPCK'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement
     do_IS   = True                            #si on veut calculer la proba globale
 
@@ -160,7 +161,7 @@ if __name__ == '__main__':
     hf_2d_grid_fixed = None
     # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
     do_custom_hf = False
-    _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\output', 'custom_hf_grid.json')
+    _custom_grid_file = os.path.join(path_dir, 'output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
         print(f"[HF CUSTOM] grille chargee : {len(hf_custom_points)} points depuis {_custom_grid_file}", flush=True)
@@ -318,7 +319,7 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = os.path.join(r'C:\_workingDir\_SF\test flexion\output\png EFF', f'png_EFF_{timestamp}')
+    out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{timestamp}')
     os.makedirs(out_dir_eff, exist_ok=True)
 
     do_KRG = True if modele == 'KRG' else False
@@ -656,7 +657,7 @@ if __name__ == '__main__':
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"}
-            exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals())
+            exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals())
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -776,7 +777,7 @@ if __name__ == '__main__':
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-        exec(open(r"C:\_workingDir\_SF\test flexion\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+        exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
         kwargs["static_params"] = static_params
         kwargs["cinematic_params"] = cinematic_params
         kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -870,7 +871,7 @@ if __name__ == '__main__':
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_doe_worker.log", "w")
             print(f"    -> worker {w}: points {idxs}", flush=True)
-            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\launcher3.py"],
+            p = _sp.Popen([sys.executable, os.path.join(path_dir, "launcher3.py")],
                           env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         for p, out_file, wlog, w, idxs in procs:
@@ -932,7 +933,7 @@ if __name__ == '__main__':
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_hf_worker.log", "w")
             print(f"    -> hf_worker {w}: {len(idxs)} points", flush=True)
-            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\launcher3.py"],
+            p = _sp.Popen([sys.executable, os.path.join(path_dir, "launcher3.py")],
                           env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         g_results = [None] * npts
