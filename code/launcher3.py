@@ -20,6 +20,7 @@ for d in dll_dirs:
 path_dir = r"C:\_workingDir\dir_fiabilite"
 sys.path.insert(0, r'C:\workspace\front')
 sys.path.insert(0, os.path.join(path_dir, 'lib'))
+sys.path.insert(0, os.path.join(path_dir, 'code', 'modules fiabilite'))
 
 # Run the target script — guard __main__ + freeze_support pour que les
 # subprocesses DOE paralleles (Windows spawn) ne re-executent pas tout.
