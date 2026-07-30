@@ -48,6 +48,7 @@ from datetime import datetime
 from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 from _parallel_is import adaptive_is
 from lois import loi_fy, loi_fc, loi_F_permanente, loi_F_exploitation, loi_F_intermittente, loi_uni_approx, SIGMA
+from patch_params import patch_params
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
 _IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))
@@ -363,18 +364,6 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # FONCTION D'APPEL STRAINS ET DOE                                             #
-
-    # --- DSCAD ET DSLOAD ---
-    def patch_params(path, **params):
-        """Reecrit dsCad.txt et dsLoad.txt avec de nouvelles valeurs de parametres."""
-        for filename in ('dsCad.txt', 'dsLoad.txt'):
-            fpath = os.path.join(path, filename)
-            with open(fpath, 'r') as f:
-                content = f.read()
-            for name, value in params.items():
-                content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
-            with open(fpath, 'w') as f:
-                f.write(content)
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {}
