@@ -50,6 +50,8 @@ from _parallel_is import adaptive_is
 from lois import loi_fy, loi_fc, loi_F_permanente, loi_F_exploitation, loi_F_intermittente, loi_uni_approx, SIGMA
 from patch_params import patch_params
 import etat
+from config_utilisateur import *
+from config_pardefaut import *
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
 _IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))
@@ -63,148 +65,31 @@ if __name__ == '__main__':
     print("=" * 70)
     print("CALCUL DE FIABILITE -- UTILISATEUR")
     print("=" * 70)
-    """
-    1. Définir modelname, _path_ds, path_dir ici + mettre le même path_dir dans le launcher
-    """
-    modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
-    storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
+    # --- Variables importees depuis config_utilisateur.py et config_pardefaut.py ---
+    # --- Voir ces fichiers pour modifier les parametres ---
+
+    # --- Derivees calculees a l'execution ---
     _path_ds = storage + modelname + ".ds"
-    path_dir = r"C:\_workingDir\dir_fiabilite"
-    
-    #Ne pas modifier ces lignes ------------------------------------# 
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
-    # --------------------------------------------------------------#
-    
-    """
-    2. Definir les variables globales modele, n0, tol_FORM, tol_all_modes et n_workers_DOE ci dessous en s'aidant du guide d'utilisation / des commentaires
-    """
-    modele = 'GEPCK'                    # type de modèle d'approximation - options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
-    n0 = 5                              #nombre de points du plan d'expérience initial (DOE)
-    tol_FORM = 0.05                     # précision acceptée par FORM pour l'état limite
-    tol_all_modes = 0.9                 #distance DBSCAN entre deux modes
-    n_workers_DOE = 6                   #nb de SOCP DOE en parallele
-    
-    """
-    3. Définition de PARAM_CONFIG
-    """
-    """
-    3.1. Préliminaire : Si besoin, définir la liste d'éléments concernés par param_config ici. Partie à modifier ou effacer. 
-    
-    (Cette partie est spécifique au cas du moulin blanc. 
-    On prédéfinit une liste de régions en lisant le dsCad qu'on donne à param_config.
-    Vous pouvez la remplacer par vos besoins spécifiques ou la supprimer.)
-    """
+
+    # --- Lecture dsCad (specifique Moulin Blanc) ---
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
     group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
     group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
-    """
-    3.2. Définir les variables PARAM_CONFIG_CAD et PARAM_CONFIG_LOAD ci-dessous
-    """
-    PARAM_CONFIG_CAD = {}
-    PARAM_CONFIG_LOAD = {
-        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
-                              "axis": "position", "region_key": "s_convoi"},
-                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.1, 0.30)},
-    }
-    
-    
-    #Ne pas modifier ces lignes ------------------------------------# 
+    # --- PARAM_CONFIG : merge et validation ---
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
     _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
     assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
     assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
-    # --------------------------------------------------------------#
 
-
-
-    """
-    4. Paramétrer l'affichage
-    """
-    slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
-    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
-    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
-    
-    """
-    5. Pour calculer la grille HF
-    """
-    print_HF = True 
-    print_fullHF = False             #Très déconseillé de mettre True : ca calcule une grille en R^d! nombre d'appels HF: 7x7x ...x7 
-    n_grid_hf = 7                    # nombre de points par axe 
-
-    """
-    6. Pour repartir d'un état précédent
-    """
-    config_is_identical = True    #True = reutiliser les caches si présents
-    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
-    """
-    7. Paramètres à laisser par défaut sauf cas particulier (voir guide d'utilisation)
-    """
-    # 6.1 Sur les polynomes
-    max_degree = 2                         # (fixe) degre max base candidats — LARS gere P > N
-    
-    # 6.2 Sur le critère d'enrichissement
-    n_max_EFF_points = 200                # plafond de points EFF ajoutes (arret force si atteint)
-    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
-    tol_EFF = 0.002                 # Arret par max(EFF) < tol_EFF
-    tol_BB       = 0.05             # Arret BB si |beta_IS_sup - beta_IS_inf| / beta_IS < tol_BB
-    tol_BS       = 0.01             # Arre BS si |beta_IS - beta_IS_prec| / beta_IS < tol_BS
-
-    # 6.3 Sur l'affichage
-    u1_max = 7.5
-    u2_max = 7.5
-    u1_min = -7.5
-    u2_min = -7.5
-    n_grid = 300
-
-    # 6.4 Pour enregistrer l'historique des résultats 
-    save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
-
-    """
-    PAS BESOIN DE LIRE OU DE MODIFIER LA SUITE 
-    """
-    # --------------------------------------------------------------------------- #
-    # OPTIONS PAR DEFAUT                                                          #
-    do_EFF = True                              #si on veut enrichir progressivement 
-    do_IS   = True                            #si on veut calculer la proba globale 
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES PAR DEFAUT FORM                                                  #
-    n_max_FORM = 50
-    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
-    do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
-    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
-    n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
-    do_FORM_filter = True           #True = rejeter les u* FORM hors eff_bounds avant DBSCAN
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES PAR DEFAUT IS                                                    #
-    n_IS    = 10000                                       # taille échantillon IS
-    cov_IS  = 0.05                                        # critère d'arrêt COV
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES PAR DEFAUT PCE/ EFF                                         #
-    # 1. PCE
-    q = 0.75                                  # tri base poly candidats
-    # 2. EFF
-    epsilon_factor = 2                        # paramètre fonction EFF, voir guide technique - eps = epsilon_factor * sigma
-    n_NLopt_EFF = 30                          # budget evaluations NLopt GN_DIRECT par recherche EFF
-    n_batch_EFF = n_workers_DOE               # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
-    print_EFF_progres = True                  # True = prints debug EFF a chaque iter
-    print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
-    print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES ET OPTIONS DE PRINT PAR DEFAUT                                   #
-    print_DOE = True
-    print_3D = False
-
-    # --- Print facultatifs, par défaut à False ---
+    # --- Flags derives ---
     print_grad_sp = False #option si on veut afficher les gradients des points de départ
 
     # --- Résultats fixés ---
