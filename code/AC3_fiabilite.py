@@ -267,9 +267,6 @@ if __name__ == '__main__':
                 return i
         return None
 
-    def dist_jointe():
-        return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
-                                     for p in params_names])
 
     # --- APPELS STRAINS ---
 

@@ -4,6 +4,7 @@ Modifier les variables ci-dessous pour adapter le code a votre modele.
 Voir le guide d'utilisation pour plus de details.
 """
 import re
+import openturns as ot
 from lois import loi_fy, loi_fc, loi_F_permanente, loi_F_exploitation, loi_F_intermittente, loi_uni_approx
 
 """
@@ -54,6 +55,12 @@ PARAM_CONFIG_LOAD = {
 # --- Derivees de PARAM_CONFIG (pour slice_def) ---
 params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
 n_var = len(params_names)
+
+PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
+
+def dist_jointe():
+    return ot.JointDistribution([PARAM_CONFIG[p]['loi'](*PARAM_CONFIG[p]['args'])
+                                 for p in params_names])
 
 """
 4. Parametrer l'affichage
