@@ -52,6 +52,7 @@ from patch_params import patch_params
 import etat
 from config_utilisateur import *
 from config_pardefaut import *
+from config_autres import *
 from form_is import _is_position_var, _find_position_var_index, projection_surrogate, FORM_all_modes, run_IS, run_IS_proj, print_results_IS
 from visu_pure import _batch_mu_sigma, _eff_vectorized, print_EFF_graphs, print_Pf_evolution, print_logPf_evolution
 from surrogate_pure import (build_starting_points, build_Y_aug, build_metamodel_PCE, calculate_PCE,
@@ -92,13 +93,7 @@ if __name__ == '__main__':
     assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
     assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
 
-    # --- Flags derives ---
-    print_grad_sp = False #option si on veut afficher les gradients des points de départ
-
-    # --- Résultats fixés ---
-    hf_3d_grid_fixed = None
-    # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
-    do_custom_hf = True
+    # --- Resultats fixes et flags : voir config_autres.py ---
     _custom_grid_file = os.path.join(path_dir, 'output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
@@ -244,14 +239,7 @@ if __name__ == '__main__':
     etat.out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{etat.timestamp}')
     os.makedirs(etat.out_dir_eff, exist_ok=True)
 
-    do_KRG = True if modele == 'KRG' else False
-    do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
-    do_HF = True if modele == 'HF' else False # penser à jouer avec des bornes différentes
-    do_PCKRG = True if modele == 'PCKRG' else False
-    do_old_GEPCK = True if modele == 'old_GEPCK' else False
-    do_GEPCK     = True if modele == 'GEPCK'     else False
-    do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
-    do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
+    # Flags do_KRG/GEK/HF/PCKRG/old_GEPCK/GEPCK/IS/EFF : voir config_autres.py
 
     # --------------------------------------------------------------------------- #
     # DEFINTION DE FONCTIONS                                                      #

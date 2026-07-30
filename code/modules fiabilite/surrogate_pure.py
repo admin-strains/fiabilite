@@ -7,11 +7,9 @@ import openturns as ot
 from scipy.stats import norm
 from smt.surrogate_models import GEKPLS
 from branche1 import predict_gepck, predict_gradient_gepck
-from config_utilisateur import n_var, eff_bounds_min, eff_bounds_max, modele, dist_jointe
+from config_utilisateur import n_var, eff_bounds_min, eff_bounds_max, dist_jointe
 from config_pardefaut import q, max_degree, epsilon_factor, n_sp, print_gepck_calls
-
-do_KRG = (modele == 'KRG')
-do_GEK = (modele == 'GEK')
+from config_autres import do_KRG, do_GEK
 
 
 def build_starting_points():
