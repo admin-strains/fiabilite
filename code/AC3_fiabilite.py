@@ -74,11 +74,9 @@ if __name__ == '__main__':
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
-    # --- Lecture dsCad (specifique Moulin Blanc) ---
-    rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
+    # --- Lecture dsCad (voir prelim_dscad dans config_utilisateur.py) ---
+    rebar_names, group1_names, group2_names = prelim_dscad(_cad_txt)
     n_rebars = len(rebar_names)
-    group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
-    group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
     # --- PARAM_CONFIG : merge et validation ---
