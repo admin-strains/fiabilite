@@ -49,6 +49,7 @@ from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
 from _parallel_is import adaptive_is
 from lois import loi_fy, loi_fc, loi_F_permanente, loi_F_exploitation, loi_F_intermittente, loi_uni_approx, SIGMA
 from patch_params import patch_params
+import etat
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
 _IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))
@@ -129,8 +130,6 @@ if __name__ == '__main__':
     4. Paramétrer l'affichage
     """
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
-    slice_def_final = None
-
     eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
     eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
@@ -210,7 +209,6 @@ if __name__ == '__main__':
 
     # --- Résultats fixés ---
     hf_3d_grid_fixed = None
-    hf_2d_grid_fixed = None
     # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
     do_custom_hf = True
     _custom_grid_file = os.path.join(path_dir, 'output', 'custom_hf_grid.json')
@@ -351,28 +349,12 @@ if __name__ == '__main__':
         grad_sp_fixed = None
         traj_runs_fixed = None
 
-    # --- Label PCE GEPCK et LOO (mis a jour par init_g_ot, lus par print_planche_EFF) ---
-    _gepck_pce_label = ""
-    _gepck_loo       = None
-
-    # --- Historiques EFF (mis a jour par run_EFF et init_g_ot, lus par print_EFF_graphs) ---
-    _eff_history_EFF   = []   # EFF(u_opt) avant ajout de chaque point (incl. initial)
-    _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
-    _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
-    _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
-    _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
-    _fosm_u0_cache     = [None] # cache run_HF([0,0]) FOSM : calcule 1x, reutilise pour tous les modes
-    _point_log_phase   = ["?"]  # phase courante pour le log incremental (HF/EFF/USTAR ; DOE logue a part)
-    _point_log_round   = [0]    # round de re-enrichissement (0 = run initial)
-    _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
-    _enrich_round     = 0       # 0 = run initial, k = k-ieme reprise
-    _round_sizes_prev = []      # taille de chaque round precedent (charge du dump)
-    _restart_xt_eff   = []      # points EFF charges du dump (seeder xt_eff en reprise)
+    # --- Variables d'etat partagees : voir etat.py ---
 
     # --- Sortie PNG EFF ---
-    timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{timestamp}')
-    os.makedirs(out_dir_eff, exist_ok=True)
+    etat.timestamp   = datetime.now().strftime('%d%m_%H%M')
+    etat.out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{etat.timestamp}')
+    os.makedirs(etat.out_dir_eff, exist_ok=True)
 
     do_KRG = True if modele == 'KRG' else False
     do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
@@ -407,7 +389,6 @@ if __name__ == '__main__':
                                      for p in params_names])
 
     # --- APPELS STRAINS ---
-    _socp_call_counter = [0]
 
     def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p_vals=None):
         """Copie le dsmed cinematique dans SOCP_history/.
@@ -538,9 +519,9 @@ if __name__ == '__main__':
                 d = json.load(f)
             SOL[i]['g']=d['info']['Primal_bound'][0] -1
             if save_history:
-                _socp_call_counter[0] += 1
+                etat._socp_call_counter[0] += 1
                 _save_socp_outputs(path, AnalysisName,
-                                   prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
+                                   prefix_tag=f"SOL_{etat._socp_call_counter[0]:03d}",
                                    p_vals=[float(SOL[i][p]) for p in params_names])
             # --- Lecture sensibilites et conversion X -> U ---
             grad_X = [None] * n_var
@@ -570,7 +551,6 @@ if __name__ == '__main__':
             _save_doe_cache_incremental(SOL, _n_done)
         return SOL
 
-    _run_HF_count = [0]  # compteur pour le print memoire (temporaire)
     def run_HF(u):
         import psutil as _psutil_hf
         _mem_before = _psutil_hf.Process(os.getpid()).memory_info().rss / 1024 / 1024
@@ -661,9 +641,9 @@ if __name__ == '__main__':
             d = json.load(f) #chargement du fichier .dsmetares
         g_HF=d['info']['Primal_bound'][0] -1
         if save_history:
-            _socp_call_counter[0] += 1
+            etat._socp_call_counter[0] += 1
             _save_socp_outputs(path, AnalysisName,
-                               prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
+                               prefix_tag=f"HF_{etat._socp_call_counter[0]:03d}",
                                u1=float(u[0]), u2=float(u[1]),
                                p_vals=[float(x_point[j]) for j in range(n_var)])
         grad_HF_X=[None]*n_var
@@ -681,11 +661,11 @@ if __name__ == '__main__':
             grad_HF_U = J_Tinv_T * ot.Point(grad_HF_X)
         if sensitivity and any(v is None for v in grad_HF_U):
             raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
-        _append_point_log(_point_log_phase[0], u, x_point, g_HF)
+        _append_point_log(etat._point_log_phase[0], u, x_point, g_HF)
         _mem_after = _psutil_hf.Process(os.getpid()).memory_info().rss / 1024 / 1024
-        _run_HF_count[0] += 1
-        if _run_HF_count[0] <= 2:  # print seulement les 2 premiers appels
-            print(f"[MEM run_HF #{_run_HF_count[0]}] avant={_mem_before:.0f} MB  apres={_mem_after:.0f} MB  delta={_mem_after-_mem_before:+.0f} MB", flush=True)
+        etat._run_HF_count[0] += 1
+        if etat._run_HF_count[0] <= 2:  # print seulement les 2 premiers appels
+            print(f"[MEM run_HF #{etat._run_HF_count[0]}] avant={_mem_before:.0f} MB  apres={_mem_after:.0f} MB  delta={_mem_after-_mem_before:+.0f} MB", flush=True)
         return g_HF, grad_HF_U, grad_HF_X
 
     # --- DOE PARALLELE ---
@@ -867,7 +847,7 @@ if __name__ == '__main__':
         try:
             st["signature"] = _doe_cache_sig()
             st["modele"]    = modele
-            st["timestamp"] = timestamp
+            st["timestamp"] = etat.timestamp
             try:    st["max_degree"] = int(max_degree)
             except Exception: st["max_degree"] = None
             st["xt"]       = np.asarray(xt).tolist()       if xt       is not None else None
@@ -876,19 +856,19 @@ if __name__ == '__main__':
             st["xt_eff"]   = [np.asarray(p).tolist() for p in xt_eff] if xt_eff else []
             st["n_doe"]    = n0
             st["n_total"]  = int(len(xt)) if xt is not None else 0
-            _prev_tot = sum(_round_sizes_prev) if _round_sizes_prev else 0
-            if _enrich_round > 0:
-                st["round_sizes"] = list(_round_sizes_prev) + [int(len(xt)) - _prev_tot]
+            _prev_tot = sum(etat._round_sizes_prev) if etat._round_sizes_prev else 0
+            if etat._enrich_round > 0:
+                st["round_sizes"] = list(etat._round_sizes_prev) + [int(len(xt)) - _prev_tot]
             else:
                 st["round_sizes"] = [int(len(xt))] if xt is not None else []
-            st["enrich_round"]     = int(_enrich_round)
+            st["enrich_round"]     = int(etat._enrich_round)
             st["round_boundaries"] = list(np.cumsum([0] + st["round_sizes"]).astype(int).tolist())
-            st["hist_EFF"]     = [float(v) for v in _eff_history_EFF]
-            st["hist_BB"]      = [None if v is None else float(v) for v in _eff_history_BB]
-            st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
-            st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
-            st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
-            try:    st["hf_2d_grid"] = hf_2d_grid_fixed
+            st["hist_EFF"]     = [float(v) for v in etat._eff_history_EFF]
+            st["hist_BB"]      = [None if v is None else float(v) for v in etat._eff_history_BB]
+            st["hist_BS"]      = [None if v is None else float(v) for v in etat._eff_history_BS]
+            st["hist_theta"]   = [[float(x) for x in t] for t in etat._eff_history_theta]
+            st["hist_beta_IS"] = [None if v is None else float(v) for v in etat._eff_history_beta_IS]
+            try:    st["hf_2d_grid"] = etat.hf_2d_grid_fixed
             except Exception: st["hf_2d_grid"] = None
             st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
             st["best_result"] = _u_beta(best_result) if best_result is not None else None
@@ -910,7 +890,7 @@ if __name__ == '__main__':
         try:
             _u = list(u) if u is not None else []
             _x = list(x) if x is not None else []
-            rec = {"phase": phase, "round": _point_log_round[0],
+            rec = {"phase": phase, "round": etat._point_log_round[0],
                    "g": None if g is None else float(g),
                    "lambda": None if g is None else float(g) + 1.0}
             for i, p in enumerate(params_names):
@@ -1373,7 +1353,7 @@ if __name__ == '__main__':
         créé uniquement une fonction OT. Retourne g_ot, sigma_func, xt, yt, all_grad.
         Si fixed_fm est fourni (refit KB) : theta et polynomes fixes du fit precedent.
         """
-        global _gepck_pce_label, _gepck_loo, _eff_history_theta
+
         if do_KRG:
             if xt is None: xt, yt, all_grad = build_DOE()
             g_ot, result = build_metamodel_KRG(xt, yt)
@@ -1441,9 +1421,9 @@ if __name__ == '__main__':
                 _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
                 _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
             print(f"  GEPCK PCE termes : {' '.join(_terms)}", flush=True)
-            _gepck_pce_label = ' '.join(_terms)
-            _gepck_loo       = _fm['Error'][0]['LOO']
-            _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
+            etat._gepck_pce_label = ' '.join(_terms)
+            etat._gepck_loo       = _fm['Error'][0]['LOO']
+            etat._eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
             gepck_impl = GEPCKFunction(_fm)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
@@ -1677,9 +1657,9 @@ if __name__ == '__main__':
         # --- Si aucune branche ne tourne, on ne fait rien ---
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
-        _point_log_phase[0] = "EFF"
+        etat._point_log_phase[0] = "EFF"
 
-        xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
+        xt_eff = list(etat._restart_xt_eff) if restart_enrich_only else []
 
         def _form_is_iter(g_ot_i, label, sign=0, fm=None):
             """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé.
@@ -1773,20 +1753,20 @@ if __name__ == '__main__':
         else:
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
+
         _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         if restart_enrich_only:
-            list_beta_IS = list(_eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
+            list_beta_IS = list(etat._eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
         else:
             list_beta_IS = [_b_mid] if _b_mid is not None else []
         if not restart_enrich_only:
-            _eff_history_BB = []
-            _eff_history_BS = []
-            _eff_history_Pf = []
-        list_ratio_BB = _eff_history_BB   # alias — même objet
-        list_ratio_BS = _eff_history_BS
-        list_Pf = _eff_history_Pf
-        _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
+            etat._eff_history_BB.clear()
+            etat._eff_history_BS.clear()
+            etat._eff_history_Pf.clear()
+        list_ratio_BB = etat._eff_history_BB   # alias — même objet
+        list_ratio_BS = etat._eff_history_BS
+        list_Pf = etat._eff_history_Pf
+        etat._eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         # --- Ratio BB initial (avant tout enrichissement) ---
         if print_Pf:
@@ -1801,7 +1781,7 @@ if __name__ == '__main__':
             _sigG = sigma_func(u_opt)
             _muG  = g_ot(ot.Point(u_opt))[0]
             print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
-            _eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
+            etat._eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
 
             # --- Calcul HF des points du batch ---
             _n_batch_actual = min(n_batch_EFF, n_max_EFF_points - len(xt_eff))
@@ -1921,7 +1901,7 @@ if __name__ == '__main__':
                 print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
 
             # --- Dump restart incremental (kill-safe) ---
-            _eff_history_beta_IS = list(list_beta_IS)
+            etat._eff_history_beta_IS = list(list_beta_IS)
             _save_restart_state(xt, yt, all_grad, xt_eff, None, None, [], None)
 
             # --- On re-résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
@@ -1979,7 +1959,7 @@ if __name__ == '__main__':
             _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, "BB final", b_mid_precalc=(_b_mid, _pf_mid_conv))
             print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
 
-        _eff_history_beta_IS = list(list_beta_IS)
+        etat._eff_history_beta_IS = list(list_beta_IS)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
 
     # --------------------------------------------------------------------------- #
@@ -2018,8 +1998,8 @@ if __name__ == '__main__':
 
     def print_EFF_graphs():
         """Planche 3 subplots : historique EFF, criteres BB/BS, theta Kriging.
-        Lit les globaux _eff_history_*. Sauvegarde en PNG dans out_dir_eff."""
-        if not (_eff_history_EFF or _eff_history_BB or _eff_history_theta):
+        Lit les globaux _eff_history_*. Sauvegarde en PNG dans etat.out_dir_eff."""
+        if not (etat._eff_history_EFF or etat._eff_history_BB or etat._eff_history_theta):
             return
 
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
@@ -2027,8 +2007,8 @@ if __name__ == '__main__':
 
         # --- Subplot 1 : EFF vs iterations ---
         ax = axes[0]
-        x_eff = list(range(len(_eff_history_EFF)))
-        vals_eff = [max(abs(v), _clip) for v in _eff_history_EFF]
+        x_eff = list(range(len(etat._eff_history_EFF)))
+        vals_eff = [max(abs(v), _clip) for v in etat._eff_history_EFF]
         ax.semilogy(x_eff, vals_eff, 'b-o', ms=4, lw=1.2, label='EFF(u_opt)')
         ax.axhline(tol_EFF, color='orange', ls='--', lw=1, label=f'tol_EFF={tol_EFF:.1e}')
         ax.set_xlabel('Iteration EFF')
@@ -2039,14 +2019,14 @@ if __name__ == '__main__':
 
         # --- Subplot 2 : BB / BS vs iterations ---
         ax = axes[1]
-        if _eff_history_BB:
-            x_bb = list(range(1, len(_eff_history_BB) + 1))
-            vals_bb = [max(v, _clip) if v is not None else np.nan for v in _eff_history_BB]
+        if etat._eff_history_BB:
+            x_bb = list(range(1, len(etat._eff_history_BB) + 1))
+            vals_bb = [max(v, _clip) if v is not None else np.nan for v in etat._eff_history_BB]
             ax.semilogy(x_bb, vals_bb, 'g-o', ms=4, lw=1.2, label='BB')
             ax.axhline(tol_BB, color='g', ls='--', lw=0.8, label=f'tol_BB={tol_BB:.1e}')
-        if _eff_history_BS:
-            x_bs = list(range(1, len(_eff_history_BS) + 1))
-            vals_bs = [max(v, _clip) if v is not None else np.nan for v in _eff_history_BS]
+        if etat._eff_history_BS:
+            x_bs = list(range(1, len(etat._eff_history_BS) + 1))
+            vals_bs = [max(v, _clip) if v is not None else np.nan for v in etat._eff_history_BS]
             ax.semilogy(x_bs, vals_bs, 'r-s', ms=4, lw=1.2, label='BS')
             ax.axhline(tol_BS, color='r', ls='--', lw=0.8, label=f'tol_BS={tol_BS:.1e}')
         ax.set_xlabel('Iteration')
@@ -2057,9 +2037,9 @@ if __name__ == '__main__':
 
         # --- Subplot 3 : theta Kriging vs iterations ---
         ax = axes[2]
-        if _eff_history_theta:
-            thetas = np.array(_eff_history_theta)   # shape (n_fits, n_var)
-            x_th = list(range(len(_eff_history_theta)))
+        if etat._eff_history_theta:
+            thetas = np.array(etat._eff_history_theta)   # shape (n_fits, n_var)
+            x_th = list(range(len(etat._eff_history_theta)))
             for k in range(thetas.shape[1]):
                 lbl = params_names[k] if k < len(params_names) else f'dim{k}'
                 ax.semilogy(x_th, np.maximum(thetas[:, k], _clip), '-o', ms=4, lw=1.2, label=f'theta_{lbl}')
@@ -2072,20 +2052,20 @@ if __name__ == '__main__':
         ax.grid(True, which='both', alpha=0.4)
 
         fig.tight_layout()
-        fname = f'EFF_graphs_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        fname = f'EFF_graphs_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [EFF_graphs] -> {fname}", flush=True)
 
     def print_Pf_evolution():
         """PNG Pf_IS (mu, mu+2sigma, mu-2sigma) au fil des iterations EFF.
-        Lit _eff_history_Pf. Sauvegarde dans out_dir_eff."""
-        if not _eff_history_Pf:
+        Lit etat._eff_history_Pf. Sauvegarde dans etat.out_dir_eff."""
+        if not etat._eff_history_Pf:
             return
-        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in _eff_history_Pf]
-        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in _eff_history_Pf]
-        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in _eff_history_Pf]
-        x = list(range(len(_eff_history_Pf)))
+        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in etat._eff_history_Pf]
+        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in etat._eff_history_Pf]
+        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in etat._eff_history_Pf]
+        x = list(range(len(etat._eff_history_Pf)))
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(x, pf_mid, 'r-o', ms=5, lw=1.5, label='Pf_IS (mu)')
         ax.plot(x, pf_sup, 'b--^', ms=4, lw=1.0, label='Pf_IS (mu+2sigma)')
@@ -2096,20 +2076,20 @@ if __name__ == '__main__':
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        fname = f'Pf_evolution_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        fname = f'Pf_evolution_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [Pf_evolution] -> {fname}", flush=True)
 
     def print_logPf_evolution():
         """PNG Pf_IS (mu, mu+2sigma, mu-2sigma) en echelle log au fil des iterations EFF.
-        Lit _eff_history_Pf. Sauvegarde dans out_dir_eff."""
-        if not _eff_history_Pf:
+        Lit etat._eff_history_Pf. Sauvegarde dans etat.out_dir_eff."""
+        if not etat._eff_history_Pf:
             return
-        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in _eff_history_Pf]
-        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in _eff_history_Pf]
-        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in _eff_history_Pf]
-        x = list(range(len(_eff_history_Pf)))
+        pf_mid = [d['mid'] if d['mid'] is not None else np.nan for d in etat._eff_history_Pf]
+        pf_sup = [d['sup'] if d['sup'] is not None else np.nan for d in etat._eff_history_Pf]
+        pf_inf = [d['inf'] if d['inf'] is not None else np.nan for d in etat._eff_history_Pf]
+        x = list(range(len(etat._eff_history_Pf)))
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.semilogy(x, pf_mid, 'r-o', ms=5, lw=1.5, label='Pf_IS (mu)')
         ax.semilogy(x, pf_sup, 'b--^', ms=4, lw=1.0, label='Pf_IS (mu+2sigma)')
@@ -2121,15 +2101,14 @@ if __name__ == '__main__':
         ax.legend(fontsize=9)
         ax.grid(True, which='both', alpha=0.3)
         fig.tight_layout()
-        fname = f'logPf_evolution_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        fname = f'logPf_evolution_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [logPf_evolution] -> {fname}", flush=True)
 
     # --- HF GRID CACHE ---
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
-    hf_2d_grid_fixed_final = None
 
     def _load_hf_cache(n_grid_hf_local, cache_file, sd):
         if not config_is_identical:
@@ -2195,7 +2174,7 @@ if __name__ == '__main__':
         Lecture/ecriture automatique d'un cache sidecar JSON.
         Sauvegarde incrementale dans cache_file.partial (reprise apres crash).
         Retourne Z (n_grid_hf x n_grid_hf)."""
-        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
+
         if cache_file is None:
             cache_file = _HF_CACHE_FILE
         if sd is None:
@@ -2204,12 +2183,12 @@ if __name__ == '__main__':
         if cached is not None:
             _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': cached.tolist()}
             if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
+                etat.hf_2d_grid_fixed_final = _grid_dict
             else:
-                hf_2d_grid_fixed = _grid_dict
+                etat.hf_2d_grid_fixed = _grid_dict
             return cached
         import time as _time_local
-        _point_log_phase[0] = "HF"
+        etat._point_log_phase[0] = "HF"
         n_total = len(grid_hf)
         # Charger le cache partiel (reprise apres crash)
         Z_flat = _load_hf_cache_partial(cache_file, sd, n_total)
@@ -2241,9 +2220,9 @@ if __name__ == '__main__':
         Z = np.array(Z_flat, dtype=float).reshape(n_grid_hf_local, n_grid_hf_local)
         _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
         if grid_var_name == 'hf_2d_grid_fixed_final':
-            hf_2d_grid_fixed_final = _grid_dict
+            etat.hf_2d_grid_fixed_final = _grid_dict
         else:
-            hf_2d_grid_fixed = _grid_dict
+            etat.hf_2d_grid_fixed = _grid_dict
         _save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
         # supprimer le cache partiel
         _partial_file = cache_file + '.partial'
@@ -2253,8 +2232,6 @@ if __name__ == '__main__':
 
     # --- HF GRILLE FULL (n_var-D) ---
     _HF_FULL_CACHE_FILE = os.path.join(_path_ds, "hf_grid_full_cache.json")
-    _hf_grid_full = [None]   # [Z_full] en memoire (array n_var-D), liste pour mutabilite dans closures
-    _hf_grid_full_axes = [None]  # axes de la grille (liste de 1D arrays)
 
     def _load_hf_grid_full():
         if not config_is_identical:
@@ -2284,12 +2261,12 @@ if __name__ == '__main__':
         """Calcule la grille HF complete (n_grid_hf^n_var points STRAINS)."""
         cached = _load_hf_grid_full()
         if cached is not None:
-            _hf_grid_full[0] = cached
+            etat._hf_grid_full[0] = cached
             axes = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
-            _hf_grid_full_axes[0] = axes
+            etat._hf_grid_full_axes[0] = axes
             return cached
         import time as _time_local
-        _point_log_phase[0] = "HF_FULL"
+        etat._point_log_phase[0] = "HF_FULL"
         axes = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
         grids = np.meshgrid(*axes, indexing='ij')
         grid_flat = np.column_stack([g.ravel() for g in grids])
@@ -2311,8 +2288,8 @@ if __name__ == '__main__':
         _t_total = (_time_local.perf_counter() - _t_start) / 60
         print(f"\n##### HF FULL GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
         Z_full = np.array(Z_flat).reshape([n_grid_hf] * n_var)
-        _hf_grid_full[0] = Z_full
-        _hf_grid_full_axes[0] = axes
+        etat._hf_grid_full[0] = Z_full
+        etat._hf_grid_full_axes[0] = axes
         _save_hf_grid_full(Z_full)
         return Z_full
 
@@ -2320,8 +2297,8 @@ if __name__ == '__main__':
         """Extrait une coupe 2D (n_grid_hf x n_grid_hf) depuis la grille full par interpolation."""
         from scipy.interpolate import RegularGridInterpolator
         idx_x, idx_y, fixed = sd
-        axes = _hf_grid_full_axes[0]
-        interp = RegularGridInterpolator(axes, _hf_grid_full[0], method='linear')
+        axes = etat._hf_grid_full_axes[0]
+        interp = RegularGridInterpolator(axes, etat._hf_grid_full[0], method='linear')
         ux = np.linspace(u1_min, u1_max, n_grid_hf)
         uy = np.linspace(u2_min, u2_max, n_grid_hf)
         UX, UY = np.meshgrid(ux, uy)
@@ -2334,8 +2311,6 @@ if __name__ == '__main__':
         return Z
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
-    _hf_custom_result = [None]   # cache memoire (evite relecture JSON a chaque print)
-
     def _hf_from_custom_points(sd):
         """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
         puis interpole (griddata) sur une grille reguliere.
@@ -2343,8 +2318,8 @@ if __name__ == '__main__':
         Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
         if hf_custom_points is None:
             return None, None, None
-        if _hf_custom_result[0] is not None:
-            return _hf_custom_result[0]
+        if etat._hf_custom_result[0] is not None:
+            return etat._hf_custom_result[0]
         from scipy.interpolate import griddata
         import time as _time_local
         idx_x, idx_y, fixed = sd
@@ -2364,7 +2339,7 @@ if __name__ == '__main__':
                     uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
                     UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
                     Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
-                    _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
+                    etat._hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
                     return Z_true, UX_hf, UY_hf
             except Exception:
                 pass
@@ -2390,7 +2365,7 @@ if __name__ == '__main__':
             if n_workers_DOE and n_workers_DOE > 1 and len(_pts_todo) > 1:
                 _g_todo = run_HF_grid_parallel(_pts_todo, n_workers=n_workers_DOE)
             else:
-                _point_log_phase[0] = "HF_CUSTOM"
+                etat._point_log_phase[0] = "HF_CUSTOM"
                 _g_todo = []
                 _t_start = _time_local.perf_counter()
                 for _k, pt in enumerate(_pts_todo):
@@ -2431,17 +2406,17 @@ if __name__ == '__main__':
         uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
         Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
-        _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
+        etat._hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
         return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
         """Retourne Z_true (n_grid_hf x n_grid_hf) pour une coupe sd.
         Cascade : cache 2D memoire -> cache 2D disque -> grille full -> recalcul 2D."""
-        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
+
         if cache_file is None:
             cache_file = _HF_CACHE_FILE
         # 1. Cache 2D memoire
-        _mem = hf_2d_grid_fixed_final if grid_var_name == 'hf_2d_grid_fixed_final' else hf_2d_grid_fixed
+        _mem = etat.hf_2d_grid_fixed_final if grid_var_name == 'hf_2d_grid_fixed_final' else etat.hf_2d_grid_fixed
         if _mem is not None:
             return np.array(_mem['Z'])
         # 2. Cache 2D disque
@@ -2449,20 +2424,20 @@ if __name__ == '__main__':
         if Z_cached is not None:
             _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf}, 'Z': Z_cached.tolist()}
             if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
+                etat.hf_2d_grid_fixed_final = _grid_dict
             else:
-                hf_2d_grid_fixed = _grid_dict
+                etat.hf_2d_grid_fixed = _grid_dict
             return Z_cached
         # 3. Grille full
-        if _hf_grid_full[0] is not None:
+        if etat._hf_grid_full[0] is not None:
             print(f"[HF SLICE] extraction depuis grille full pour coupe ({sd[0]},{sd[1]})", flush=True)
             Z = _extract_hf_slice(sd)
             _save_hf_cache(Z, n_grid_hf, cache_file, sd)
             _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf}, 'Z': Z.tolist()}
             if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
+                etat.hf_2d_grid_fixed_final = _grid_dict
             else:
-                hf_2d_grid_fixed = _grid_dict
+                etat.hf_2d_grid_fixed = _grid_dict
             return Z
         # 4. Recalcul 2D (49 SOCP)
         idx_x, idx_y, fixed = sd
@@ -2480,7 +2455,7 @@ if __name__ == '__main__':
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
         """Planche 3 graphiques cote a cote : EFF, sigma, g surrogate.
         Utilise la globale slice_def pour definir la coupe 2D."""
-        global hf_2d_grid_fixed
+
         _sd = slice_def if slice_def is not None else (0, 1, {})
         idx_x, idx_y, fixed = _sd
         n_added = len(xt_eff)
@@ -2514,9 +2489,9 @@ if __name__ == '__main__':
 
         # --- Figure ---
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(21, 6))
-        _pce_line   = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
-        _theta_str  = '  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']' if _eff_history_theta else ''
-        _loo_str    = f'  LOO={_gepck_loo:.3e}' if _gepck_loo is not None else ''
+        _pce_line   = f'\n{etat._gepck_pce_label}' if etat._gepck_pce_label else ''
+        _theta_str  = '  theta=[' + ', '.join(f'{v:.3f}' for v in etat._eff_history_theta[-1]) + ']' if etat._eff_history_theta else ''
+        _loo_str    = f'  LOO={etat._gepck_loo:.3e}' if etat._gepck_loo is not None else ''
         _fixed_str  = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
         fig.suptitle(f'{modele} - N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_theta_str}{_loo_str}{_fixed_str}{_pce_line}', fontsize=10)
 
@@ -2565,20 +2540,20 @@ if __name__ == '__main__':
         _decorate(ax3)
 
         plt.tight_layout()
-        fname = f'EFF_{n_added}points_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        fname = f'EFF_{n_added}points_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [EFF visu] -> {fname}", flush=True)
 
     def print_globalplanche_EFF(xt, yt, all_grad, xt_eff):
         """Planche globale EFF : 3 colonnes (EFF, sigma, g) x N lignes (DOE initial + chaque etape EFF).
-        Refit le surrogate a chaque etape. Utilise slice_def_final pour la coupe.
+        Refit le surrogate a chaque etape. Utilise etat.slice_def_final pour la coupe.
         Grille HF calculee une seule fois et reutilisee."""
-        global hf_2d_grid_fixed_final
-        if slice_def_final is None:
-            print("[GLOBAL PLANCHE] slice_def_final est None, skip", flush=True)
+
+        if etat.slice_def_final is None:
+            print("[GLOBAL PLANCHE] etat.slice_def_final est None, skip", flush=True)
             return
-        idx_x, idx_y, fixed = slice_def_final
+        idx_x, idx_y, fixed = etat.slice_def_final
         n_eff = len(xt_eff)
         n_steps = n_eff + 1   # DOE initial + chaque point EFF
 
@@ -2595,12 +2570,12 @@ if __name__ == '__main__':
         # --- Grille HF (une seule fois) ---
         Z_true, UX_hf, UY_hf = None, None, None
         if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(etat.slice_def_final)
         elif print_HF:
             ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+            Z_true = _get_hf_slice(etat.slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
 
         _xlabel = f'u_{params_names[idx_x]}'
         _ylabel = f'u_{params_names[idx_y]}'
@@ -2669,14 +2644,14 @@ if __name__ == '__main__':
 
         fig.suptitle(f'Evolution EFF - {modele} - {_fixed_str}', fontsize=14, y=1.0)
         plt.tight_layout()
-        fname = f'globalplanche_EFF_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=100, bbox_inches='tight')
+        fname = f'globalplanche_EFF_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=100, bbox_inches='tight')
         plt.close(fig)
         print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
 
     def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
-        global hf_2d_grid_fixed
+
         u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
         u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
@@ -2699,8 +2674,8 @@ if __name__ == '__main__':
             u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
+            if etat.hf_2d_grid_fixed is not None:
+                Z_true = np.array(etat.hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_EFF")
@@ -2731,7 +2706,7 @@ if __name__ == '__main__':
 
     def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
         """Carte 2D de l'ecart-type conditionnel du surrogate."""
-        global hf_2d_grid_fixed
+
         u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
         u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
         U1, U2 = np.meshgrid(u1, u2)
@@ -2754,8 +2729,8 @@ if __name__ == '__main__':
             u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
+            if etat.hf_2d_grid_fixed is not None:
+                Z_true = np.array(etat.hf_2d_grid_fixed['Z'])
             else:
                 grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
                 Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_sigma")
@@ -2783,7 +2758,7 @@ if __name__ == '__main__':
         plt.show(block=False)
 
     def print_results(best_result, g_ot):
-        _point_log_phase[0] = "USTAR"
+        etat._point_log_phase[0] = "USTAR"
         u_star = best_result.getStandardSpaceDesignPoint()
         n_iter = best_result.getOptimizationResult().getIterationNumber()
         dist_X = dist_jointe()
@@ -2808,11 +2783,11 @@ if __name__ == '__main__':
             for i, p in enumerate(params_names):
                 print(f"dg/du_{p} en u* (HF@u*GEK) = {grad_HF_U_star[i]:.6f}", flush=True)
             u0             = ot.Point([0.0] * n_var)
-            if _fosm_u0_cache[0] is None:
+            if etat._fosm_u0_cache[0] is None:
                 g0_HF, grad_HF_U0, _ = run_HF(u0)
-                _fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
+                etat._fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
             else:
-                g0_HF, grad_HF_U0 = _fosm_u0_cache[0]
+                g0_HF, grad_HF_U0 = etat._fosm_u0_cache[0]
                 print("  [FOSM] run_HF([0,0]) reutilise du cache (pas de SOCP redondant)", flush=True)
             u_FOSM         = grad_HF_U0 * (-g0_HF / grad_HF_U0.normSquare())
             print(f"u* FOSM (HF) = {[round(v, 4) for v in u_FOSM]}", flush=True)
@@ -2820,17 +2795,17 @@ if __name__ == '__main__':
 
 
     def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff):
-        global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
-        if slice_def_final is None:
+        global u1_min, u1_max, u2_min, u2_max
+        if etat.slice_def_final is None:
             if best_result is not None:
                 _imp = np.array(best_result.getImportanceFactors())
                 _top2 = list(np.argsort(_imp)[::-1][:2])
                 _u_star = np.array(best_result.getStandardSpaceDesignPoint())
-                slice_def_final = (min(_top2), max(_top2),
+                etat.slice_def_final = (min(_top2), max(_top2),
                                    {i: float(_u_star[i]) for i in range(n_var) if i not in _top2})
             else:
-                slice_def_final = slice_def
-        idx_x, idx_y, fixed = slice_def_final
+                etat.slice_def_final = slice_def
+        idx_x, idx_y, fixed = etat.slice_def_final
 
         ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
         uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
@@ -2855,14 +2830,14 @@ if __name__ == '__main__':
 
         # --- Contour HF grossier ---
         if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            Z_true, UX_hf, UY_hf = _hf_from_custom_points(etat.slice_def_final)
             if Z_true is not None:
                 ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
         elif print_HF:
             ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+            Z_true = _get_hf_slice(etat.slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- Points ---
@@ -2959,8 +2934,8 @@ if __name__ == '__main__':
         _fixed_str = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
         ax.set_title(f'FORM et etat limite g=0{_fixed_str}')
         plt.tight_layout()
-        fname = f'visu{modele}_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
+        fname = f'visu{modele}_{etat.timestamp}.png'
+        fig.savefig(os.path.join(etat.out_dir_eff, fname), dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"  [visu] -> {fname}", flush=True)
 
@@ -3124,23 +3099,23 @@ if __name__ == '__main__':
         xt = np.array(_rs['xt'], float)
         yt = np.array(_rs['yt'], float)
         all_grad = np.array(_rs['all_grad'], float)
-        _restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
+        etat._restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
         if _rs.get('max_degree') is not None:
             max_degree = int(_rs['max_degree'])
-        hf_2d_grid_fixed = _rs.get('hf_2d_grid')
-        _eff_history_EFF   = list(_rs.get('hist_EFF', []))
-        _eff_history_BB    = list(_rs.get('hist_BB', []))
-        _eff_history_BS    = list(_rs.get('hist_BS', []))
-        _eff_history_theta = list(_rs.get('hist_theta', []))
-        _eff_history_beta_IS = list(_rs.get('hist_beta_IS', []))
-        _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
-        _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
-        _point_log_round[0] = _enrich_round
+        etat.hf_2d_grid_fixed = _rs.get('hf_2d_grid')
+        etat._eff_history_EFF   = list(_rs.get('hist_EFF', []))
+        etat._eff_history_BB    = list(_rs.get('hist_BB', []))
+        etat._eff_history_BS    = list(_rs.get('hist_BS', []))
+        etat._eff_history_theta = list(_rs.get('hist_theta', []))
+        etat._eff_history_beta_IS = list(_rs.get('hist_beta_IS', []))
+        etat._enrich_round     = int(_rs.get('enrich_round', 0)) + 1
+        etat._round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
+        etat._point_log_round[0] = etat._enrich_round
         with open(_POINT_LOG_FILE, "a") as _pf:
-            _pf.write(json.dumps({"phase": "_RESTART", "round": _enrich_round,
-                                  "n_total": int(len(xt)), "n_eff": len(_restart_xt_eff)}) + "\n")
-        print(f"[RESTART] charge {len(xt)} pts (dont {len(_restart_xt_eff)} EFF) "
-              f"depuis {_RESTART_STATE_FILE} (round {_enrich_round})", flush=True)
+            _pf.write(json.dumps({"phase": "_RESTART", "round": etat._enrich_round,
+                                  "n_total": int(len(xt)), "n_eff": len(etat._restart_xt_eff)}) + "\n")
+        print(f"[RESTART] charge {len(xt)} pts (dont {len(etat._restart_xt_eff)} EFF) "
+              f"depuis {_RESTART_STATE_FILE} (round {etat._enrich_round})", flush=True)
 
         # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func = None, None, None
