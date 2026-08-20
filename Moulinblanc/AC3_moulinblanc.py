@@ -531,7 +531,7 @@ if __name__ == '__main__':
     #             'loi': loi_fy, 'args': (FY_MEAN, None)},
     # }
 
-    FY_MEAN = 235.0  
+    # FY_MEAN = 235.0  
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {}
     PARAM_CONFIG_LOAD = {
@@ -539,7 +539,7 @@ if __name__ == '__main__':
                               "axis": "position", "region_key": "s_convoi"},
                      'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
         'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.1, 0.30)},
+                     'loi': loi_F_permanente, 'args': (0.2, 0.40)},
     }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
