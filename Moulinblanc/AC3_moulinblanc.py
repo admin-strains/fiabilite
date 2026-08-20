@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'PCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
@@ -2860,7 +2860,10 @@ if __name__ == '__main__':
             ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+            if slice_def_final == slice_def:
+                Z_true = _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
+            else:
+                Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
 
         _xlabel = f'u_{params_names[idx_x]}'
         _ylabel = f'u_{params_names[idx_y]}'
@@ -3122,7 +3125,10 @@ if __name__ == '__main__':
             ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+            if slice_def_final == slice_def:
+                Z_true = _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
+            else:
+                Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- Points ---
