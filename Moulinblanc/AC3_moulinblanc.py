@@ -71,14 +71,14 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'PCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
 
