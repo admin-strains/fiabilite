@@ -521,6 +521,17 @@ if __name__ == '__main__':
 
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
+    # # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
+    # PARAM_CONFIG_CAD = {
+    #     # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
+    #     # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
+    #     'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
+    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
+    #     'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
+    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
+    # }
+
+    FY_MEAN = 235.0  
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
     PARAM_CONFIG_CAD = {}
     PARAM_CONFIG_LOAD = {
@@ -735,10 +746,10 @@ if __name__ == '__main__':
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         params={params_names[i]: x_point[i] for i in range(n_var)}
-        patch_params(path, **params) #à cette étape SOL ne contient que 'fc': ,'fy':
-        model = MODEL() #ici model n'est pas encore rempli
+        patch_params(path, **params) 
+        model = MODEL() 
         SET_CONTEXT(model, path)
-        fileName = os.path.join(path, AnalysisName + ".dscad") #on crée le chemin du fichier disque .dscad lisible par C. C va tout faire et on renverra les info plus tard (.load)
+        fileName = os.path.join(path, AnalysisName + ".dscad") 
 
         cadfile = open(path + '\\dsCad.txt', 'r')
         cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
