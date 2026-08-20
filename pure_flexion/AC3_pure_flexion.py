@@ -72,7 +72,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'KRG'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement
     do_IS   = True                            #si on veut calculer la proba globale
 
@@ -112,10 +112,8 @@ if __name__ == '__main__':
     reduc_PLS = 0
 
     # 2. PCE
-    seuil_pce = 0.90                              # seuil de validation de l'erreur
     q = 0.75                                              # tri base poly candidats
     max_degree = 2     # (fixe) degre max base candidats — LARS gere P > N
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
@@ -126,7 +124,7 @@ if __name__ == '__main__':
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
-    eps_taylor = 0.1                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
+    eps_taylor = 0.0                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
@@ -520,10 +518,10 @@ if __name__ == '__main__':
     n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
     rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
     PARAM_CONFIG_CAD = {
-        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names, "region_key": "fy"},
-               'loi': loi_fy, 'args': (550, None)},
         'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"], "region_key": "fc"},
                'loi': loi_fc, 'args': (48, 0.12)},
+        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names, "region_key": "fy"},
+               'loi': loi_fy, 'args': (550, None)},
     }
     PARAM_CONFIG_LOAD = {
         # 'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0", "region_key": "F"},
@@ -1078,7 +1076,7 @@ if __name__ == '__main__':
         dist_X   = dist_jointe()
         T     = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
+        dist_U = dist_X.getStandardDistribution() 
         lhs    = ot.LHSExperiment(dist_U, n_doe)
         sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         U_doe  = sa.generate()
@@ -1547,11 +1545,12 @@ if __name__ == '__main__':
 
     def build_metamodel_KRG(xt, yt):
         n_var = xt.shape[1]
-        basis = ot.ConstantBasisFactory(n_var).build()
+        basis = ot.LinearBasisFactory(n_var).build()
+        #apres test: remettre base constante avec ot.ConstantBasisFactory(n_var).build()
         covarianceModel = ot.SquaredExponential([1.0] * n_var)
         algo_KRG = ot.KrigingAlgorithm(xt, yt, covarianceModel, basis)
         if do_KRG:
-            algo_KRG.setOptimizationBounds(ot.Interval([1.0] * n_var, [5.0] * n_var))
+            algo_KRG.setOptimizationBounds(ot.Interval([1.0] * n_var, [100.0] * n_var))
         algo_KRG.run()
         result = algo_KRG.getResult()
         cov_opt = result.getCovarianceModel()
@@ -3391,36 +3390,6 @@ if __name__ == '__main__':
         event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
         xt_eff = None
 
-    # --- Mode test : DOE Sobol fixe, evaluer HF, sauver, sortir ---
-    # if do_test:
-    #     from scipy.stats.qmc import Sobol
-    #     _test_n0 = int(os.environ.get("_TEST_N0", "16"))
-    #     _sobol = Sobol(d=n_var, scramble=True, seed=42)
-    #     _sobol_u01 = _sobol.random(16)                         # 16 pts dans [0,1]^n_var
-    #     _sobol_std = -7.5 + 15.0 * _sobol_u01                 # -> uniforme [-7.5, 7.5]^n_var
-    #     xt = _sobol_std[:_test_n0]                             # premiers _test_n0 points
-    #     dist_X = dist_jointe()
-    #     T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-    #     SOL = [{} for _ in range(_test_n0)]
-    #     for i in range(_test_n0):
-    #         x_pt = T_inv(ot.Point(list(xt[i])))
-    #         for j, p in enumerate(params_names):
-    #             SOL[i][p] = float(x_pt[j])
-    #     if n_workers_DOE > 1 and _test_n0 > 1:
-    #         SOL = run_DOE_parallel(modelname, SOL, params_names, min(n_workers_DOE, _test_n0))
-    #     else:
-    #         SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True)
-    #     yt = np.array([SOL[i]['g'] for i in range(_test_n0)]).reshape(-1, 1)
-    #     all_grad = np.array([[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(_test_n0)])
-    #     print(f"[TEST DOE] n0={_test_n0}, xt shape={xt.shape}", flush=True)
-    #     print("xt_test = ["); [print(f"    [{', '.join(f'{v:.16f}' for v in row)}],") for row in xt]; print("]")
-    #     print("yt_test = ["); [print(f"    {yt[i,0]:.16f},") for i in range(_test_n0)]; print("]")
-    #     print("all_grad_test = ["); [print(f"    [{', '.join(f'{v:.10f}' for v in row)}],") for row in all_grad]; print("]")
-    #     _test_out = os.path.join(r'C:\_workingDir\_SF\test flexion\output', f'doe_sobol_n0_{_test_n0}.json')
-    #     json.dump({"n0": _test_n0, "xt": xt.tolist(), "yt": yt.tolist(), "all_grad": all_grad.tolist()},
-    #               open(_test_out, "w"), indent=1)
-    #     print(f"[TEST DOE] sauve dans {_test_out}", flush=True)
-    #     sys.exit(0)
 
     if print_3D:
         print_3D_HF()
