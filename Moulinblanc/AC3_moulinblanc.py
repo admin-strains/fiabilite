@@ -78,8 +78,9 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
+
 
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
@@ -131,7 +132,7 @@ if __name__ == '__main__':
 
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 360                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 6                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
@@ -166,7 +167,7 @@ if __name__ == '__main__':
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
     # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
-    do_custom_hf = True
+    do_custom_hf = False
     _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
@@ -521,26 +522,27 @@ if __name__ == '__main__':
 
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
-    # # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
-    # PARAM_CONFIG_CAD = {
-    #     # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
-    #     # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
-    #     'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
-    #     'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
-    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
-    # }
-
-    # FY_MEAN = 235.0  
-    # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    PARAM_CONFIG_CAD = {}
-    PARAM_CONFIG_LOAD = {
-        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
-                              "axis": "position", "region_key": "s_convoi"},
-                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.2, 0.40)},
+    # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
+    FY_MEAN = 235.0  
+    PARAM_CONFIG_CAD = {
+        # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
+        # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
+        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
     }
+
+    PARAM_CONFIG_LOAD = {}
+    # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    # PARAM_CONFIG_CAD = {}
+    # PARAM_CONFIG_LOAD = {
+    #     's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
+    #                           "axis": "position", "region_key": "s_convoi"},
+    #                  'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
+    #     'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
+    #                  'loi': loi_F_permanente, 'args': (0.2, 0.40)},
+    # }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
@@ -550,8 +552,8 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 
-    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, fy1]
-    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
+    eff_bounds_min = [-7.5, -7.5]     # bornes inf de la recherche EFF [s_convoi, fy1]
+    eff_bounds_max = [+7.5, +7.5]     # bornes sup de la recherche EFF [s_convoi, fy1]
     
     def _is_position_var(sens):
         """Detecte si une region de sensibilite est une variable de position (axis='position')."""
