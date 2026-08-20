@@ -45,7 +45,7 @@ from scipy.stats import norm
 from math import comb
 import warnings
 from datetime import datetime
-from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
+from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck, fit_pck, predict_pck
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -133,6 +133,7 @@ if __name__ == '__main__':
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 360                       # plafond de points EFF ajoutes (arret force si atteint)
     n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    eps_taylor = 0.0                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
     print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
@@ -335,6 +336,7 @@ if __name__ == '__main__':
     do_PCKRG = True if modele == 'PCKRG' else False
     do_old_GEPCK = True if modele == 'old_GEPCK' else False
     do_GEPCK     = True if modele == 'GEPCK'     else False
+    do_PCK       = True if modele == 'PCK'       else False
     do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
     do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
 
@@ -1136,6 +1138,16 @@ if __name__ == '__main__':
                     print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
                 print("]", flush=True)
             _save_doe_cache(xt, yt, all_grad)
+            if do_PCK and eps_taylor > 0:
+                _n_real = len(xt)
+                for _i_pt in range(_n_real):
+                    for _i_dim in range(n_var):
+                        _u_virt = xt[_i_pt] + eps_taylor * np.eye(n_var)[_i_dim]
+                        _y_virt = yt[_i_pt, 0] + eps_taylor * all_grad[_i_pt, _i_dim]
+                        xt = np.vstack([xt, [_u_virt]])
+                        yt = np.vstack([yt, [[_y_virt]]])
+                        all_grad = np.vstack([all_grad, [all_grad[_i_pt]]])
+                print(f"  [Taylor DOE] {_n_real} HF + {_n_real * n_var} virtuels = {len(xt)} pts", flush=True)
             return xt, yt, all_grad
         return xt
 
@@ -1359,6 +1371,34 @@ if __name__ == '__main__':
             return [[v] for v in grad]
 
     # --------------------------------------------------------------------------- #
+    # WRAPPER PCK (sans gradient analytique — FORM utilise differences finies)    #
+    class PCKFunction(ot.OpenTURNSPythonFunction):
+        def __init__(self, fm):
+            super().__init__(n_var, 1)
+            self.fm = fm
+            self.n_eval_calls = 0
+
+        def _exec(self, u):
+            u_np  = np.array(u).reshape(1, -1)
+            g_val = float(predict_pck(self.fm, u_np)[0, 0])
+            self.n_eval_calls += 1
+            if print_gepck_calls:
+                print(f"[PCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
+                      f"  g={g_val:+.6f}", flush=True)
+            return [g_val]
+
+        def _exec_sample(self, U):
+            U_np = np.array(U)
+            return predict_pck(self.fm, U_np)[:, 0:1].tolist()
+
+        def _exec_sigma(self, u):
+            u_np = np.array(u).reshape(1, -1)
+            _, YSig2 = predict_pck(self.fm, u_np, return_var=True)
+            return float(np.sqrt(max(0.0, float(YSig2[0, 0]))))
+
+        # pas de _gradient : OT utilise differences finies pour FORM
+
+    # --------------------------------------------------------------------------- #
     # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
 
     class BoundSurrogateFunction(ot.OpenTURNSPythonFunction):
@@ -1387,7 +1427,10 @@ if __name__ == '__main__':
             _fm = getattr(getattr(self._sigma_func, '__self__', None), 'fm', None)
             if _fm is not None:
                 U_np = np.array(U)
-                mu_arr, sig2_arr = predict_gepck(_fm, U_np, return_var=True)
+                if do_PCK:
+                    mu_arr, sig2_arr = predict_pck(_fm, U_np, return_var=True)
+                else:
+                    mu_arr, sig2_arr = predict_gepck(_fm, U_np, return_var=True)
                 mu    = mu_arr[:, 0]
                 sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
                 result = mu + self._sign * 2.0 * sigma
@@ -1614,6 +1657,44 @@ if __name__ == '__main__':
             gepck_impl = GEPCKFunction(_fm)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
+
+        elif do_PCK:
+            if xt is None: xt, yt, all_grad = build_DOE()
+            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
+            _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
+            if fixed_fm is not None:
+                _prev_theta = fixed_fm['Kriging'][0]['theta']
+                _prev_npoly = int(fixed_fm['NumberOfPoly'][0])
+                _prev_idx   = fixed_fm['idxranking'][0][:_prev_npoly]
+                _prev_poly  = fixed_fm['AllIndices'][0][np.array(_prev_idx), :]
+                _prev_types = fixed_fm['PolyTypes']
+                _opts = {'Mode': 'sequential',
+                         'PolyIndices': _prev_poly,
+                         'PolyTypes': _prev_types,
+                         'Kriging': {'Optim': {'Method': 'none',
+                                               'InitialValue': _prev_theta}}}
+            else:
+                _opts = {'Mode': 'optimal',
+                         'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
+            print(f"=== PCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                _fm = fit_pck(xt, yt.ravel(), _opts, _marginals, _copula)
+            print(f"  LOO={_fm['Error'][0]['LOO']:.4e}  n_poly={_fm['NumberOfPoly'][0]}  theta={_fm['Kriging'][0]['theta']}", flush=True)
+            _final_idx   = _fm['idxranking'][0][:_fm['NumberOfPoly'][0]]
+            _sel_indices = _fm['AllIndices'][0][np.array(_final_idx), :]
+            _beta_pce    = np.array(_fm['Kriging'][0]['beta']).ravel()
+            _terms = []
+            for _mi, _coef in zip(_sel_indices, _beta_pce):
+                _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
+                _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
+            print(f"  PCK PCE termes : {' '.join(_terms)}", flush=True)
+            _gepck_pce_label = ' '.join(_terms)
+            _gepck_loo       = _fm['Error'][0]['LOO']
+            _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
+            pck_impl = PCKFunction(_fm)
+            g_ot       = ot.Function(pck_impl)
+            sigma_func = pck_impl._exec_sigma
 
         elif do_HF:
             if xt is None: xt = build_DOE()
@@ -1871,7 +1952,7 @@ if __name__ == '__main__':
             beta_f  = r_i.getHasoferReliabilityIndex()
             pf_f    = r_i.getEventProbability()
             # --- IS adaptatif parallelisable (sonde + ramp-up) ---
-            if _IS_PARALLEL and fm is not None:
+            if _IS_PARALLEL and fm is not None and not do_PCK:
                 u_star  = list(r_i.getStandardSpaceDesignPoint())
                 _state  = dict(xt=xt, yt=yt, all_grad=all_grad, max_degree=max_degree)
                 _cap    = int(os.environ.get("_IS_CAP", str(n_IS)))
@@ -2000,6 +2081,15 @@ if __name__ == '__main__':
                     grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
                     all_grad = np.vstack([all_grad, grad_val])
                     print(f"[EFF HF] u={list(np.round(_u_pt, 10))}  g={g_val:.10f}  grad_U={[round(float(grad_U[i]), 10) for i in range(n_var)]}", flush=True)
+                    # --- Points virtuels Taylor ordre 1 (PCK uniquement) ---
+                    if do_PCK and eps_taylor > 0 and n_batch_EFF <= 1:
+                        for _i_dim in range(n_var):
+                            _u_virt = np.array(_u_pt) + eps_taylor * np.eye(n_var)[_i_dim]
+                            _y_virt = g_val + eps_taylor * float(grad_U[_i_dim])
+                            xt = np.vstack([xt, [_u_virt]])
+                            yt = np.vstack([yt, [[_y_virt]]])
+                            all_grad = np.vstack([all_grad, grad_val])
+                            print(f"[EFF Taylor] u={list(np.round(_u_virt, 10))}  y_taylor={_y_virt:.10f}  (eps={eps_taylor}, dim={_i_dim})", flush=True)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
             # --- Suivi convergence beta_IS ---
@@ -2162,7 +2252,10 @@ if __name__ == '__main__':
         """
         _fm = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
         if _fm is not None:
-            mu_arr, sig2_arr = predict_gepck(_fm, grid, return_var=True)
+            if do_PCK:
+                mu_arr, sig2_arr = predict_pck(_fm, grid, return_var=True)
+            else:
+                mu_arr, sig2_arr = predict_gepck(_fm, grid, return_var=True)
             mu    = mu_arr[:, 0]
             sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
             return mu, sigma
