@@ -78,7 +78,7 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = False   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
 
@@ -3409,7 +3409,7 @@ if __name__ == '__main__':
 
         # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func = None, None, None
-        xt_eff = None
+        xt_eff = list(_restart_xt_eff)
     else:
         # --- Reset log incremental ---
         open(_POINT_LOG_FILE, "w").close()
