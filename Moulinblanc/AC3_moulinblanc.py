@@ -71,14 +71,14 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'PCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement 
     do_IS   = True                            #si on veut calculer la proba globale 
 
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = False  #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
 
@@ -125,14 +125,14 @@ if __name__ == '__main__':
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = -1                                              # critere d'arret EFF
+    tol_EFF = 0.001                                              # critere d'arret EFF
     tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
     EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
 
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 360                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 6                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
+    n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
     eps_taylor = 0.0                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
     print_EFF_progres = True                  # True = prints debug EFF a chaque iter
     print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
     # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
-    do_custom_hf = True
+    do_custom_hf = False
     _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
@@ -524,26 +524,27 @@ if __name__ == '__main__':
 
         return ot.Distribution(TukeyDistribution(a, b, alpha))
 
-    # # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
-    # FY_MEAN = 235.0
-    # PARAM_CONFIG_CAD = {
-    #     # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
-    #     # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
-    #     'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
-    #     'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
-    #             'loi': loi_fy, 'args': (FY_MEAN, None)},
-    # }
-
-    # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    PARAM_CONFIG_CAD = {}
-    PARAM_CONFIG_LOAD = {
-        's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
-                              "axis": "position", "region_key": "s_convoi"},
-                     'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-        'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-                     'loi': loi_F_permanente, 'args': (0.2, 0.40)},
+    # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
+    FY_MEAN = 235.0
+    PARAM_CONFIG_CAD = {
+        # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
+        # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
+        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
+        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
+                'loi': loi_fy, 'args': (FY_MEAN, None)},
     }
+
+    PARAM_CONFIG_LOAD = {}
+    # # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    # PARAM_CONFIG_CAD = {}
+    # PARAM_CONFIG_LOAD = {
+    #     's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
+    #                           "axis": "position", "region_key": "s_convoi"},
+    #                  'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
+    #     'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
+    #                  'loi': loi_F_permanente, 'args': (0.2, 0.40)},
+    # }
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
@@ -553,8 +554,8 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 
-    eff_bounds_min = [-2.0, -3.32]     # bornes inf de la recherche EFF [s_convoi, q]
-    eff_bounds_max = [+2.0, +7.5]     # bornes sup de la recherche EFF [s_convoi, q]
+    eff_bounds_min = [-7.5, -7.5]     # bornes inf de la recherche EFF [fy1, fy2]
+    eff_bounds_max = [+7.5, +7.5]     # bornes sup de la recherche EFF [fy1, fy2]
     
     def _is_position_var(sens):
         """Detecte si une region de sensibilite est une variable de position (axis='position')."""
@@ -1490,7 +1491,7 @@ if __name__ == '__main__':
         covarianceModel = ot.SquaredExponential([1.0] * n_var)
         algo_KRG = ot.KrigingAlgorithm(xt, yt, covarianceModel, basis)
         if do_KRG:
-            algo_KRG.setOptimizationBounds(ot.Interval([1.0] * n_var, [5.0] * n_var))
+            algo_KRG.setOptimizationBounds(ot.Interval([0.0] * n_var, [100.0] * n_var))
         algo_KRG.run()
         result = algo_KRG.getResult()
         cov_opt = result.getCovarianceModel()
