@@ -72,7 +72,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
     # DEFINITION DU MODELE                                                        #
-    modele = 'KRG'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
+    modele = 'PCK'                    #options: 'GEPCK', 'PCK', 'PCKRG', 'KRG', 'GEK', 'HF'
     do_EFF = True                              #si on veut enrichir progressivement
     do_IS   = True                            #si on veut calculer la proba globale
 
@@ -113,14 +113,14 @@ if __name__ == '__main__':
 
     # 2. PCE
     q = 0.75                                              # tri base poly candidats
-    max_degree = 2     # (fixe) degre max base candidats — LARS gere P > N
+    max_degree = 0     # (fixe) degre max base candidats — LARS gere P > N
 
     # 3. EFF
     epsilon_factor = 2                               # eps = epsilon_factor * sigma
     tol_EFF = 1e-3                                            # critere d'arret EFF
     tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
     tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
+    EFF_criteria = 'at_least_one'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
     n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
     n_max_EFF_points = 30                       # plafond de points EFF ajoutes (arret force si atteint)
     n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
@@ -1076,7 +1076,7 @@ if __name__ == '__main__':
         dist_X   = dist_jointe()
         T     = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        dist_U = dist_X.getStandardDistribution() 
+        dist_U = ot.JointDistribution([ot.Uniform(-7.5, 7.5)] * n_var)
         lhs    = ot.LHSExperiment(dist_U, n_doe)
         sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         U_doe  = sa.generate()
@@ -1545,8 +1545,8 @@ if __name__ == '__main__':
 
     def build_metamodel_KRG(xt, yt):
         n_var = xt.shape[1]
-        basis = ot.LinearBasisFactory(n_var).build()
-        #apres test: remettre base constante avec ot.ConstantBasisFactory(n_var).build()
+        basis = ot.ConstantBasisFactory(n_var).build() 
+        #passer à linéaire avec ot.LinearBasisFactory(n_var).build()
         covarianceModel = ot.SquaredExponential([1.0] * n_var)
         algo_KRG = ot.KrigingAlgorithm(xt, yt, covarianceModel, basis)
         if do_KRG:
