@@ -23,5 +23,12 @@ word de resultat et comparaison/
 output_*.txt
 C：tmpform_out.txt
 
-# Fichiers Markdown
-*.md
+# Notes de session Claude a la racine (jetables) -- PAS toute la doc :
+# la regle '*.md' qui existait ici rendait le depot impossible a documenter
+# (ni README, ni doc de tests, ni plan).
+resume_session*.md
+global_resume_session*.md
+mix_fonctionnement_global.md
+
+# Caches d'outils
+.pytest_cache/
