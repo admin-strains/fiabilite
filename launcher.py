@@ -127,12 +127,15 @@ def setup(ds_root):
             sys.path.insert(0, p)
 
 
-def run(script):
+def run(script, extra=()):
     """Execute l'etude avec __name__ == '__main__'.
 
     Les scripts AC ont 98 % de leur code dans `if __name__ == '__main__':` :
     les importer ne fait rien. Cette execution par exec est donc obligatoire
     tant que la phase 3 du plan de nettoyage n'a pas sorti ce code de main.
+
+    `extra` est transmis via sys.argv, pour les outils qui prennent des
+    arguments (tools/solve_one.py).
     """
     script = os.path.abspath(script)
     if not os.path.isfile(script):
@@ -142,6 +145,7 @@ def run(script):
     if dossier not in sys.path:
         sys.path.insert(0, dossier)
 
+    sys.argv = [script] + list(extra)
     os.chdir(dossier)
     with open(script, "r", encoding="utf-8", errors="replace") as fh:
         source = fh.read()
@@ -182,7 +186,7 @@ def main(argv):
 
     print("[launcher] etude  : %s" % argv[1], flush=True)
     setup(ds_root)
-    run(argv[1])
+    run(argv[1], argv[2:])
 
 
 if __name__ == "__main__":
