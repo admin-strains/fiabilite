@@ -42,11 +42,31 @@ def test_api_surface(mod, sym, params):
         f'{mod}.{sym} : parametres {got[:len(params)]} au lieu de {params}'
 
 
-def test_lib_nimporte_pas_strains():
-    """_lib doit rester utilisable sans STRAINS, OpenTURNS ni sklearn."""
+def test_lib_nimporte_pas_strains(tmp_path):
+    """_lib doit rester utilisable sans STRAINS, OpenTURNS ni sklearn.
+
+    Le controle tourne en SOUS-PROCESSUS : dans le processus pytest, d'autres
+    fichiers de tests (test_60_environnement) importent openturns des la
+    collecte, ce qui rendrait l'assertion vide de sens. Version precedente :
+    elle passait pour cette raison, pas parce que la propriete etait vraie.
+    """
+    import os
+    import subprocess
     import sys
-    for m in ('branche1', 'branche2', 'branche3', 'branche4', 'branche5', 'branche_lars'):
-        __import__(m)
-    interdits = {'openturns', 'STRAINS', 'smt', 'sklearn', 'autograd', 'nlopt'}
-    charges = interdits & set(sys.modules)
-    assert not charges, f'_lib a tire des dependances lourdes : {sorted(charges)}'
+
+    lib = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '_lib')
+    script = tmp_path / 'sonde_imports.py'
+    script.write_text(
+        'import sys\n'
+        'sys.path.insert(0, %r)\n'
+        'for m in ("branche1","branche2","branche3","branche4","branche5","branche_lars"):\n'
+        '    __import__(m)\n'
+        'interdits = {"openturns","STRAINS","smt","sklearn","autograd","nlopt","matplotlib"}\n'
+        'print(",".join(sorted(interdits & set(sys.modules))))\n' % lib,
+        encoding='utf-8')
+
+    p = subprocess.run([sys.executable, str(script)], capture_output=True,
+                       text=True, errors='replace', timeout=300)
+    assert p.returncode == 0, f'_lib ne s importe pas seul :\n{p.stderr[-2000:]}'
+    charges = [m for m in p.stdout.strip().split(',') if m]
+    assert not charges, f'_lib a tire des dependances lourdes : {charges}'

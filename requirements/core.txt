@@ -1,0 +1,13 @@
+# Couche NOYAU -- metamodeles (_lib) et harness de tests.
+#
+# S'installe sur n'importe quel poste, n'importe quel OS, n'importe quelle
+# version de Python >= 3.9. Ni STRAINS, ni OpenTURNS, ni licence, ni GPU.
+# C'est la couche ou vit l'essentiel du code : 4 522 lignes de mathematiques
+# sur les ~7 000 du depot.
+#
+#   python -m pip install -r requirements/core.txt
+
+numpy>=2.1
+scipy>=1.15
+threadpoolctl>=3.6      # _lib/_parallel_is.py -- brida le sur-abonnement BLAS
+pytest>=8.0             # harness tests/

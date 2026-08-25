@@ -1,0 +1,23 @@
+# Environnement de REFERENCE -- versions exactes du serveur ou les etudes
+# Moulin Blanc et flexion pure ont tourne (releve du 25/08/2026).
+#
+# A utiliser pour reproduire ce serveur au paquet pres :
+#   python -m pip install -r requirements/studies.txt -c requirements/constraints-reference.txt
+#
+# Sans ce fichier, requirements/studies.txt installe des versions plus
+# recentes. Un second jeu a ete valide le 25/08/2026 sur un venv neuf
+# (openturns 1.27.post1, numpy 2.1.1, scipy 1.15.2, smt 2.13.0,
+# autograd 1.9.1) : les deux fonctionnent, la chaine d'import passe a 26/26.
+# Les planchers de studies.txt sont donc des planchers, pas des pins.
+
+autograd==1.8.0
+matplotlib==3.10.8
+ndsplines==0.3.0
+numpy==2.2.3
+openturns==1.27
+psutil==7.2.2
+pytest==9.0.2
+scikit-learn==1.7.2
+scipy==1.15.3
+smt==2.12.0
+threadpoolctl==3.6.0

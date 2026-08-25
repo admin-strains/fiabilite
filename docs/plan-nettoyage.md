@@ -3,6 +3,12 @@
 > Etat au 25/08/2026, branche `cleaning`. Le depot vient d'un travail de
 > stage : il calcule juste, il est structure comme un brouillon. L'objectif
 > est d'en faire un outil livrable, sans perdre un seul resultat acquis.
+>
+> **Terminologie** — le paquet Python `STRAINS` importe par les scripts AC
+> **est Digital Structure**, le solveur des depots `front/` et `back/` du
+> workspace. Ce n'est pas une brique tierce et ce n'est pas un paquet pip.
+> Le present document dit « Digital Structure » (ou DS) ; `STRAINS` n'y
+> apparait que lorsqu'il s'agit du nom litteral du module importe.
 
 ---
 
@@ -27,7 +33,7 @@ Tout ce qui suit est mesure sur le depot, pas estime.
 Consequence directe : **rien n'est importable, donc rien n'est testable**.
 Les 63 fonctions et 8 classes se ferment sur les 57 variables de `main` ;
 aucune ne peut etre appelee depuis un test sans rejouer tout le script,
-donc sans STRAINS.
+donc sans Digital Structure.
 
 ### 1.2 Le code est duplique
 
@@ -145,11 +151,46 @@ faire un argument.
 
 **Phase 0 — filet de securite.** Branche `cleaning` creee depuis `flexion`,
 harness de non-regression en place (`tests/`, commit `8f6e229`) : 62 tests
-verts, 4 defauts en `xfail(strict)`, environ 50 s, **sans STRAINS, sans
-OpenTURNS et sans l'environnement conda de production**. Contrat detaille
+verts, 4 defauts en `xfail(strict)`, environ 50 s, **sans Digital Structure, sans
+OpenTURNS et sans environnement de production**. Contrat detaille
 dans `tests/README.md`.
 
 Rien de ce qui suit ne se fait sans que ce harness soit vert avant et apres.
+
+**Phase 0 bis — l'environnement est reproductible.** Le depot n'avait aucun
+fichier de dependances, sur aucune des quatre branches, et dix lanceurs
+recopies portant chacun ses chemins absolus. Etabli le 25/08 :
+
+- `requirements/core.txt` — numpy, scipy, threadpoolctl, pytest. Installable
+  partout, sans DS ni licence. C'est la couche ou vivent 4 522 des ~7 000
+  lignes du depot.
+- `requirements/studies.txt` — la couche AC : openturns, smt, autograd,
+  scikit-learn, matplotlib, ndsplines, psutil. `nlopt` n'en fait PAS partie,
+  contrairement a ce que laissait croire le code : NLopt est utilise via
+  `ot.NLopt`.
+- `requirements/constraints-reference.txt` — versions exactes du serveur ou
+  les etudes ont tourne, pour reproduire cet environnement au paquet pres.
+- `launcher.py` — un lanceur portable, sans chemin en dur, qui remplace les
+  dix precedents. `python launcher.py --check` valide une installation sans
+  lancer de calcul.
+- `tests/test_60_environnement.py` — verifie les deux contraintes ci-dessous ;
+  saute proprement sur un poste sans DS.
+
+Deux contraintes ont ete mesurees, la seconde corrigeant une croyance :
+
+1. **Python 3.10 exactement.** Les `.pyd` de DS sont lies a `python310.dll`.
+   Un interpreteur 3.11+ echoue sur un « DLL load failed » trompeur qui n'a
+   rien a voir avec une DLL manquante.
+2. **OpenTURNS doit etre importe avant l'ajout des repertoires DLL de DS.**
+   Les anciens lanceurs parlaient d'un « conflit MKL ». C'est faux : trois
+   DLL portent le meme nom des deux cotes avec des contenus differents —
+   `liblapack.dll` fait **14,4 Mo** chez OpenTURNS (OpenBLAS MinGW) contre
+   **0,17 Mo** chez DS, `libblas.dll` 0,75 contre 0,10 Mo, plus `zlib1.dll`.
+   Quand `bin\` de DS passe devant, `libot.dll` resout le mauvais LAPACK.
+
+Resultat : un environnement neuf a ete monte de zero en quelques minutes, et
+la chaine d'import d'un script AC passe **26 controles sur 26**. Le harness
+donne les memes goldens dans deux interpreteurs distincts.
 
 ---
 
@@ -168,9 +209,9 @@ fiabilite/
     transform.py        <- branche5      transformation isoprobabiliste
     lars.py             <- branche_lars
     api.py              <- branche1      fit_pck / fit_gepck / predict_*
-  reliability/        FORM, IS, EFF, separation des modes -- sans STRAINS
+  reliability/        FORM, IS, EFF, separation des modes -- sans DS
   model/              lois, PARAM_CONFIG, etat limite
-  solver/             SEUL point de contact STRAINS (SOCP, maillage, sensibilites)
+  solver/             SEUL point de contact Digital Structure (SOCP, maillage, sensibilites)
   cache/              doe_cache, hf_cache, restart_state
   viz/                figures
   config/             schema de configuration d'etude
@@ -186,17 +227,17 @@ premiere chose que lit un nouvel arrivant, et elle ne l'informe pas.
 
 ### 3.2 La regle qui structure tout le reste
 
-**Une seule frontiere avec STRAINS.** Aujourd'hui le solveur est appele
+**Une seule frontiere avec Digital Structure.** Aujourd'hui le solveur est appele
 depuis le milieu de `main`, ce qui rend toute la chaine non testable. Cible :
 `solver/` expose une interface a trois methodes (`evaluate`,
 `evaluate_batch`, `gradient`), avec deux implementations :
 
-- `StrainsSolver` — la vraie, qui appelle SOCP ;
+- `DigitalStructureSolver` — la vraie, qui appelle SOCP ;
 - `AnalyticSolver` — un etat limite analytique, **deja ecrit**
   (`tests/reference/limit_states.py`).
 
 Tout ce qui est en amont de cette frontiere devient testable sur un poste
-sans STRAINS, en secondes. C'est ce qui permet une base de tests unitaires
+sans Digital Structure, en secondes. C'est ce qui permet une base de tests unitaires
 qui couvre autre chose que `_lib/`.
 
 ---
@@ -268,7 +309,7 @@ utilisable sur un autre poste que celui de son auteur.
 *Sortie : `AC3_pure_flexion` et `AC3_moulinblanc` deviennent deux fichiers de
 configuration et un runner commun.*
 
-### Phase 5 — Isoler STRAINS · 3 j
+### Phase 5 — Isoler Digital Structure · 3 j
 
 Interface `solver/` a deux implementations (cf. §3.2). Permet enfin de tester
 la chaine **complete** — DOE, enrichissement EFF, FORM multimodal, IS — sur
@@ -327,7 +368,7 @@ Nettoyage du depot : `C:tmpform_out.txt` et ses 3,7 Mo, les `output_*.txt`,
 | 2 — renommage | 1 j | mecanique, risque nul |
 | 3 — extraction du noyau | 5-8 j | le coeur du chantier |
 | 4 — configuration | 2 j | structurant |
-| 5 — isolation STRAINS | 3 j | debloque la CI |
+| 5 — isolation Digital Structure | 3 j | debloque la CI |
 | 6 — defauts | 3-5 j | qualite numerique |
 | 7 — performance | 2-4 j | mesure avant-apres |
 | 8 — doc et CI | 2 j | perennite |

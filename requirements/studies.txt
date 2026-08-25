@@ -1,0 +1,21 @@
+# Couche ETUDES -- scripts AC, qui pilotent le solveur Digital Structure.
+#
+# CONTRAINTE DURE : Python 3.10 uniquement.
+# Les modules compiles de DS (CetSOLV.pyd, CetCAD.pyd, ...) sont lies a
+# python310.dll. Un interpreteur 3.11+ ne pourra jamais les charger, quelle
+# que soit l'installation ; l'erreur est un "DLL load failed" trompeur.
+#
+# DS lui-meme n'est PAS un paquet pip : il est atteint par insertion de
+# <racine>/front dans sys.path, cf. launcher.py.
+#
+#   python -m pip install -r requirements/studies.txt
+
+-r core.txt
+
+openturns>=1.27         # FORM, IS, lois, NLopt (via ot.NLopt -- pas le paquet nlopt)
+smt>=2.12               # GEKPLS (krigeage gradient-enhanced de reference)
+autograd>=1.8           # gradients de la fonction de performance analytique
+scikit-learn>=1.7       # DBSCAN -- separation des modes de defaillance
+matplotlib>=3.10        # figures
+ndsplines>=0.3          # find_all_modes.py
+psutil>=7.0             # supervision des workers DOE paralleles
