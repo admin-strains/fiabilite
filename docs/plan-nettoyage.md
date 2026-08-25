@@ -192,6 +192,28 @@ Resultat : un environnement neuf a ete monte de zero en quelques minutes, et
 la chaine d'import d'un script AC passe **26 controles sur 26**. Le harness
 donne les memes goldens dans deux interpreteurs distincts.
 
+**Phase 2 — renommage, FAIT (`b6c65a6`).** Quatre modules mono-sujet
+renommes : `branche1`->`api`, `branche2`->`options`, `branche4`->`predict`,
+`branche_lars`->`lars`. Renommage pur, verifie par diff : trois fichiers
+identiques a l'octet pres, `api.py` a deux lignes d'import pres. Coquilles de
+compatibilite a liaison tardive (`__getattr__`), pour que `tests/unit/` reste
+intouche et que l'instrumentation reste visible a travers l'ancien nom.
+
+**Phase 3a — scission, FAIT (`e417aa9`, `5cd2424`).** Les deux modules
+composites sont decoupes, decoupage instruit par
+`tools/analyse_dependances.py` avant d'ecrire une ligne :
+
+    branche5 -> polynomials (8) + transform (12) + kernels (9)
+                zero arete entre les trois
+    branche3 -> kriging (15) + pce_basis (4) + fit (2)
+                stratification fit -> kriging, fit -> pce_basis
+
+Corps des fonctions VERBATIM. Le dernier import differe de `_lib` a ete
+remonte en tete, dans un commit separe.
+
+Les deux etapes n'ont regenere AUCUN golden et laisse la baseline identique
+au bit pres.
+
 ---
 
 ## 3. Cible
