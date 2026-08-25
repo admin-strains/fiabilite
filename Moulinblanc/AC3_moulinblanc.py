@@ -51,6 +51,8 @@ from lois import (
     loi_F_intermittente, loi_uni_approx,
 )
 import lois as _lois
+import doe as _cache_doe
+import hf as _cache_hf
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -826,55 +828,22 @@ if __name__ == '__main__':
     # --- DOE cache ---
     _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")
 
+    # --- Caches : la logique est dans _cache/doe.py et _cache/hf.py.
+    # Ces delegues gardent les sites d'appel intacts et disparaitront
+    # avec la refonte de la configuration (phase 4).
     def _load_doe_cache():
-        if not config_is_identical:
-            return None
-        if not os.path.exists(_DOE_CACHE_FILE):
-            print(f"[DOE CACHE] aucun cache ({_DOE_CACHE_FILE}) -> calcul DOE", flush=True)
-            return None
-        try:
-            d = json.load(open(_DOE_CACHE_FILE))
-            _n0_cache = d.get('n0', len(d.get('xt', [])))
-            if _n0_cache != n0:
-                print(f"[DOE CACHE] n0 different (cache={_n0_cache}, courant={n0}) -> recalcul DOE", flush=True)
-                return None
-            if not d.get('complet', False):
-                print(f"[DOE CACHE] cache incomplet (complet=False) -> recalcul DOE", flush=True)
-                return None
-            print(f"[DOE CACHE] charge depuis {_DOE_CACHE_FILE} (n0={n0}, complet -> 0 SOCP DOE)", flush=True)
-            return np.array(d["xt"]), np.array(d["yt"]), np.array(d["all_grad"])
-        except Exception as e:
-            print(f"[DOE CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul DOE", flush=True)
-        return None
+        return _cache_doe.load_doe_cache(_DOE_CACHE_FILE, n0, config_is_identical)
 
     def _save_doe_cache(xt, yt, all_grad):
-        try:
-            json.dump({"n0": n0, "complet": True,
-                       "xt": np.asarray(xt).tolist(),
-                       "yt": np.asarray(yt).tolist(),
-                       "all_grad": np.asarray(all_grad).tolist()},
-                      open(_DOE_CACHE_FILE, "w"), indent=1)
-            print(f"[DOE CACHE] sauve (complet) dans {_DOE_CACHE_FILE}", flush=True)
-        except Exception as e:
-            print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+        return _cache_doe.save_doe_cache(_DOE_CACHE_FILE, n0, xt, yt, all_grad)
 
     def _save_doe_cache_incremental(SOL, n_done):
-        """Sauvegarde incrementale : ecrit les n_done premiers points de SOL.
-        Gradients deja en U (converties par run_one_SOL). Pas de cle 'complet'."""
-        try:
-            _xt = [SOL[i]['_u'] for i in range(n_done)]
-            _yt = [[SOL[i]['g']] for i in range(n_done)]
-            _ag = [[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_done)]
-            json.dump({"n0": n0, "complet": False, "n_completed": n_done,
-                       "xt": _xt, "yt": _yt, "all_grad": _ag},
-                      open(_DOE_CACHE_FILE, "w"), indent=1)
-            print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
-        except Exception as e:
-            print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)
+        return _cache_doe.save_doe_cache_incremental(
+            _DOE_CACHE_FILE, n0, params_names, SOL, n_done)
 
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():
-        return {"n0": n0, "params": list(params_names), "n_var": n_var, "modelname": modelname}
+        return _cache_doe.doe_cache_sig(n0, params_names, n_var, modelname)
 
     # --- DUMP RESTART ---
     _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state.json")
@@ -2260,62 +2229,16 @@ if __name__ == '__main__':
     hf_2d_grid_fixed_final = None
 
     def _load_hf_cache(n_grid_hf_local, cache_file, sd):
-        if not config_is_identical:
-            return None
-        if not os.path.exists(cache_file):
-            print(f"[HF CACHE] aucun cache ({cache_file}) -> calcul grille HF", flush=True)
-            return None
-        try:
-            d = json.load(open(cache_file))
-            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
-            _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
-            if _sd_cache != _sd_now:
-                print(f"[HF CACHE] coupe differente (cache={_sd_cache}, courant={_sd_now}) -> recalcul", flush=True)
-                return None
-            print(f"[HF CACHE] charge depuis {cache_file} (coupe OK -> 0 SOCP grille)", flush=True)
-            return np.array(d['Z'])
-        except Exception as e:
-            print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
-        return None
+        return _cache_hf.load_hf_cache(n_grid_hf_local, cache_file, sd, config_is_identical)
 
     def _save_hf_cache(Z, n_grid_hf_local, cache_file, sd):
-        try:
-            _sd = sd if sd is not None else (0, 1, {})
-            json.dump({'Z': Z.tolist(), 'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
-                      open(cache_file, 'w'), indent=1)
-            print(f"[HF CACHE] sauve dans {cache_file}", flush=True)
-        except Exception as e:
-            print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+        return _cache_hf.save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
 
     def _save_hf_cache_partial(Z_flat, n_total, cache_file, sd):
-        """Sauvegarde incrementale de la grille HF (Z_flat peut contenir des None)."""
-        try:
-            _sd = sd if sd is not None else (0, 1, {})
-            json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
-                       'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
-                      open(cache_file + '.partial', 'w'), indent=1)
-        except Exception as e:
-            print(f"[HF CACHE PARTIAL] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+        return _cache_hf.save_hf_cache_partial(Z_flat, n_total, cache_file, sd)
 
     def _load_hf_cache_partial(cache_file, sd, n_total):
-        """Charge le cache partiel. Retourne une liste Z_flat (avec None) ou None."""
-        if not config_is_identical:
-            return None
-        partial_file = cache_file + '.partial'
-        if not os.path.exists(partial_file):
-            return None
-        try:
-            d = json.load(open(partial_file))
-            _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
-            _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
-            if _sd_cache != _sd_now or d.get('n_total') != n_total:
-                return None
-            z = d['Z_flat']
-            n_done = sum(1 for v in z if v is not None)
-            print(f"[HF CACHE PARTIAL] reprise : {n_done}/{n_total} points deja calcules", flush=True)
-            return z
-        except Exception:
-            return None
+        return _cache_hf.load_hf_cache_partial(cache_file, sd, n_total, config_is_identical)
 
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
                                         cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
@@ -2385,28 +2308,11 @@ if __name__ == '__main__':
     _hf_grid_full_axes = [None]  # axes de la grille (liste de 1D arrays)
 
     def _load_hf_grid_full():
-        if not config_is_identical:
-            return None
-        if not os.path.exists(_HF_FULL_CACHE_FILE):
-            return None
-        try:
-            d = json.load(open(_HF_FULL_CACHE_FILE))
-            if d.get('n_var') != n_var or d.get('n_grid') != n_grid_hf:
-                print(f"[HF FULL CACHE] dimensions differentes -> recalcul", flush=True)
-                return None
-            print(f"[HF FULL CACHE] charge depuis {_HF_FULL_CACHE_FILE} (0 SOCP)", flush=True)
-            return np.array(d['Z'])
-        except Exception as e:
-            print(f"[HF FULL CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
-        return None
+        return _cache_hf.load_hf_grid_full(
+            _HF_FULL_CACHE_FILE, n_var, n_grid_hf, config_is_identical)
 
     def _save_hf_grid_full(Z_full):
-        try:
-            json.dump({'Z': Z_full.tolist(), 'n_var': n_var, 'n_grid': n_grid_hf},
-                      open(_HF_FULL_CACHE_FILE, 'w'), indent=1)
-            print(f"[HF FULL CACHE] sauve dans {_HF_FULL_CACHE_FILE}", flush=True)
-        except Exception as e:
-            print(f"[HF FULL CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+        return _cache_hf.save_hf_grid_full(_HF_FULL_CACHE_FILE, Z_full, n_var, n_grid_hf)
 
     def _compute_hf_grid_full():
         """Calcule la grille HF complete (n_grid_hf^n_var points STRAINS)."""

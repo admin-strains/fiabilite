@@ -122,7 +122,8 @@ def setup(ds_root):
             print("           " + d, file=sys.stderr)
 
     # 3. chemins d'import : DS, puis les modules du depot
-    for p in (ds_root, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model")):
+    for p in (ds_root, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
+              os.path.join(REPO, "_cache")):
         if p not in sys.path:
             sys.path.insert(0, p)
 

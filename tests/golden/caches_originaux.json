@@ -1,0 +1,214 @@
+{
+ "cas": {
+  "doe_cache_sig": {
+   "modelname": "test_pure_flexion",
+   "n0": 3,
+   "n_var": 2,
+   "params": [
+    "fc",
+    "fy"
+   ]
+  },
+  "load_doe_cache": [
+   [
+    [
+     0.1,
+     -0.2
+    ],
+    [
+     1.5,
+     0.3
+    ],
+    [
+     -2.0,
+     1.1
+    ]
+   ],
+   [
+    [
+     0.5
+    ],
+    [
+     -0.1
+    ],
+    [
+     0.9
+    ]
+   ],
+   [
+    [
+     0.01,
+     0.02
+    ],
+    [
+     0.03,
+     0.04
+    ],
+    [
+     0.05,
+     0.06
+    ]
+   ]
+  ],
+  "load_doe_cache_absent": null,
+  "load_doe_cache_config_differente": null,
+  "load_doe_cache_incomplet": null,
+  "load_doe_cache_n0_different": null,
+  "load_hf_cache": [
+   [
+    1.0,
+    2.0
+   ],
+   [
+    3.0,
+    4.0
+   ]
+  ],
+  "load_hf_cache_coupe_differente": null,
+  "load_hf_cache_partial": [
+   1.0,
+   null,
+   3.0,
+   null
+  ],
+  "load_hf_cache_partial_n_different": null,
+  "load_hf_grid_full": [
+   [
+    1.0,
+    2.0
+   ],
+   [
+    3.0,
+    4.0
+   ]
+  ],
+  "load_hf_grid_full_dimensions_differentes": null,
+  "save_doe_cache": {
+   "all_grad": [
+    [
+     0.01,
+     0.02
+    ],
+    [
+     0.03,
+     0.04
+    ],
+    [
+     0.05,
+     0.06
+    ]
+   ],
+   "complet": true,
+   "n0": 3,
+   "xt": [
+    [
+     0.1,
+     -0.2
+    ],
+    [
+     1.5,
+     0.3
+    ],
+    [
+     -2.0,
+     1.1
+    ]
+   ],
+   "yt": [
+    [
+     0.5
+    ],
+    [
+     -0.1
+    ],
+    [
+     0.9
+    ]
+   ]
+  },
+  "save_doe_cache_incremental": {
+   "all_grad": [
+    [
+     0.01,
+     0.02
+    ],
+    [
+     0.03,
+     0.04
+    ]
+   ],
+   "complet": false,
+   "n0": 3,
+   "n_completed": 2,
+   "xt": [
+    [
+     0.1,
+     -0.2
+    ],
+    [
+     1.5,
+     0.3
+    ]
+   ],
+   "yt": [
+    [
+     0.5
+    ],
+    [
+     -0.1
+    ]
+   ]
+  },
+  "save_hf_cache": {
+   "Z": [
+    [
+     1.0,
+     2.0
+    ],
+    [
+     3.0,
+     4.0
+    ]
+   ],
+   "slice_def": [
+    0,
+    1,
+    {
+     "2": 0.0
+    }
+   ]
+  },
+  "save_hf_cache_partial": {
+   "Z_flat": [
+    1.0,
+    null,
+    3.0,
+    null
+   ],
+   "complet": false,
+   "n_total": 4,
+   "slice_def": [
+    0,
+    1,
+    {
+     "2": 0.0
+    }
+   ]
+  },
+  "save_hf_grid_full": {
+   "Z": [
+    [
+     1.0,
+     2.0
+    ],
+    [
+     3.0,
+     4.0
+    ]
+   ],
+   "n_grid": 2,
+   "n_var": 2
+  }
+ },
+ "revision": "HEAD"
+}
