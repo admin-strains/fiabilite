@@ -55,6 +55,7 @@ import doe as _cache_doe
 import hf as _cache_hf
 import eff as _eff
 import eff_ot as _eff_ot
+import form as _form
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -1283,41 +1284,12 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
 
-    class BoundSurrogateFunction(ot.OpenTURNSPythonFunction):
-        """
-        g_bound(u) = g_ot(u) + sign * 2 * sigma_func(u)
-        sign = +1  →  borne supérieure  g_sup = μ̂g + 2σ̂g
-        sign = -1  →  borne inférieure  g_inf = μ̂g − 2σ̂g
-
-        Wrappeur externe : ne modifie aucune classe existante.
-        Compatible avec tous les modèles (GEPCK, KRG, GEK, PCKRG).
-        Pas de _gradient défini → OT utilise différences finies si FORM est appelé.
-        """
-        def __init__(self, g_ot, sigma_func, sign):
-            super().__init__(n_var, 1)
-            self._g_ot       = g_ot
-            self._sigma_func = sigma_func
-            self._sign       = sign   # +1 ou -1
-
-        def _exec(self, u):
-            u_pt  = ot.Point(list(u))
-            mu    = self._g_ot(u_pt)[0]
-            sigma = self._sigma_func(u_pt)
-            return [mu + self._sign * 2.0 * sigma]
-
-        def _exec_sample(self, U):
-            _fm = getattr(getattr(self._sigma_func, '__self__', None), 'fm', None)
-            if _fm is not None:
-                U_np = np.array(U)
-                if do_PCK:
-                    mu_arr, sig2_arr = predict_pck(_fm, U_np, return_var=True)
-                else:
-                    mu_arr, sig2_arr = predict_gepck(_fm, U_np, return_var=True)
-                mu    = mu_arr[:, 0]
-                sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
-                result = mu + self._sign * 2.0 * sigma
-                return result.reshape(-1, 1).tolist()
-            return [[self._exec(u)[0]] for u in U]
+    # --- FORM multimodal et tirage d'importance : la logique est dans
+    # _reliability/form.py, en un seul exemplaire pour les deux etudes.
+    def BoundSurrogateFunction(g_ot, sigma_func, sign):
+        return _form.bound_surrogate_function(
+            g_ot, sigma_func, sign, n_var,
+            predict_pck if do_PCK else predict_gepck)
 
     # Usage :
     #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
@@ -1611,91 +1583,9 @@ if __name__ == '__main__':
 
     # --- Multi-start FORM depuis les points du DOE ---
     def FORM_all_modes(starting_points, tol_all_modes, event):
-        """
-        Multi-start FORM + DBSCAN pour identifier les modes de défaillance.
-        - Chaque cluster DBSCAN = un mode distinct.
-        - u* isolés (label -1) = descentes mal convergées, ignorées.
-        """
-        all_u_star   = []   # u* de chaque run réussi
-        all_results  = []   # FORMResult correspondant
-        all_sp       = []   # point de départ correspondant
-        n_total = len(starting_points)
-
-        for k, sp in enumerate(starting_points):
-            print(f"  FORM {k+1}/{n_total}...", flush=True)
-            try:
-                solver = ot.AbdoRackwitz()
-                solver.setStartingPoint(sp.tolist())
-                solver.setMaximumIterationNumber(n_max_FORM)
-                solver.setCheckStatus(False)
-                solver.setMaximumConstraintError(tol_FORM)
-                form_i = ot.FORM(solver, event)
-                form_i.run()
-                r_i    = form_i.getResult()
-                u_star = np.array(r_i.getStandardSpaceDesignPoint())
-                all_u_star.append(u_star)
-                all_results.append(r_i)
-                all_sp.append(sp)
-                print(f"  [sp={[round(v,3) for v in np.array(sp)]}, "
-                    f"u*={[round(v,3) for v in u_star]}, "
-                    f"beta={r_i.getHasoferReliabilityIndex():.4f}]", flush=True)
-            except Exception as e:
-                print(f"  [sp={[round(v,3) for v in np.array(sp)]}, "
-                    f"ECHEC ({type(e).__name__})]", flush=True)
-
-        # --- Filtrer les u* hors bornes EFF ---
-        if do_FORM_filter:
-            _filtered = [(u, r, s) for u, r, s in zip(all_u_star, all_results, all_sp)
-                         if all(eff_bounds_min[j] <= u[j] <= eff_bounds_max[j] for j in range(n_var))]
-            _n_rejected = len(all_u_star) - len(_filtered)
-            if _n_rejected > 0:
-                print(f"  [FORM FILTER] {_n_rejected} u* hors bornes EFF rejetes", flush=True)
-            all_u_star  = [x[0] for x in _filtered]
-            all_results = [x[1] for x in _filtered]
-            all_sp      = [x[2] for x in _filtered]
-
-        if not all_u_star:
-            return [], []
-
-        # --- Cas 1 point : pas de DBSCAN ---
-        if len(all_u_star) == 1:
-            print(f"\n1 mode(s) distinct(s) (1 seul point de depart, pas de DBSCAN) :", flush=True)
-            u = [round(v, 3) for v in all_results[0].getStandardSpaceDesignPoint()]
-            print(f"  mode 1 : beta={all_results[0].getHasoferReliabilityIndex():.4f}  "
-                  f"Pf={all_results[0].getEventProbability():.3e}  u*={u}", flush=True)
-            return [all_results[0]], [all_sp[0]]
-
-        # --- DBSCAN ---
-        U_all  = np.array(all_u_star)          # shape (n_runs_ok, n_var)
-        db     = DBSCAN(eps=tol_all_modes, min_samples=2).fit(U_all)
-        labels = db.labels_
-
-        n_noise = np.sum(labels == -1)
-        if n_noise > 0:
-            print(f"  {n_noise} descente(s) mal convergée(s) ignorée(s) (bruit DBSCAN)", flush=True)
-
-        # --- Un mode par cluster : FORMResult avec beta minimal ---
-        modes     = []
-        best_sps  = []
-        for lbl in sorted(set(labels) - {-1}):
-            idx_cluster = [i for i, l in enumerate(labels) if l == lbl]
-            best_i = min(idx_cluster,
-                        key=lambda i: all_results[i].getHasoferReliabilityIndex())
-            modes.append(all_results[best_i])
-            best_sps.append(all_sp[best_i])
-
-        order = sorted(range(len(modes)), key=lambda i: modes[i].getHasoferReliabilityIndex())
-        modes    = [modes[i]    for i in order]
-        best_sps = [best_sps[i] for i in order]
-
-        print(f"\n{len(modes)} mode(s) distinct(s) "
-            f"(DBSCAN eps={tol_all_modes}, min_samples=2) :", flush=True)
-        for i, m in enumerate(modes):
-            u = [round(v, 3) for v in m.getStandardSpaceDesignPoint()]
-            print(f"  mode {i+1} : beta={m.getHasoferReliabilityIndex():.4f}  "
-                f"Pf={m.getEventProbability():.3e}  u*={u}", flush=True)
-
-        return modes, best_sps
+        return _form.form_all_modes(starting_points, tol_all_modes, event,
+                                    n_var, n_max_FORM, tol_FORM,
+                                    do_FORM_filter, eff_bounds_min, eff_bounds_max)
     
     # --- Warm-start FORM depuis les points du DOE ---
     def FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad):
@@ -2981,33 +2871,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTION IS POST-FORM                                                       #
     def run_IS(modes, event):
-        """
-        Importance Sampling post-FORM sur le surrogate.
-        Distribution instrumentale : mixture de N(u*_i) pondérée par les Pf_FORM_i.
-        Mono-modal : N simple centré sur u*.
-        Retourne un ProbabilitySimulationResult.
-        """
-        if len(modes) == 1:
-            g_imp = ot.Normal(n_var)
-            g_imp.setMu(modes[0].getStandardSpaceDesignPoint())
-            importance_dist = g_imp
-        else:
-            gaussians  = []
-            pf_weights = []
-            for m in modes:
-                g_i = ot.Normal(n_var)
-                g_i.setMu(m.getStandardSpaceDesignPoint())
-                gaussians.append(g_i)
-                pf_weights.append(m.getEventProbability())
-            importance_dist = ot.Mixture(gaussians, pf_weights)
-
-        experiment = ot.ImportanceSamplingExperiment(importance_dist, n_IS)
-        std_event  = ot.StandardEvent(event)
-        algo = ot.ProbabilitySimulationAlgorithm(std_event, experiment)
-        algo.setMaximumCoefficientOfVariation(cov_IS)
-        algo.setMaximumOuterSampling(n_IS)
-        algo.run()
-        return algo.getResult()
+        return _form.run_IS(modes, event, n_var, n_IS, cov_IS)
 
     def run_IS_proj(modes, event_proj):
         """IS sur le surrogate projete (sans la variable de position).
@@ -3049,16 +2913,7 @@ if __name__ == '__main__':
         return algo.getResult()
 
     def print_results_IS(result_IS):
-        pf   = result_IS.getProbabilityEstimate()
-        cov  = result_IS.getCoefficientOfVariation()
-        ci   = result_IS.getConfidenceLength(0.95)
-        beta = float(-ot.Normal().computeQuantile(pf)[0])
-        print(f"=== Importance Sampling ===", flush=True)
-        print(f"  Pf_IS   = {pf:.4e}", flush=True)
-        print(f"  beta_IS = {beta:.4f}", flush=True)
-        print(f"  COV     = {cov:.4f}", flush=True)
-        print(f"  IC 95%  = [{pf - ci/2:.4e}, {pf + ci/2:.4e}]", flush=True)
-        print(f"  N_IS    = {result_IS.getOuterSampling()}", flush=True)
+        return _form.print_results_IS(result_IS)
 
     """
     DEBUT DE CODE
