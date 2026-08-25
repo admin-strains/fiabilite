@@ -53,6 +53,8 @@ from lois import (
 import lois as _lois
 import doe as _cache_doe
 import hf as _cache_hf
+import eff as _eff
+import eff_ot as _eff_ot
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -1720,23 +1722,10 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS D'ENRICHISSEMENT DU PLAN D'EXPERIENCE (EFF)                       #
-    class EFFFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, g_ot, sigma_func):
-            super().__init__(n_var, 1)
-            self.g_ot = g_ot
-            self.sigma_func = sigma_func
-
-        def _exec(self, u):
-            u = ot.Point(u)
-            sigmaG  = self.sigma_func(u)
-            if sigmaG <= 0.0:
-                return [0.0]
-            muG     = self.g_ot(u)[0]
-            epsilon = epsilon_factor * sigmaG
-            t1 = -muG / sigmaG
-            t2 = (epsilon + muG) / sigmaG
-            t3 = (epsilon - muG) / sigmaG
-            return [2*muG*norm.cdf(t1) - (epsilon+muG)*norm.cdf(-t2) + (epsilon-muG)*norm.cdf(t3) + sigmaG*(-2*norm.pdf(t1) + norm.pdf(t2) + norm.pdf(t3))]
+    # --- Critere EFF : la formule est dans _reliability/eff.py, en un seul
+    # exemplaire. Elle etait ecrite deux fois ici (vectorisee et scalaire).
+    def EFFFunction(g_ot, sigma_func):
+        return _eff_ot.eff_function(g_ot, sigma_func, n_var, epsilon_factor)
 
     def _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad):
         """Trouve n_batch_EFF points EFF par Kriging Believer.
@@ -2071,17 +2060,16 @@ if __name__ == '__main__':
         _muG2  = g_ot(ot.Point(u_opt))[0]
         _eps2  = epsilon_factor * _sigG2
         if _sigG2 > 0:
-            t1 = -_muG2 / _sigG2
-            t2 = (_eps2 + _muG2) / _sigG2
-            t3 = (_eps2 - _muG2) / _sigG2
-            term1 = 2 * _muG2 * norm.cdf(t1)
-            term2 = -(_eps2 + _muG2) * norm.cdf(-t2)
-            term3 = (_eps2 - _muG2) * norm.cdf(t3)
-            term4 = _sigG2 * (norm.pdf(t2) - norm.pdf(t3))
+            # Decomposition fournie par _reliability/eff.py : elle est derivee de
+            # l'implementation unique, donc la ligne imprimee ne peut plus
+            # diverger du critere optimise. La copie manuelle qui se trouvait
+            # ici etait fausse (quatrieme terme), de 39 % a 1271 % d'ecart.
+            _tt = _eff.eff_termes(_muG2, _sigG2, epsilon_factor)
+            term1, term2, term3, term4 = (float(x) for x in _tt[3:])
             print(f"  EFF converge debug : u_opt={list(np.round(np.array(u_opt),4))}  sigmaG={_sigG2:.8f}  muG={_muG2:.8f}  epsilon={_eps2:.8f}", flush=True)
-            print(f"    t1={t1:.6f}  t2={t2:.6f}  t3={t3:.6f}", flush=True)
-            print(f"    norm.cdf(t1)={norm.cdf(t1):.8e}  norm.cdf(-t2)={norm.cdf(-t2):.8e}  norm.cdf(t3)={norm.cdf(t3):.8e}", flush=True)
-            print(f"    norm.pdf(t2)={norm.pdf(t2):.8e}  norm.pdf(t3)={norm.pdf(t3):.8e}", flush=True)
+            print(f"    t1={float(_tt[0]):.6f}  t2={float(_tt[1]):.6f}  t3={float(_tt[2]):.6f}", flush=True)
+            print(f"    cdf(t1)={norm.cdf(float(_tt[0])):.8e}  cdf(-t2)={norm.cdf(-float(_tt[1])):.8e}  cdf(t3)={norm.cdf(float(_tt[2])):.8e}", flush=True)
+            print(f"    pdf(t2)={norm.pdf(float(_tt[1])):.8e}  pdf(t3)={norm.pdf(float(_tt[2])):.8e}", flush=True)
             print(f"    term1={term1:.8e}  term2={term2:.8e}  term3={term3:.8e}  term4={term4:.8e}", flush=True)
             print(f"    EFF = {term1+term2+term3+term4:.8e}", flush=True)
         else:
@@ -2127,34 +2115,11 @@ if __name__ == '__main__':
     # HELPERS VECTORISES (batch eval surrogate sur grille - BLAS multi-thread)
     # =========================================================================
     def _batch_mu_sigma(g_ot, sigma_func, grid):
-        """Calcule (mu, sigma) en batch sur une grille de points.
-        - GEPCK : 1 appel predict_gepck(return_var=True) -> mu + var en 1 fois (BLAS multi-thread)
-        - Autres modeles : batch via ot.Sample pour mu, loop fallback pour sigma
-        """
-        _fm = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
-        if _fm is not None:
-            if do_PCK:
-                mu_arr, sig2_arr = predict_pck(_fm, grid, return_var=True)
-            else:
-                mu_arr, sig2_arr = predict_gepck(_fm, grid, return_var=True)
-            mu    = mu_arr[:, 0]
-            sigma = np.sqrt(np.maximum(0.0, sig2_arr[:, 0]))
-            return mu, sigma
-        grid_ot = ot.Sample(grid.tolist())
-        mu    = np.array(g_ot(grid_ot))[:, 0]
-        sigma = np.array([sigma_func(pt) for pt in grid])
-        return mu, sigma
+        return _eff_ot.batch_mu_sigma(g_ot, sigma_func, grid,
+                                   predict_pck if do_PCK else predict_gepck)
 
     def _eff_vectorized(mu, sigma, eps_factor):
-        """Calcul vectorise du critere EFF (Expected Feasibility Function)."""
-        eps        = eps_factor * sigma
-        safe_sigma = np.where(sigma > 0, sigma, 1.0)
-        t1 = -mu / safe_sigma
-        t2 = (eps + mu) / safe_sigma
-        t3 = (eps - mu) / safe_sigma
-        eff_vals = (2*mu*norm.cdf(t1) - (eps+mu)*norm.cdf(-t2) + (eps-mu)*norm.cdf(t3)
-                    + sigma*(-2*norm.pdf(t1) + norm.pdf(t2) + norm.pdf(t3)))
-        return np.where(sigma > 0, eff_vals, 0.0)
+        return _eff.eff(mu, sigma, eps_factor)
     # =========================================================================
 
     def print_EFF_graphs():

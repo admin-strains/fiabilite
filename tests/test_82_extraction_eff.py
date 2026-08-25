@@ -1,0 +1,191 @@
+"""
+Le critere EFF extrait reproduit-il celui des scripts AC ?
+
+La formule etait ecrite DEUX FOIS dans chaque script -- vectorisee dans
+`_eff_vectorized`, scalaire dans `EFFFunction._exec` -- soit quatre copies
+dans le depot. `_reliability/eff.py` n'en garde qu'une.
+
+L'oracle est `tests/golden/eff_original.json`, qui contient les valeurs des
+DEUX implementations d'origine, lues a une revision git. Le golden conserve
+donc aussi la preuve qu'elles coincidaient : c'est ce qui justifiait
+l'unification.
+
+`eff` seul ne demande que numpy et scipy. `eff_function` et `batch_mu_sigma`
+demandent OpenTURNS et sautent la ou il est absent.
+"""
+
+import json
+import os
+import sys
+
+import numpy as np
+import pytest
+
+TESTS = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(TESTS)
+for p in (os.path.join(REPO, "_reliability"), os.path.join(REPO, "tools")):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+GOLDEN = os.path.join(TESTS, "golden", "eff_original.json")
+
+pytestmark = pytest.mark.skipif(not os.path.isfile(GOLDEN),
+                                reason="oracle du critere EFF absent")
+
+
+@pytest.fixture(scope="module")
+def attendu():
+    with open(GOLDEN, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _eff():
+    import eff
+    return eff
+
+
+def _eff_ot():
+    return pytest.importorskip("eff_ot", reason="emballage OpenTURNS")
+
+
+# --------------------------------------------------------------------------- #
+# La formule                                                                   #
+# --------------------------------------------------------------------------- #
+def test_eff_reproduit_la_version_vectorisee(attendu):
+    mu = np.array(attendu["mu"])
+    sg = np.array(attendu["sigma"])
+    for f in attendu["facteurs"]:
+        obtenu = _eff().eff(mu, sg, f)
+        assert list(obtenu) == pytest.approx(attendu["vectorise"][str(f)],
+                                             rel=1e-15, abs=1e-300)
+
+
+def test_eff_reproduit_aussi_la_version_scalaire(attendu):
+    """Les deux implementations d'origine coincidaient : c'est ce qui a permis
+    de n'en garder qu'une. Le golden en garde la trace, ce test la verifie."""
+    mu = np.array(attendu["mu"])
+    sg = np.array(attendu["sigma"])
+    for f in attendu["facteurs"]:
+        obtenu = _eff().eff(mu, sg, f)
+        assert list(obtenu) == pytest.approx(attendu["scalaire"][str(f)],
+                                             rel=1e-15, abs=1e-300)
+
+
+@pytest.mark.parametrize("sigma", [0.0, -1.0, -1e-9])
+def test_eff_est_nul_ou_le_metamodele_est_certain(sigma):
+    """sigma <= 0 : rien a gagner a enrichir la. Comportement d'origine."""
+    assert _eff().eff(np.array([1.0, 0.0, -1.0]),
+                      np.full(3, sigma), 2.0).tolist() == [0.0, 0.0, 0.0]
+
+
+def test_eff_est_positif_ailleurs():
+    """Une esperance de faisabilite est positive ; le critere etant ensuite
+    maximise, un signe faux orienterait l'enrichissement a l'envers.
+
+    Tolerance a l'epsilon machine : la sortie descend a -1,8e-15 la ou le
+    critere sous-depasse (|mu/sigma| > 9,6), pour un maximum de 7,77 -- soit
+    2e-16 en relatif. C'est l'arrondi, pas la formule. Mesure sur
+    200 000 tirages : 0,31 % des points, tous a cette amplitude.
+    """
+    rng = np.random.default_rng(3)
+    mu = rng.normal(0, 3, 200000)
+    sg = np.abs(rng.normal(0, 1.5, 200000)) + 1e-9
+    v = _eff().eff(mu, sg, 2.0)
+    assert (v >= -1e-13).all(), "minimum %.3e" % v.min()
+    assert (v[np.abs(mu / sg) < 5] > 0).all()
+
+
+def test_eff_decroit_quand_on_s_eloigne_de_l_etat_limite():
+    """Propriete attendue du critere : a sigma fixe, il est maximal en mu = 0
+    (sur l'etat limite estime) et decroit de part et d'autre."""
+    e = _eff()
+    mu = np.linspace(-4.0, 4.0, 201)
+    v = e.eff(mu, np.full_like(mu, 1.0), 2.0)
+    assert np.argmax(v) == 100                      # mu = 0
+    assert (np.diff(v[:101]) > 0).all()
+    assert (np.diff(v[100:]) < 0).all()
+
+
+# --------------------------------------------------------------------------- #
+# L'emballage OpenTURNS, qui ne doit plus reecrire la formule                  #
+# --------------------------------------------------------------------------- #
+def test_eff_function_donne_les_memes_valeurs_que_eff():
+    """`EFFFunction._exec` recalculait la formule ; l'emballage ne fait plus
+    qu'appeler `eff`. Ce test verifie qu'aucune divergence ne se reintroduit."""
+    ot = pytest.importorskip("openturns")
+    e = _eff()
+
+    class _G(ot.OpenTURNSPythonFunction):
+        def __init__(self):
+            super().__init__(2, 1)
+
+        def _exec(self, u):
+            return [float(u[0]) * 0.7 - float(u[1]) * 0.3 + 0.2]
+
+    g = ot.Function(_G())
+    sigma = lambda u: 0.1 + 0.05 * abs(float(u[0]))          # noqa: E731
+
+    f = ot.Function(_eff_ot().eff_function(g, sigma, 2, 2.0))
+    for u in ([0.0, 0.0], [1.0, -1.0], [-2.0, 0.5], [3.0, 3.0], [-0.3, 0.9]):
+        mu = g(ot.Point(u))[0]
+        sg = sigma(ot.Point(u))
+        assert f(u)[0] == pytest.approx(float(e.eff(np.array([mu]), np.array([sg]), 2.0)[0]),
+                                        rel=1e-15)
+
+
+def test_eff_function_rend_zero_si_sigma_nul():
+    ot = pytest.importorskip("openturns")
+    e = _eff()
+
+    class _G(ot.OpenTURNSPythonFunction):
+        def __init__(self):
+            super().__init__(2, 1)
+
+        def _exec(self, u):
+            return [1.0]
+
+    f = ot.Function(_eff_ot().eff_function(ot.Function(_G()), lambda u: 0.0, 2, 2.0))
+    assert f([0.0, 0.0])[0] == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Ce que l'extraction devait accomplir                                        #
+# --------------------------------------------------------------------------- #
+def test_plus_aucune_variable_libre():
+    from extraction_temoin import variables_libres
+    autorises = {"np", "ot", "norm", "eff"}
+    chemin = os.path.join(REPO, "_reliability", "eff.py")
+    for nom in ("eff", "eff_termes"):
+        restantes = set(variables_libres(chemin, nom)) - autorises
+        assert not restantes, f"{nom} depend encore de {sorted(restantes)}"
+
+
+@pytest.mark.parametrize("rel", ["pure_flexion/AC3_pure_flexion.py",
+                                 "Moulinblanc/AC3_moulinblanc.py"])
+def test_les_scripts_ac_ne_reecrivent_plus_la_formule(rel):
+    """La signature de la formule : `norm.pdf(t2)`. Si elle reapparait dans un
+    script AC, c'est qu'une copie est revenue."""
+    with open(os.path.join(REPO, rel), encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "norm.pdf(t2)" not in src, f"{rel} reecrit la formule EFF"
+    assert src.count("norm.cdf(t1)") == 0, f"{rel} reecrit la formule EFF"
+
+
+def test_la_somme_des_termes_vaut_le_critere():
+    """La propriete qui rend impossible le retour du defaut : le journal
+    d'enrichissement decompose desormais `eff` au lieu de la recopier."""
+    e = _eff()
+    rng = np.random.default_rng(11)
+    mu = np.concatenate([rng.normal(0, 3, 3000), [0.0, 5.0, -5.0]])
+    sg = np.concatenate([np.abs(rng.normal(0, 1.5, 3000)) + 1e-9, [1.0, 0.0, -1.0]])
+    for f in (2.0, 1.0, 0.5):
+        termes = e.eff_termes(mu, sg, f)
+        somme = termes[3] + termes[4] + termes[5] + termes[6]
+        assert somme == pytest.approx(e.eff(mu, sg, f), rel=1e-13, abs=1e-300)
+
+
+def test_la_decomposition_est_neutre_quand_sigma_est_nul():
+    e = _eff()
+    termes = e.eff_termes(np.array([1.0, 2.0]), np.array([0.0, -1.0]), 2.0)
+    for t in termes[3:]:
+        assert t.tolist() == [0.0, 0.0]
