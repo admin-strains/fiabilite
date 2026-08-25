@@ -128,3 +128,45 @@ def test_la_coquille_annonce_son_retrait(vieux, neuf):
     assert messages, f'{vieux} ne previent pas qu il est obsolete'
     assert neuf in messages[0] and 'phase 3' in messages[0], \
         f'le message ne dit pas le nouveau nom et la date de retrait : {messages[0]}'
+
+
+# --------------------------------------------------------------------------- #
+# Coquilles federatrices (phase 3 : scission de branche3 et branche5)         #
+# --------------------------------------------------------------------------- #
+SCISSIONS = [('branche3', ['kriging', 'pce_basis', 'fit']),
+             ('branche5', ['polynomials', 'transform', 'kernels'])]
+
+
+@pytest.mark.parametrize('vieux,cibles', SCISSIONS, ids=[v for v, _ in SCISSIONS])
+def test_la_coquille_federe_les_trois_modules(vieux, cibles):
+    coquille = __import__(vieux)
+    vus = set()
+    for nom_cible in cibles:
+        cible = __import__(nom_cible)
+        exportes = [n for n in dir(cible) if not n.startswith('_')]
+        assert exportes, f'{nom_cible} n expose rien'
+        for nom in exportes:
+            assert getattr(coquille, nom) is getattr(cible, nom), \
+                f'{vieux}.{nom} ne pointe pas sur {nom_cible}.{nom}'
+        vus.update(exportes)
+    assert vus, f'{vieux} ne federe rien'
+
+
+@pytest.mark.parametrize('vieux,cibles', SCISSIONS, ids=[v for v, _ in SCISSIONS])
+def test_les_modules_scindes_sont_disjoints(vieux, cibles):
+    """Une fonction ne doit exister que dans UN des modules issus de la
+    scission : un doublon signifierait deux copies divergentes a terme."""
+    vu = {}
+    for nom_cible in cibles:
+        cible = __import__(nom_cible)
+        for nom in dir(cible):
+            if nom.startswith('_') or not callable(getattr(cible, nom, None)):
+                continue
+            fn = getattr(cible, nom)
+            # ignorer ce qui est simplement importe d'un module voisin
+            if getattr(fn, '__module__', None) != nom_cible:
+                continue
+            assert nom not in vu, \
+                f'{nom} est defini dans {vu[nom]} ET dans {nom_cible}'
+            vu[nom] = nom_cible
+    assert vu

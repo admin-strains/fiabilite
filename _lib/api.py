@@ -28,9 +28,9 @@ if _dir not in sys.path:
     sys.path.insert(0, _dir)
 
 from options import uq_PCK_initialize
-from branche3 import uq_PCK_calculate_coefficients, uq_GEPCK_calculate_coefficients
+from fit import uq_PCK_calculate_coefficients, uq_GEPCK_calculate_coefficients
 from predict import uq_PCK_eval, uq_GEPCK_eval, uq_GEPCK_eval_deriv
-from branche5 import uq_eval_Kernel, uq_eval_global_Kernel
+from kernels import uq_eval_Kernel, uq_eval_global_Kernel
 
 
 # ===========================================================================

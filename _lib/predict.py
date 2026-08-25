@@ -22,8 +22,9 @@ _dir = os.path.dirname(__file__)
 if _dir not in sys.path:
     sys.path.insert(0, _dir)
 
-from branche3 import uq_Kriging_calc_DiagOfCongruent, uq_Kriging_calc_auxMatrices
-from branche5 import uq_GeneralIsopTransform, uq_eval_deriv_global_Kernel
+from kriging import uq_Kriging_calc_DiagOfCongruent, uq_Kriging_calc_auxMatrices
+from kernels import uq_eval_deriv_global_Kernel
+from transform import uq_GeneralIsopTransform
 
 
 # ===========================================================================
