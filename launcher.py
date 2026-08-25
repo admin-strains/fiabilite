@@ -156,12 +156,12 @@ def check(ds_root):
     """--check : valide l'installation sans lancer un seul calcul."""
     import openturns as ot
     from STRAINS.rupt.core import CetSOLV  # noqa: F401
-    import branche1
+    import api
 
     print("[check] openturns %s" % ot.__version__)
     print("[check] Digital Structure : modules compiles chargeables")
     print("[check] librairie du depot : %d fonctions exposees"
-          % len([n for n in dir(branche1) if not n.startswith("_")]))
+          % len([n for n in dir(api) if not n.startswith("_")]))
     for mod in ("smt", "autograd", "sklearn", "matplotlib", "psutil", "threadpoolctl"):
         __import__(mod)
     print("[check] pile des etudes complete")

@@ -45,7 +45,7 @@ from scipy.stats import norm
 from math import comb
 import warnings
 from datetime import datetime
-from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck, fit_pck, predict_pck
+from api import fit_gepck, predict_gepck, predict_gradient_gepck, fit_pck, predict_pck
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))

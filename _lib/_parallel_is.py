@@ -21,7 +21,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _here)                    # branche1 a cote (layout _lib/)
 sys.path.insert(0, os.path.dirname(_here))   # branche1 au parent (layout racine)
 import numpy as np
-from branche1 import fit_gepck, predict_gepck
+from api import fit_gepck, predict_gepck
 from threadpoolctl import threadpool_limits
 import concurrent.futures as cf
 

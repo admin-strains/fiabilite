@@ -20,7 +20,7 @@ if LIB_DIR not in sys.path:
 
 
 # --------------------------------------------------------------------------- #
-# DOE fige -- volontairement independant de scipy.qmc et de branche1.generate_doe
+# DOE fige -- volontairement independant de scipy.qmc et de api.generate_doe
 # (dont l'implementation LHS peut changer d'une version de scipy a l'autre).
 # Latin Hypercube centre + permutation PCG64 : stable entre versions numpy.
 # --------------------------------------------------------------------------- #
@@ -62,7 +62,7 @@ def fit(kind, X, ls, max_degree=3, opts=None):
     Les warnings d'optimisation sont laisses visibles (contrairement a la
     production qui les masque) : un nouveau warning est une information.
     """
-    from branche1 import fit_pck, fit_gepck
+    from api import fit_pck, fit_gepck
 
     X = np.atleast_2d(np.asarray(X, dtype=float))
     n_var = X.shape[1]
@@ -85,7 +85,7 @@ def predictors(kind, fm, fd_step=1e-5):
     - GEPCK : grad_hat = gradient ANALYTIQUE du metamodele (predict_gradient_gepck)
     - PCK   : grad_hat = differences finies centrees (comme OpenTURNS par defaut)
     """
-    from branche1 import predict_pck, predict_gepck, predict_gradient_gepck
+    from api import predict_pck, predict_gepck, predict_gradient_gepck
 
     pred = predict_pck if kind == 'PCK' else predict_gepck
 
@@ -119,7 +119,7 @@ def signature(fm, X_probe, kind):
     Resume numerique reproductible d'un metamodele ajuste.
     C'est cet objet qui est compare au fichier golden.
     """
-    from branche1 import predict_pck, predict_gepck
+    from api import predict_pck, predict_gepck
 
     pred = predict_pck if kind == 'PCK' else predict_gepck
     mu, var = pred(fm, X_probe, return_var=True)

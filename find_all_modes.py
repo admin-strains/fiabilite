@@ -14,7 +14,7 @@ import numpy as np
 
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion')
 sys.path.insert(0, r'C:\_workingDir\_SF\test flexion\_lib')
-from branche1 import fit_gepck, predict_gepck, predict_gradient_gepck
+from api import fit_gepck, predict_gepck, predict_gradient_gepck
 
 import ndsplines
 from projected_polyhedron import ndspline_to_bernstein_patches, pp_solve

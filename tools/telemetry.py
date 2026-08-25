@@ -221,11 +221,11 @@ def pin_seeds(journal=None, ot_seed=0, np_seed=20260825):
 #  Le condensat roulant, lui, repond exactement a la bonne question : la SUITE
 #  des appels est-elle la meme ?
 CIBLES_LIB = [
-    ("branche1", "fit_pck", ("X", "Y"), "detaille"),
-    ("branche1", "fit_gepck", ("X", "Y_aug"), "detaille"),
-    ("branche1", "predict_pck", ("X_test",), "agrege"),
-    ("branche1", "predict_gepck", ("X_test",), "agrege"),
-    ("branche1", "predict_gradient_gepck", ("X_test",), "agrege"),
+    ("api", "fit_pck", ("X", "Y"), "detaille"),
+    ("api", "fit_gepck", ("X", "Y_aug"), "detaille"),
+    ("api", "predict_pck", ("X_test",), "agrege"),
+    ("api", "predict_gepck", ("X_test",), "agrege"),
+    ("api", "predict_gradient_gepck", ("X_test",), "agrege"),
 ]
 
 

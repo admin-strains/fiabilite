@@ -140,7 +140,7 @@ def chaine(journal, cfg, solveur):
 
     # --- 2. metamodele --------------------------------------------------------
     # (les appels a fit_* / predict_* sont journalises par instrument_lib)
-    from branche1 import fit_pck, fit_gepck
+    from api import fit_pck, fit_gepck
     marginals = [{"Type": "Gaussian", "Parameters": [0.0, 1.0]}] * 2
     copula = {"Type": "Independent", "Parameters": np.eye(2)}
     opts = harness.default_opts(cfg["max_degree"])

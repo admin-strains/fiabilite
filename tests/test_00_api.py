@@ -10,22 +10,22 @@ import pytest
 
 # (module, symbole, parametres positionnels attendus)
 API = [
-    ('branche1', 'fit_pck', ['X', 'Y', 'options', 'marginals', 'copula']),
-    ('branche1', 'fit_gepck', ['X', 'Y_aug', 'options', 'marginals', 'copula']),
-    ('branche1', 'predict_pck', ['fitted_model', 'X_test']),
-    ('branche1', 'predict_gepck', ['fitted_model', 'X_test']),
-    ('branche1', 'predict_deriv_gepck', ['fitted_model', 'X_test', 'der_var']),
-    ('branche1', 'predict_gradient_gepck', ['fitted_model', 'X_test']),
-    ('branche1', 'generate_doe', ['N', 'marginals']),
-    ('branche2', 'uq_PCK_initialize', ['current_model']),
+    ('api', 'fit_pck', ['X', 'Y', 'options', 'marginals', 'copula']),
+    ('api', 'fit_gepck', ['X', 'Y_aug', 'options', 'marginals', 'copula']),
+    ('api', 'predict_pck', ['fitted_model', 'X_test']),
+    ('api', 'predict_gepck', ['fitted_model', 'X_test']),
+    ('api', 'predict_deriv_gepck', ['fitted_model', 'X_test', 'der_var']),
+    ('api', 'predict_gradient_gepck', ['fitted_model', 'X_test']),
+    ('api', 'generate_doe', ['N', 'marginals']),
+    ('options', 'uq_PCK_initialize', ['current_model']),
     ('branche3', 'uq_PCK_calculate_coefficients', ['X', 'Y', 'pck_config']),
     ('branche3', 'uq_GEPCK_calculate_coefficients', ['X', 'Y_aug', 'pck_config']),
-    ('branche4', 'uq_PCK_eval', ['fitted_model', 'X_test']),
-    ('branche4', 'uq_GEPCK_eval', ['fitted_model', 'X_test']),
-    ('branche4', 'uq_GEPCK_eval_deriv', ['fitted_model', 'X_test', 'der_var']),
+    ('predict', 'uq_PCK_eval', ['fitted_model', 'X_test']),
+    ('predict', 'uq_GEPCK_eval', ['fitted_model', 'X_test']),
+    ('predict', 'uq_GEPCK_eval_deriv', ['fitted_model', 'X_test', 'der_var']),
     ('branche5', 'uq_eval_Kernel', ['X1', 'X2', 'theta', 'options']),
     ('branche5', 'uq_eval_global_Kernel', ['X1', 'X2', 'theta', 'options']),
-    ('branche_lars', 'uq_lar', None),
+    ('lars', 'uq_lar', None),
 ]
 
 
@@ -70,3 +70,61 @@ def test_lib_nimporte_pas_strains(tmp_path):
     assert p.returncode == 0, f'_lib ne s importe pas seul :\n{p.stderr[-2000:]}'
     charges = [m for m in p.stdout.strip().split(',') if m]
     assert not charges, f'_lib a tire des dependances lourdes : {charges}'
+
+
+# --------------------------------------------------------------------------- #
+# Coquilles de compatibilite (phase 2)                                        #
+# --------------------------------------------------------------------------- #
+COQUILLES = [('branche1', 'api'), ('branche2', 'options'),
+             ('branche4', 'predict'), ('branche_lars', 'lars')]
+
+
+@pytest.mark.parametrize('vieux,neuf', COQUILLES, ids=[v for v, _ in COQUILLES])
+def test_ancien_nom_delegue_au_nouveau(vieux, neuf):
+    """Les suites de tests/unit/ sont conservees telles quelles : elles
+    importent les anciens noms, qui doivent continuer a fonctionner."""
+    a, b = __import__(vieux), __import__(neuf)
+    exportes = [n for n in dir(b) if not n.startswith('_')]
+    assert exportes, f'{neuf} n expose rien'
+    for nom in exportes:
+        assert getattr(a, nom) is getattr(b, nom), \
+            f'{vieux}.{nom} ne pointe pas sur {neuf}.{nom}'
+
+
+@pytest.mark.parametrize('vieux,neuf', COQUILLES, ids=[v for v, _ in COQUILLES])
+def test_la_coquille_suit_l_instrumentation(vieux, neuf):
+    """
+    Liaison TARDIVE, et non `from X import *`.
+
+    tools/telemetry.py instrumente en remplacant les fonctions dans le module.
+    Avec un `import *`, la coquille aurait fige les references au chargement et
+    l'ancien nom aurait continue de rendre la fonction NON instrumentee -- deux
+    chemins d'import donnant deux objets differents, silencieusement.
+    """
+    a, b = __import__(vieux), __import__(neuf)
+    cible = [n for n in dir(b) if not n.startswith('_')][0]
+    original = getattr(b, cible)
+    sentinelle = object()
+    try:
+        setattr(b, cible, sentinelle)
+        assert getattr(a, cible) is sentinelle, \
+            f'{vieux} a fige {cible} au chargement : la deleguation n est pas tardive'
+    finally:
+        setattr(b, cible, original)
+
+
+@pytest.mark.parametrize('vieux,neuf', COQUILLES, ids=[v for v, _ in COQUILLES])
+def test_la_coquille_annonce_son_retrait(vieux, neuf):
+    """Une coquille sans date de retrait devient permanente. Celle-ci doit
+    prevenir a l'import et dire quand elle disparait."""
+    import importlib
+    import warnings
+    mod = importlib.import_module(vieux)
+    with warnings.catch_warnings(record=True) as captures:
+        warnings.simplefilter('always')
+        importlib.reload(mod)
+    messages = [str(w.message) for w in captures
+                if issubclass(w.category, DeprecationWarning)]
+    assert messages, f'{vieux} ne previent pas qu il est obsolete'
+    assert neuf in messages[0] and 'phase 3' in messages[0], \
+        f'le message ne dit pas le nouveau nom et la date de retrait : {messages[0]}'

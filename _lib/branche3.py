@@ -38,7 +38,7 @@ from branche5 import (
     uq_poly_rec_coeffs,           # used to identify poly type from marginal
     uq_eval_hermite_deriv, uq_eval_legendre_deriv,
 )
-from branche_lars import uq_lar
+from lars import uq_lar
 
 
 # ===========================================================================
