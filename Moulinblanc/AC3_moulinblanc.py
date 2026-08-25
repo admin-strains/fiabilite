@@ -1923,6 +1923,7 @@ if __name__ == '__main__':
         renvoie métamodèle+ paramètres mis à jour.
         """
         # --- Si aucune branche ne tourne, on ne fait rien ---
+        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
         _point_log_phase[0] = "EFF"
@@ -1996,10 +1997,10 @@ if __name__ == '__main__':
             return None, None, None, None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
-        # Reprendre les compteurs de convergence depuis l'historique (restart)
         count_valid_BB   = 0
         count_valid_BS   = 0
         count_valid_both = 0
+        # Reprendre les compteurs de convergence depuis l'historique (restart)
         if restart_enrich_only and _eff_history_BS:
             for _v in reversed(_eff_history_BS):
                 if _v < tol_BS:
@@ -2036,7 +2037,6 @@ if __name__ == '__main__':
         else:
             _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
         _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         if restart_enrich_only:
             list_beta_IS = list(_eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
