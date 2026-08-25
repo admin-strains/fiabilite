@@ -85,3 +85,23 @@ def test_gradient_gepck_est_juste(fitted, flexion_ls):
     assert fd(1e-3) < 1e-5, 'gradient analytique GEPCK faux au pas le plus fiable'
     assert fd(1e-3) < fd(1e-6), \
         'le FD ne se degrade plus quand h diminue : reexaminer le diagnostic'
+
+
+@pytest.mark.defect
+@pytest.mark.xfail(strict=True, reason=(
+    "branche3.py l.230 : `float((z.T @ z) / N)` convertit un tableau 1x1 en "
+    "scalaire. NumPy le deprecie depuis 1.25 et l'annonce comme une ERREUR "
+    "dans une version future -- le code cessera alors de fonctionner, sans "
+    "que rien n'ait change dans le depot. Meme motif possible ailleurs : "
+    "chercher les float() sur resultat matriciel. Corriger en float(z.T @ z) "
+    "sur un scalaire deja reduit, ou .item()."))
+def test_pas_de_conversion_tableau_vers_scalaire_depreciee(doe24, flexion_ls):
+    """Ajuster un metamodele ne doit lever aucun DeprecationWarning NumPy."""
+    import warnings
+    import harness
+    with warnings.catch_warnings(record=True) as captures:
+        warnings.simplefilter('always', DeprecationWarning)
+        harness.fit('GEPCK', doe24, flexion_ls)
+    ndim = [str(w.message) for w in captures
+            if 'ndim > 0 to a scalar' in str(w.message)]
+    assert not ndim, f'{len(ndim)} conversion(s) depreciee(s) : {ndim[0][:120]}'

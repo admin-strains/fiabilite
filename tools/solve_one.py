@@ -150,9 +150,26 @@ def evaluate(ds_dir, params, global_size=0.05, geo_min_approx=4,
     t_solv = time.perf_counter() - t0
 
     with open(os.path.join(ds_dir, "%s_%d_kine.dsmetares" % (analysis, iteration)), "r") as fh:
-        res = json.load(fh)
-    alpha = res["info"]["Primal_bound"][0]
-    return alpha - 1.0, alpha, t_mesh, t_solv
+        info = json.load(fh)["info"]
+
+    alpha = info["Primal_bound"][0]
+    dual = info.get("Dual_bound", [float("nan")])[0]
+    sante = {
+        "converged": info.get("converged"),
+        "solver_status": info.get("solver_status"),
+        "solverIterations": info.get("solverIterations"),
+        "numTetra": info.get("numTetra"),
+        "systemSize": info.get("systemSize"),
+        "Dual_bound": dual,
+        "gap_relatif": abs(alpha - dual) / abs(alpha) if alpha else float("nan"),
+    }
+    # Les scripts AC lisent Primal_bound SANS regarder ces indicateurs
+    # (0 occurrence de "converged" / "solver_status" dans AC3_pure_flexion et
+    # AC3_moulinblanc). Mesure du 25/08/2026 : a global_physical_size=0.018 le
+    # solveur sort NUMERICAL_ERROR, converged=False, avec un ecart primal-dual
+    # de 16 % -- et alpha=1.5197 au lieu de ~1.318. Un tel point entre alors
+    # dans le DOE comme une evaluation valide.
+    return alpha - 1.0, alpha, t_mesh, t_solv, sante
 
 
 def main():
@@ -198,9 +215,11 @@ def main():
     with open(out, "w") as fh:
         json.dump({"fc": args.fc, "fy": args.fy, "alpha": alpha, "g": g,
                    "global_physical_size": args.global_size,
-                   "t_mesh": t_mesh, "t_solv": t_solv}, fh, indent=1)
+                   "t_mesh": t_mesh, "t_solv": t_solv,
+                   "sain": sain, **sante}, fh, indent=1)
     print("  ecrit : %s" % out, flush=True)
+    return 0 if sain else 2
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
