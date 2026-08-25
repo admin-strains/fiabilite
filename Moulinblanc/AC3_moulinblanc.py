@@ -78,7 +78,7 @@ if __name__ == '__main__':
     n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
     n_workers_DOE = 6             #nb de SOCP DOE en parallele
     config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = False  #True = charger restart_state.json et continuer l'enrichissement
+    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
 
 
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     u1_min = -7.5
     u2_min = -7.5
     n_grid = 300
-    n_grid_hf = 7
+    n_grid_hf = 15
 
     # --- Options de print ---
     print_HF = True
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     hf_3d_grid_fixed = None
     hf_2d_grid_fixed = None
     # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
-    do_custom_hf = False
+    do_custom_hf = True
     _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
