@@ -1996,9 +1996,24 @@ if __name__ == '__main__':
             return None, None, None, None
 
         # --- FORM+IS sur le DOE initial (avant EFF) ---
+        # Reprendre les compteurs de convergence depuis l'historique (restart)
         count_valid_BB   = 0
         count_valid_BS   = 0
         count_valid_both = 0
+        if restart_enrich_only and _eff_history_BS:
+            for _v in reversed(_eff_history_BS):
+                if _v < tol_BS:
+                    count_valid_BS += 1
+                else:
+                    break
+        if restart_enrich_only and _eff_history_BB:
+            for _v in reversed(_eff_history_BB):
+                if _v < tol_BB:
+                    count_valid_BB += 1
+                else:
+                    break
+        if count_valid_BS > 0 or count_valid_BB > 0:
+            print(f"  [RESTART] compteurs repris : count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}", flush=True)
         # --- On résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
         _batch_pts, _eff_val_init = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
         u_opt = ot.Point(_batch_pts[0].tolist())
