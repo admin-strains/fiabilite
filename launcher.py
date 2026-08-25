@@ -121,8 +121,8 @@ def setup(ds_root):
         for d in manquants:
             print("           " + d, file=sys.stderr)
 
-    # 3. chemins d'import : DS, puis la librairie du depot
-    for p in (ds_root, os.path.join(REPO, "_lib")):
+    # 3. chemins d'import : DS, puis les modules du depot
+    for p in (ds_root, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model")):
         if p not in sys.path:
             sys.path.insert(0, p)
 
@@ -152,8 +152,13 @@ def run(script, extra=()):
     exec(compile(source, script, "exec"), {"__name__": "__main__", "__file__": script})
 
 
-def check(ds_root):
-    """--check : valide l'installation sans lancer un seul calcul."""
+def check(ds_root, etude=None):
+    """--check : valide l'installation sans lancer un seul calcul.
+
+    Avec une etude en argument, execute aussi son EN-TETE (imports +
+    INITCATALOG) en posant __name__ != "__main__" : le bloc de calcul, qui
+    represente 98 % du fichier, n'est donc pas atteint.
+    """
     import openturns as ot
     from STRAINS.rupt.core import CetSOLV  # noqa: F401
     import api
@@ -165,6 +170,22 @@ def check(ds_root):
     for mod in ("smt", "autograd", "sklearn", "matplotlib", "psutil", "threadpoolctl"):
         __import__(mod)
     print("[check] pile des etudes complete")
+
+    if etude:
+        chemin = os.path.abspath(etude)
+        if not os.path.isfile(chemin):
+            raise SystemExit("Etude introuvable : %s" % chemin)
+        dossier = os.path.dirname(chemin)
+        if dossier not in sys.path:
+            sys.path.insert(0, dossier)
+        os.environ.setdefault("_FIAB_LOG_REDIRECTED", "1")   # matplotlib en Agg
+        with open(chemin, "r", encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+        espace = {"__name__": "_check_pas_main", "__file__": chemin}
+        exec(compile(source, chemin, "exec"), espace)
+        print("[check] en-tete de %s : %d symboles definis avant __main__"
+              % (os.path.basename(chemin), len(espace)))
+
     print("[check] OK -- installation utilisable")
 
 
@@ -181,7 +202,7 @@ def main(argv):
 
     if argv[1] == "--check":
         setup(ds_root)
-        check(ds_root)
+        check(ds_root, argv[2] if len(argv) > 2 else None)
         return
 
     print("[launcher] etude  : %s" % argv[1], flush=True)

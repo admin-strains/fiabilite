@@ -35,7 +35,8 @@ import sys
 import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for p in (REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "tests"), os.path.join(REPO, "tools")):
+for p in (REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
+          os.path.join(REPO, "tests"), os.path.join(REPO, "tools")):
     if p not in sys.path:
         sys.path.insert(0, p)
 

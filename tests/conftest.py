@@ -9,7 +9,8 @@ import pytest
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TESTS_DIR)
 
-for p in (TESTS_DIR, os.path.join(ROOT, '_lib')):
+for p in (TESTS_DIR, os.path.join(ROOT, '_lib'), os.path.join(ROOT, '_model'),
+          os.path.join(ROOT, 'tools')):
     if p not in sys.path:
         sys.path.insert(0, p)
 
