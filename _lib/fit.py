@@ -17,7 +17,7 @@ aucun resultat, et la baseline le verifie.
 import copy
 import numpy as np
 
-from kernels import uq_eval_Kernel
+from kernels import uq_eval_Kernel, uq_eval_global_Kernel
 from kriging import fit_kriging_pck, fit_kriging_gepck
 from pce_basis import (
     poly_type_from_marginal, aux_marginal_from_poly_type,
@@ -315,8 +315,6 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
     optim_method    : 'gradbased' | 'de' | 'none'
     estim_method    : 'ml' | 'cv'
     """
-    from kernels import uq_eval_global_Kernel
-
     X     = np.atleast_2d(X).astype(float)
     Y_aug = np.asarray(Y_aug).ravel().astype(float)
     N, M  = X.shape
