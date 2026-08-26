@@ -2782,43 +2782,8 @@ if __name__ == '__main__':
         return _form.run_IS(modes, event, n_var, n_IS, cov_IS)
 
     def run_IS_proj(modes, event_proj):
-        """IS sur le surrogate projete (sans la variable de position).
-        Extrait u* et Pf des modes FORM (n_var dims), enleve la composante position,
-        et fait l'IS en dimension reduite sur event_proj.
-        Si pas de variable de position, equivalent a run_IS."""
-        idx_pos = _find_position_var_index()
-
-        idx_other = [i for i in range(n_var) if i != idx_pos] if idx_pos is not None else list(range(n_var))
-        n_proj = len(idx_other)
-
-        # extraire u* et Pf de chaque mode, projeter u*
-        u_stars_proj = []
-        pf_weights = []
-        for m in modes:
-            u_full = list(m.getStandardSpaceDesignPoint())
-            u_proj = [u_full[i] for i in idx_other]
-            u_stars_proj.append(u_proj)
-            pf_weights.append(m.getEventProbability())
-
-        if len(modes) == 1:
-            g_imp = ot.Normal(n_proj)
-            g_imp.setMu(u_stars_proj[0])
-            importance_dist = g_imp
-        else:
-            gaussians = []
-            for u_proj in u_stars_proj:
-                g_i = ot.Normal(n_proj)
-                g_i.setMu(u_proj)
-                gaussians.append(g_i)
-            importance_dist = ot.Mixture(gaussians, pf_weights)
-
-        experiment = ot.ImportanceSamplingExperiment(importance_dist, n_IS)
-        std_event  = ot.StandardEvent(event_proj)
-        algo = ot.ProbabilitySimulationAlgorithm(std_event, experiment)
-        algo.setMaximumCoefficientOfVariation(cov_IS)
-        algo.setMaximumOuterSampling(n_IS)
-        algo.run()
-        return algo.getResult()
+        return _form.run_IS_proj(modes, event_proj, n_var, n_IS, cov_IS,
+                                 _find_position_var_index())
 
     def print_results_IS(result_IS):
         return _form.print_results_IS(result_IS)

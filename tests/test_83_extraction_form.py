@@ -226,3 +226,47 @@ def test_plus_aucune_variable_libre():
                 "print_results_IS", "bound_surrogate_function"):
         restantes = set(variables_libres(chemin, nom)) - autorises
         assert not restantes, f"{nom} depend encore de {sorted(restantes)}"
+
+
+# --------------------------------------------------------------------------- #
+# Le garde-fou qui manquait                                                   #
+# --------------------------------------------------------------------------- #
+EXTRAITES = ["FORM_all_modes", "BoundSurrogateFunction", "run_IS",
+             "run_IS_proj", "print_results_IS"]
+
+
+@pytest.mark.parametrize("rel", ["pure_flexion/AC3_pure_flexion.py",
+                                 "Moulinblanc/AC3_moulinblanc.py"])
+def test_les_scripts_ac_ne_portent_plus_que_des_delegues(rel):
+    """Ecrit APRES avoir constate son absence.
+
+    `run_IS_proj` avait ete extrait dans `form.py` sans etre retire des deux
+    scripts AC : il existait en TROIS exemplaires, et le message de commit
+    affirmait le contraire. Le test equivalent existait pour les caches ; il
+    manquait ici, et rien d'autre ne pouvait le voir -- aucun script AC n'est
+    execute par la suite de tests.
+
+    On verifie la STRUCTURE, pas l'absence du nom : les delegues portent les
+    memes noms que les originaux, par conception.
+    """
+    import ast
+    chemin = os.path.join(REPO, rel)
+    with open(chemin, encoding="utf-8", errors="replace") as fh:
+        source = fh.read()
+    arbre = ast.parse(source, chemin)
+    vus = {}
+    for n in ast.walk(arbre):
+        if not isinstance(n, (ast.FunctionDef, ast.ClassDef)) or n.name not in EXTRAITES:
+            continue
+        assert isinstance(n, ast.FunctionDef), \
+            f"{rel} : {n.name} est reste une classe, il devait devenir un delegue"
+        corps = [x for x in n.body
+                 if not (isinstance(x, ast.Expr) and isinstance(x.value, ast.Constant))]
+        assert len(corps) == 1 and isinstance(corps[0], ast.Return), \
+            f"{rel} : {n.name} n est pas un delegue ({len(corps)} instructions)"
+        appelle = [d.value.id for d in ast.walk(corps[0])
+                   if isinstance(d, ast.Attribute) and isinstance(d.value, ast.Name)]
+        assert "_form" in appelle, f"{rel} : {n.name} ne transmet pas a _form"
+        vus[n.name] = True
+    assert set(vus) == set(EXTRAITES), \
+        f"{rel} : manquants {sorted(set(EXTRAITES) - set(vus))}"
