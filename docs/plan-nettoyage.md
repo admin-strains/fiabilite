@@ -462,22 +462,79 @@ Reste a faire pour boucler : porter ce run dans la CI, une fois la chaine
 assez rapide pour y tenir (elle prend quelques minutes, dominees par les
 iterations FORM+IS, pas par le solveur).
 
-### Phase 6 — Corriger les quatre defauts · 3 a 5 j
+### Phase 6 — Corriger les defauts · FAIT
 
-Dans cet ordre, parce que le quatrieme conditionne les autres :
+Menee dans l'ordre prevu, le quatrieme conditionnant les autres. Les criteres
+de reussite avaient ete chiffres D'AVANCE — interpolation GEPCK sous 1e-6 et
+ecart sur `beta` sous 0,05 % — et sont tenus avec de la marge.
 
-- **defaut 4** : trancher la convention `der`/`dp`, puis corriger le code ou
-  le test, et la docstring. Tant que la convention est ambigue, les defauts
-  2 et 3 ne sont pas diagnosticables ;
-- **defaut 1** : le dispatch `isGram` doit etre un parametre explicite de
-  l'appelant, pas une devinette sur le contenu des tableaux ;
-- **defauts 2 et 3** : conditionnement de `R_tilde` — mise a l'echelle des
-  blocs de derivees, pepite adaptative, bornes sur `theta`. Le critere de
-  reussite est chiffre d'avance : interpolation GEPCK sous 1e-6 et ecart sur
-  `beta` sous 0,05 %, c'est-a-dire au moins aussi bon que PCK.
+**Defaut 4 — la convention `der`/`dp`. Le code avait raison, la
+documentation avait tort.** Deux docstrings de `kernels.py` annonçaient la
+derivee par rapport au premier argument la ou le code derivait le second.
+Tranche par differences finies : la l-ieme observation augmentee est
+`dy/dx_l` AU POINT D'APPRENTISSAGE, donc
+`Cov(y(x*), dy/dx_l(x^j)) = dk(x*, x^j)/dx^j_l` — le second argument.
+Les docstrings sont corrigees ; le test herite qui encode la convention
+inverse reste `xfail` et INCHANGE, parce qu'un temoin ne se reecrit pas.
+20 tests ancrent desormais la convention (`test_51_convention_derivees.py`).
 
-Chaque correction retire un `xfail(strict)`, ce qui rend l'echec impossible a
-manquer si elle regresse.
+**Defaut 1 — le dispatch `isGram` devinait.** `uq_eval_global_Kernel`
+choisissait entre deux formes de retour, `(n(m+1), n(m+1))` et
+`(n1, n2(m+1))`, en inspectant le CONTENU des tableaux. Evaluer le
+metamodele sur un point deja present dans son plan d'experiences le faisait
+donc basculer sur la mauvaise branche. L'appelant le DIT maintenant, via
+`options['IsGram']`, et un `IsGram=True` sur deux jeux distincts est refuse.
+
+**Defauts 2 et 3 — ce n'etait pas l'echelle des blocs, c'etait l'absence de
+pepite.** L'hypothese inscrite au plan — « mise a l'echelle des blocs de
+derivees » — est FAUSSE : l'equilibrage de Jacobi ne gagne rien
+(1,64e15 → 1,63e15), pas plus que le raffinement iteratif ou `lstsq`.
+
+La vraie cause est en amont. Les etats limites de fiabilite sont tres
+lisses ; sans pepite, la vraisemblance croit indefiniment avec les longueurs
+de correlation, parce qu'une matrice plus singuliere la gonfle
+artificiellement. L'optimiseur allait donc au plafond — **deux des quatre cas
+de reference y etaient colles, a theta = 100**. C'est l'estimation de `theta`
+elle-meme qui etait cassee, pas seulement la resolution.
+
+Ce que cela coutait, mesure par `tools/mesure_pepite.py` :
+
+| etat limite | N | pepite 0 | pepite 1e-8 |
+|---|---|---|---|
+| flexion, GEPCK | 24 | 1,30 % | 0,0072 % |
+| flexion, GEPCK | 40 | **56,4 %** | 0,0015 % |
+| lineaire, GEPCK | 40 | **466 %** | exact |
+
+L'erreur EMPIRE quand le plan grandit — a l'envers de ce qu'on attend, et la
+boucle d'enrichissement EFF, elle, ajoute des points. Le cas lineaire est le
+plus parlant : l'etat limite est un hyperplan que le metamodele contient
+exactement, et sans pepite il rendait `beta = 19,8` au lieu de 3,5.
+
+`kernels.PEPITE_PAR_DEFAUT = 1e-8`, valeur choisie par balayage sur 2 etats
+limites x 4 tailles de plan x 2 metamodeles.
+
+**Defaut 5 — conversion depreciee.** Quatre `float()` sur des tableaux 1x1,
+que NumPy annonce comme une future ERREUR : le code aurait cesse de
+fonctionner sans que rien n'ait change dans le depot. Corriges par `.item()`.
+Un test statique recense les cas legitimes restants — il en a trouve un
+cinquieme que la lecture avait manque.
+
+**Ce qui change de chiffres.** C'est la premiere phase qui en change
+volontairement. Goldens et baseline ont tout detecte, et la regeneration a
+ete precedee de la demonstration exigee : la GENERALISATION s'ameliore aussi,
+pas seulement l'interpolation — erreur aux points sonde divisee par 722
+(GEPCK flexion), 561 (GEPCK lineaire), 94 et 4 pour PCK. La baseline passe
+de 0,0771 % a 0,0492 % d'erreur sur `beta` contre le meme oracle exact.
+
+`TOL_BETA` de `test_40` passe de 0,5 %/2 % — des seuils cales sur le defaut —
+au critere du plan, 0,05 % pour les deux.
+
+**Reste ouvert.** Le defaut 6 (les scripts lisaient `Primal_bound` sans
+regarder `converged`) est instrumente en phase 5 : `Evaluation.sain` et
+`exige_sain()` existent, et un point non converge est desormais SIGNALE dans
+le journal — mais il entre encore au plan d'experiences, comme avant. En
+faire une erreur est un choix d'exploitation, a arbitrer avec Semia et
+Mohamad. Le defaut 7 (`sys` non importe) est corrige en phase 5.
 
 ### Phase 7 — Performance · 2 a 4 j
 

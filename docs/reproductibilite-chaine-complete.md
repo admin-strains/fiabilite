@@ -181,6 +181,26 @@ Journaux **identiques hors chronometrage** (226 lignes). Et `beta_FORM =
 C'est la sortie utile de la phase 5. Un ecart observe sur cette chaine-la est
 imputable au code, ce qui n'a jamais ete vrai sur Digital Structure.
 
+## Effet de la phase 6 sur la chaine analytique (26/08/2026)
+
+La correction des defauts 2 et 3 -- pepite par defaut a 1e-8 -- change les
+chiffres. Sur la chaine analytique complete, ou la mesure est reproductible :
+
+| | avant | apres | exact |
+|---|---|---|---|
+| `beta_FORM` | 4,7527 | 4,7516 | 4,77257 |
+| `beta_IS` | 4,6698 | 4,6828 | 4,77257 |
+| `Pf_IS` | 1,5071e-06 | 1,4147e-06 | — |
+
+L'effet est modeste ICI, et c'est attendu : l'enrichissement EFF place ses
+points le long de l'etat limite, la ou le metamodele etait deja bon avec
+treize points. Le gain de la pepite se joue sur les grands plans
+d'experiences, ou le conditionnement s'effondrait -- 56 % d'erreur sur beta a
+quarante points, contre 0,0015 % apres. Voir `tools/mesure_pepite.py`.
+
+La baseline analytique, elle, passe de **0,0771 % a 0,0492 %** d'erreur sur
+`beta` contre le meme oracle exact.
+
 ## Comment refaire la mesure
 
 ```bat

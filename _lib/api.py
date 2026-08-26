@@ -30,7 +30,8 @@ if _dir not in sys.path:
 from options import uq_PCK_initialize
 from fit import uq_PCK_calculate_coefficients, uq_GEPCK_calculate_coefficients
 from predict import uq_PCK_eval, uq_GEPCK_eval, uq_GEPCK_eval_deriv
-from kernels import uq_eval_Kernel, uq_eval_global_Kernel
+from kernels import (PEPITE_PAR_DEFAUT, uq_eval_Kernel,
+                     uq_eval_global_Kernel)
 
 
 # ===========================================================================
@@ -201,7 +202,7 @@ def fit_pck(X, Y, options, marginals, copula):
             'Family'    : corr.get('Family',    'matern-5_2'),
             'Type'      : corr.get('Type',      'separable'),
             'Isotropic' : corr.get('Isotropic', False),
-            'Nugget'    : corr.get('Nugget',    0.0),
+            'Nugget'    : corr.get('Nugget',    PEPITE_PAR_DEFAUT),
         }
 
     # -----------------------------------------------------------------------
@@ -294,7 +295,7 @@ def fit_gepck(X, Y_aug, options, marginals, copula):
             'Family'    : corr.get('Family',    'matern-5_2'),
             'Type'      : corr.get('Type',      'separable'),
             'Isotropic' : corr.get('Isotropic', False),
-            'Nugget'    : corr.get('Nugget',    0.0),
+            'Nugget'    : corr.get('Nugget',    PEPITE_PAR_DEFAUT),
         }
 
     return uq_GEPCK_calculate_coefficients(

@@ -34,6 +34,18 @@ for p in (os.path.join(REPO, "solver"), os.path.join(REPO, "_model"), TESTS):
 
 from reference.limit_states import FlexionLS                  # noqa: E402
 
+#: Ecart-type de la limite d'elasticite de l'acier, modele JCSS :
+#: sqrt(19^2 + 22^2 + 8^2), soit la composition des trois sources de
+#: dispersion (coulee, barre, geometrie).
+#:
+#: La valeur est RECOPIEE ici, et non importee de `_model/lois.py` : ce
+#: module charge OpenTURNS, que ce fichier annonce ne pas demander. La
+#: premiere version l'importait -- quatre tests rouges sur l'interpreteur de
+#: Digital Structure, qui n'a pas OpenTURNS, exactement la faute deja commise
+#: en phase 3d avec `eff.py`. `test_la_constante_jcss_reste_alignee` verifie
+#: que les deux valeurs coincident, la ou les deux sont chargeables.
+SIGMA_ACIER_JCSS = (19.0 ** 2 + 22.0 ** 2 + 8.0 ** 2) ** 0.5
+
 MODELE = os.path.join(r"C:\workspace\storage\admin\SF", "test_pure_flexion.ds")
 #: beta exact de l'etat limite analytique sur CETTE section, obtenu par
 #: minimisation scalaire a 1e-12 -- ni metamodele, ni FORM.
@@ -49,7 +61,6 @@ def _solveur():
 
 def _oracle(section):
     """`FlexionLS` cale sur la meme section que le solveur."""
-    from lois import SIGMA_ACIER_JCSS                         # noqa: PLC0415
     ls = FlexionLS(b=section["b"], d=section["d"], L=section["L"], F=section["F"],
                    gamma_c=section["gamma_c"], gamma_s=section["gamma_s"],
                    fcm=48.0, cov_fc=0.12, fym=550.0, sig_fy=SIGMA_ACIER_JCSS,
@@ -118,6 +129,16 @@ def test_le_gradient_coincide_apres_passage_en_espace_standard():
             en_u = np.array([gx[0] * ls.sig_ln * x[0], gx[1] * ls.sig_fy])
             pire = max(pire, float(np.max(np.abs(ls.grad(U)[0] - en_u))))
     assert pire < 1e-14, "ecart max sur le gradient = %.3e" % pire
+
+
+def test_la_constante_jcss_reste_alignee():
+    """La valeur recopiee ci-dessus doit rester celle de `_model/lois.py`.
+    Le test SAUTE la ou OpenTURNS n'est pas installe -- il verifie un
+    alignement, il ne doit pas imposer une dependance."""
+    pytest.importorskip("openturns", reason="_model/lois.py charge OpenTURNS")
+    sys.path.insert(0, os.path.join(REPO, "_model"))
+    from lois import SIGMA_ACIER_JCSS as officiel              # noqa: PLC0415
+    assert SIGMA_ACIER_JCSS == pytest.approx(officiel, rel=1e-15)
 
 
 def test_beta_exact_de_reference():

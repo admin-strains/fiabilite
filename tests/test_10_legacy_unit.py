@@ -38,16 +38,20 @@ STATUT_CONNU = {
     'test_make_trend_deriv': ('ok', None),
     'test_eval_global_kernel': (
         'ko',
-        "T3 attend r0_tilde[:, cb] == kernel_deriv_factory(der=cb-1, dp=None) ; "
-        "branche5.uq_eval_global_Kernel calcule (der=None, dp=cb-1) depuis la "
-        "branche flexion. Le code contredit sa propre docstring (l.1336-1338) : "
-        "convention a trancher, puis test OU code a corriger. "
-        "Le NameError 'dp' l.103 est un typo latent du test, revele par l'echec."),
-    'test_predict_deriv_gepck': (
-        'ko',
-        "T2 (Mode=optimal, Matern-5/2) : |grad_analytique - FD| = 3.7e-3 pour un "
-        "seuil de 1e-6, avec EPS=1e-5. T1 (sequential, Legendre) passe. "
-        "Piste : conditionnement de R_tilde -- cf. test_50_known_defects."),
+        "TRANCHE le 26/08/2026 (defaut 4, phase 6) : c'est LE TEST qui a tort. "
+        "T3 attend r0_tilde[:, cb] == kernel_deriv_factory(der=cb-1, dp=None), "
+        "or la l-ieme observation augmentee est dy/dx_l AU POINT D'APPRENTISSAGE, "
+        "donc Cov(y(x*), dy/dx_l(x^j)) = dk(x*,x^j)/dx^j_l -- une derivee du "
+        "SECOND argument, soit (der=None, dp=l). Verifie par differences finies : "
+        "voir tests/test_51_convention_derivees.py, 20 tests. Les deux docstrings "
+        "de kernels.py, elles, etaient fausses et ont ete corrigees. "
+        "Ce test reste INCHANGE : les suites d'origine servent de temoin, on ne "
+        "reecrit pas un temoin. Le NameError 'dp' l.103 est un typo latent."),
+    # CORRIGE le 26/08/2026 (defauts 2 et 3, phase 6). La piste enregistree
+    # etait la bonne : c'etait bien le conditionnement de R_tilde. Avec la
+    # pepite par defaut a 1e-8, |grad_analytique - FD| passe de 3,7e-3 a sous
+    # 1e-6 et les 9 sous-tests passent. Rien n'a ete touche dans ce test.
+    'test_predict_deriv_gepck': ('ok', None),
 }
 
 SUITES = sorted(f[:-3] for f in os.listdir(UNIT_DIR)

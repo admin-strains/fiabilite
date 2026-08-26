@@ -18,6 +18,54 @@ from scipy.spatial.distance import cdist
 
 
 # =============================================================================
+# Pepite par defaut -- DEFAUTS 2 et 3 du plan de nettoyage
+# =============================================================================
+#: Valeur ajoutee a la diagonale de la matrice de correlation avant de la
+#: factoriser. Elle valait ZERO, au nom de l'interpolation exacte. La mesure
+#: du 26/08/2026 montre que c'est l'inverse qui se produit.
+#:
+#: POURQUOI UNE PEPITE EST NECESSAIRE ICI
+#: Les etats limites de fiabilite sont TRES lisses. Le maximum de
+#: vraisemblance pousse donc les longueurs de correlation vers le haut --
+#: theta = [59,9 ; 73,1] mesures sur un plan de 24 points dans [-4, 4]^2,
+#: bien loin sous le plafond de 100. La correlation vaut alors ~1 entre tous
+#: les points : la matrice devient numeriquement de rang 1.
+#:
+#: Conditionnement mesure sur ce plan : cond(R) = 7,0e13 pour PCK,
+#: cond(R_tilde) = 1,7e15 pour GEPCK -- au bord des 4,5e15 que la double
+#: precision autorise. Le residu de resolution vaut alors 2,8e-02, et c'est
+#: LUI l'erreur d'interpolation. Ni l'equilibrage de Jacobi (aucun gain
+#: mesure : 1,64e15 -> 1,63e15), ni le raffinement iteratif, ni `lstsq` n'y
+#: changent quoi que ce soit : la matrice est simplement hors de portee.
+#:
+#: CE QUE CELA COUTAIT EN PRODUCTION
+#: L'erreur EMPIRE quand le plan d'experiences grandit -- exactement a
+#: l'envers de ce qu'on attend, et la boucle d'enrichissement EFF, elle,
+#: ajoute des points :
+#:
+#:     etat limite   N    pepite 0      pepite 1e-8
+#:     flexion      24    1,30 %        0,0072 %
+#:     flexion      40    56,4 %        0,0015 %
+#:     lineaire     40    466 %         exact
+#:
+#: Le cas lineaire est le plus parlant : l'etat limite est un hyperplan que
+#: le metamodele contient exactement, et sans pepite il rendait beta = 19,8
+#: au lieu de 3,5.
+#:
+#: CHOIX DE LA VALEUR
+#: Balayage sur 2 etats limites x 4 tailles de plan x 2 metamodeles. A 1e-8,
+#: l'interpolation reste sous 4,7e-08 et l'erreur sur beta sous 0,030 %
+#: partout -- soit MIEUX que PCK, ce que GEPCK devrait toujours etre puisqu'il
+#: dispose des gradients en plus. 1e-10 ne suffit pas sur les grands plans ;
+#: 1e-6 marche aussi mais introduit un biais d'interpolation inutile.
+#:
+#: La pepite n'est ajoutee qu'a la matrice de Gram, jamais a la
+#: cross-correlation `r0` -- `predict.py` force `Nugget = 0.0` de ce cote,
+#: comme le veut la formulation.
+PEPITE_PAR_DEFAUT = 1e-8
+
+
+# =============================================================================
 # 8. uq_assemble_Kernel
 # =============================================================================
 
@@ -151,8 +199,23 @@ def uq_eval_Kernel(X1, X2, theta, options):
     if theta.ndim == 1:
         theta = theta.reshape(-1, 1)   # colonne pour broadcast
 
-    # Déterminer si c'est une matrice de Gram (X1 == X2)
-    isGram = (N1 == N2) and np.array_equal(X1, X2)
+    # Déterminer si c'est une matrice de Gram (X1 == X2).
+    #
+    # Ici l'enjeu n'est pas la FORME -- elle vaut (N1, N2) dans les deux cas --
+    # mais le contenu : la branche Gram ne calcule que le triangle inferieur,
+    # symetrise, ajoute l'identite et le nugget. Se tromper change donc la
+    # matrice, pas sa taille, ce qui est plus discret. Comme pour
+    # `uq_eval_global_Kernel`, l'appelant peut le DIRE (defaut 1 du plan).
+    isGram = options.get('IsGram')
+    if isGram is None:
+        isGram = (N1 == N2) and np.array_equal(X1, X2)
+    else:
+        isGram = bool(isGram)
+        if isGram and (N1 != N2 or not np.array_equal(X1, X2)):
+            raise ValueError(
+                "IsGram=True mais X1 et X2 different : une matrice de Gram "
+                "suppose le meme jeu de points des deux cotes (%s contre %s)."
+                % (X1.shape, X2.shape))
 
     # Familles stationnaires
     stationary_families = {'nugget', 'linear', 'exponential', 'gaussian', 'matern-5_2', 'matern-3_2'}
@@ -453,12 +516,19 @@ def uq_assemble_global_Kernel(X1, X2, theta, family):
     Le bloc (rb, cb) de taille n1 x n2 est calcule par
         kernel_deriv_factory(family, der, dp)(X1, X2, theta)
     avec
-        der = cb - 1  si cb > 0  sinon None   (derivee 1er arg, = point colonne)
-        dp  = rb - 1  si rb > 0  sinon None   (derivee 2e  arg, = point ligne)
+        der = rb - 1  si rb > 0  sinon None   (derivee 1er arg = X1, point-LIGNE)
+        dp  = cb - 1  si cb > 0  sinon None   (derivee 2e  arg = X2, point-COLONNE)
 
-    Convention article (Zuhal 2021, Eq. 7) :
-        bloc(0, k) = dR/dx^i_k  (1er arg, point-ligne x^i)  -> der=k-1, dp=None
-        bloc(k, 0) = dR/dx^j_k  (2e  arg, point-col   x^j)  -> der=None, dp=k-1
+    Convention (Zuhal 2021, Eq. 7) :
+        bloc(k, 0) = dR/dx^i_k  (1er arg, point-ligne x^i)  -> der=k-1, dp=None
+        bloc(0, k) = dR/dx^j_k  (2e  arg, point-col   x^j)  -> der=None, dp=k-1
+
+    CES DEUX LIGNES ETAIENT INVERSEES dans la docstring d'origine, ainsi que
+    l'attribution de `der`/`dp` a `rb`/`cb` ci-dessus. Le code, lui, etait
+    juste : verifie par differences finies le 26/08/2026 (defaut 4 du plan de
+    nettoyage), cf. `tests/test_51_convention_derivees.py`. Le bloc-ligne
+    rb=0 porte bien les derivees par rapport au SECOND argument, ce qui est
+    ce que reclame Cov(y(x), dy/dx'_k) = dk(x, x')/dx'_k.
 
     Parameters
     ----------
@@ -575,9 +645,17 @@ def uq_eval_global_Kernel(X1, X2, theta, options):
     Cas non-Gram (X_test, X_train) : retourne r0_tilde  (n1, n2*(m+1))
         Seulement le bloc-ligne rb=0 de la matrice complete :
             r0_tilde[i, cb*n2:(cb+1)*n2] = Cov(y(x_i), y_aug_bloc_cb(X_train))
-        avec  cb=0 -> k(X_test, X_train)            (der=None, dp=None)
-              cb=l -> dk(X_test,X_train)/dX_test_{l-1}  (der=l-1,  dp=None)
+        avec  cb=0 -> k(X_test, X_train)                  (der=None, dp=None)
+              cb=l -> dk(X_test, X_train)/dX_train_{l-1}  (der=None, dp=l-1)
         Forme compatible avec la prediction : r0_tilde @ (R_tilde_inv @ y_aug)
+
+        La derivee porte sur le SECOND argument, X_train, et non sur X_test :
+        la l-ieme observation augmentee est dy/dx_l AU POINT D'APPRENTISSAGE,
+        donc Cov(y(x*), dy/dx_l(x^j)) = dk(x*, x^j) / dx^j_l.
+        La docstring d'origine annoncait `dk/dX_test` et `(der=l-1, dp=None)`,
+        ce qui contredisait le code -- et le code avait raison. Tranche le
+        26/08/2026 par differences finies (defaut 4 du plan de nettoyage) :
+        voir `tests/test_51_convention_derivees.py`.
 
     Parameters
     ----------
@@ -601,7 +679,30 @@ def uq_eval_global_Kernel(X1, X2, theta, options):
     n1, m = X1.shape
     n2    = X2.shape[0]
 
-    isGram = (n1 == n2) and np.array_equal(X1, X2)
+    # DEFAUT 1 du plan de nettoyage, corrige le 26/08/2026.
+    #
+    # Les deux branches ne rendent pas la meme FORME : (n(m+1), n(m+1)) contre
+    # (n1, n2(m+1)). Les choisir en inspectant le CONTENU des tableaux est donc
+    # une devinette sur ce que l'appelant voulait -- et elle se trompait des
+    # que le metamodele etait evalue sur un point deja present dans son plan
+    # d'experiences : `predict_gepck` reclamait r0_tilde et recevait R_tilde,
+    # d'ou un « operands could not be broadcast together ». Cela arrive pour de
+    # bon : une grille EFF qui passe par un point du DOE, une relecture de
+    # cache, une verification d'interpolation.
+    #
+    # L'appelant DIT desormais ce qu'il veut, via `options['IsGram']`. Le repli
+    # sur l'ancienne heuristique est conserve pour les appels qui ne le
+    # precisent pas encore.
+    isGram = options.get('IsGram')
+    if isGram is None:
+        isGram = (n1 == n2) and np.array_equal(X1, X2)
+    else:
+        isGram = bool(isGram)
+        if isGram and (n1 != n2 or not np.array_equal(X1, X2)):
+            raise ValueError(
+                "IsGram=True mais X1 et X2 different : une matrice de Gram "
+                "suppose le meme jeu de points des deux cotes (%s contre %s)."
+                % (X1.shape, X2.shape))
 
     if isGram:
         # R_tilde complet : (m+1)^2 blocs, forme (n1*(m+1), n1*(m+1))

@@ -24,7 +24,20 @@ pytestmark = pytest.mark.oracle
 # GEPCK est plus laxiste que PCK : c'est un CONSTAT sur la branche cleaning
 # (0.01 % pour PCK contre 1.3 % pour GEPCK sur le meme DOE), pas une fatalite.
 # Voir tests/test_50_known_defects.py::test_gepck_interpole_son_doe.
-TOL_BETA = {'PCK': 0.005, 'GEPCK': 0.02}
+#: Ecart relatif accepte sur beta, entre le metamodele et l'oracle analytique.
+#:
+#: Valait 0,5 % (PCK) et 2 % (GEPCK) : des seuils cales sur le DEFAUT, pas sur
+#: ce que la methode peut faire. Le plan de nettoyage fixait d'avance le
+#: critere de reussite de la phase 6 -- « ecart sur beta sous 0,05 %,
+#: c'est-a-dire au moins aussi bon que PCK ». C'est ce seuil-la qui est
+#: applique ici depuis la correction des defauts 2 et 3 (pepite par defaut).
+#:
+#: Mesure du 26/08/2026 sur le plan de 24 points :
+#:     PCK    0,0017 %      (valait 0,0114 %)
+#:     GEPCK  0,0072 %      (valait 1,2982 %)
+#: GEPCK est donc redevenu meilleur que PCK, ce qu'il devrait toujours etre :
+#: il dispose des gradients en plus.
+TOL_BETA = {'PCK': 0.0005, 'GEPCK': 0.0005}
 
 STARTS = np.array([[0.0, 0.0], [2.0, -2.0], [-2.0, 2.0], [1.0, 1.0]])
 

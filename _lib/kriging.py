@@ -208,7 +208,7 @@ def uq_Kriging_calc_sigmaSq(KrgParameters, estimMethod):
         Ytilde = KrgParameters['Ytilde'].reshape(-1, 1)
         Ftilde = KrgParameters['Ftilde']
         z      = Ytilde - Ftilde @ beta
-        return float((z.T @ z) / N)
+        return float(((z.T @ z) / N).item())
 
     elif em == 'ml_nochol':
         N    = KrgParameters['N']
@@ -217,14 +217,14 @@ def uq_Kriging_calc_sigmaSq(KrgParameters, estimMethod):
         Rinv = KrgParameters['Rinv']
         beta = KrgParameters['beta'].reshape(-1, 1)
         z    = Y - F @ beta
-        return float((z.T @ Rinv @ z) / N)
+        return float(((z.T @ Rinv @ z) / N).item())
 
     elif em == 'ml_bypass_chol':
         N      = KrgParameters['N']
         Q1     = KrgParameters['Q1']
         Ytilde = KrgParameters['Ytilde'].reshape(-1, 1)
         z      = Ytilde - Q1 @ (Q1.T @ Ytilde)
-        return float((z.T @ z) / N)
+        return float(((z.T @ z) / N).item())
 
     elif em == 'ml_bypass_nochol':
         # same as ml_nochol (can't bypass without chol)
@@ -331,6 +331,10 @@ def uq_Kriging_eval_J_of_theta_ML(theta, KrgModelParameters):
     F           = KrgModelParameters['F']
     CorrOptions = KrgModelParameters['CorrOptions']
     evalR_handle = CorrOptions['Handle']
+    # DEFAUT 1 : au fit, c'est toujours la matrice de Gram du plan
+    # d'experiences qui est voulue. On le dit, plutot que de laisser le
+    # noyau le deviner en inspectant le contenu des tableaux.
+    CorrOptions = dict(CorrOptions, IsGram=True)
     trendType   = KrgModelParameters['trend_type']
     isRegression = KrgModelParameters.get('IsRegression', False)
     estimNoise  = KrgModelParameters.get('EstimNoise', False)
@@ -483,7 +487,7 @@ def fit_kriging_pck(U, Y, F_handle, CorrOptions,
 
     # Compute R at optimal theta
     evalR = CorrOptions['Handle']
-    R     = evalR(U, U, theta_opt, CorrOptions)
+    R     = evalR(U, U, theta_opt, dict(CorrOptions, IsGram=True))
 
     # Choose run case for aux matrices
     if estim_method.lower() == 'ml':
@@ -587,7 +591,7 @@ def fit_kriging_gepck(U, Y_aug, F_global_handle, CorrOptions,
 
     # R̃ au theta optimal
     evalR   = CorrOptions['Handle']
-    R_tilde = evalR(U, U, theta_opt, CorrOptions)
+    R_tilde = evalR(U, U, theta_opt, dict(CorrOptions, IsGram=True))
 
     # Matrices auxiliaires
     if estim_method.lower() == 'ml':

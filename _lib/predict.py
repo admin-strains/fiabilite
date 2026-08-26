@@ -94,8 +94,9 @@ def uq_Kriging_eval_one_output(kriging_oo, U_test, U_train, Y_train, F_train,
 
     # --- r0: cross-correlation, nugget forced to 0  (line ~140)
     # CrossCorOpts = GPCorrOptions; CrossCorOpts.Nugget = 0
-    CrossCorOpts         = dict(CorrOptions)
+    CrossCorOpts           = dict(CorrOptions)
     CrossCorOpts['Nugget'] = 0.0
+    CrossCorOpts['IsGram'] = False     # cross-correlation, jamais une Gram
     evalR = CorrOptions['Handle']
     r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N)
 
@@ -134,7 +135,11 @@ def uq_Kriging_eval_one_output(kriging_oo, U_test, U_train, Y_train, F_train,
             D2_mat = u0.T @ np.linalg.solve(FTRinvF, u0)          # (N_test, N_test)
         else:
             D2_mat = u0.T @ FTRinvF_inv @ u0
-        CorrU0  = evalR(U_test, U_test, theta, CorrOptions)        # (N_test, N_test)
+        # ici, au contraire, la matrice de Gram des points de test est bien ce
+        # qu'on veut : on le DIT, au lieu de le laisser deviner sur le contenu.
+        GramTestOpts = dict(CorrOptions)
+        GramTestOpts['IsGram'] = True
+        CorrU0  = evalR(U_test, U_test, theta, GramTestOpts)        # (N_test, N_test)
         YCov    = sigmaSQ * (CorrU0 - D1_mat + D2_mat)
         # Variance from diagonal  (line ~213)
         YSigma2 = _verify_YSigma2(np.diag(YCov))
@@ -189,8 +194,15 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
     f0 = F_global_handle(U_test)[:N_test, :]   # (N_test, P)
 
     # --- r̃₀ : cross-corrélation augmentée, nugget forcé à 0
-    CrossCorOpts           = dict(CorrOptions)
-    CrossCorOpts['Nugget'] = 0.0
+    #
+    # `IsGram=False` est EXIGE ici : on veut r0_tilde (N_test, N*(M+1)), quelle
+    # que soit la position des points de test. Sans ce drapeau, evaluer le
+    # metamodele exactement sur son propre plan d'experiences faisait basculer
+    # la fonction sur la branche Gram et rendait une matrice carree
+    # (defaut 1 du plan de nettoyage).
+    CrossCorOpts            = dict(CorrOptions)
+    CrossCorOpts['Nugget']  = 0.0
+    CrossCorOpts['IsGram']  = False
     evalR = CorrOptions['Handle']
     r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N*(M+1))
 
@@ -221,7 +233,11 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
             D2_mat = u0.T @ np.linalg.solve(FTRinvF, u0)
         else:
             D2_mat = u0.T @ FTRinvF_inv @ u0
-        CorrU0  = evalR(U_test, U_test, theta, CorrOptions)
+        # ici, au contraire, la matrice de Gram des points de test est bien ce
+        # qu'on veut : on le DIT, au lieu de le laisser deviner sur le contenu.
+        GramTestOpts = dict(CorrOptions)
+        GramTestOpts['IsGram'] = True
+        CorrU0  = evalR(U_test, U_test, theta, GramTestOpts)
         YCov    = sigmaSQ * (CorrU0 - D1_mat + D2_mat)
         YSigma2 = _verify_YSigma2(np.diag(YCov))
         return YMu, YSigma2, YCov

@@ -17,7 +17,8 @@ aucun resultat, et la baseline le verifie.
 import copy
 import numpy as np
 
-from kernels import uq_eval_Kernel, uq_eval_global_Kernel
+from kernels import (PEPITE_PAR_DEFAUT, uq_eval_Kernel,
+                     uq_eval_global_Kernel)
 from kriging import fit_kriging_pck, fit_kriging_gepck
 from pce_basis import (
     poly_type_from_marginal, aux_marginal_from_poly_type,
@@ -104,7 +105,7 @@ def uq_PCK_calculate_coefficients(X, Y, pck_config,
             'Family'    : 'matern-5_2',
             'Type'      : 'separable',
             'Isotropic' : False,
-            'Nugget'    : 0.0,
+            'Nugget'    : PEPITE_PAR_DEFAUT,
         }
 
     # -----------------------------------------------------------------------
@@ -348,7 +349,7 @@ def uq_GEPCK_calculate_coefficients(X, Y_aug, pck_config,
             'Family'    : 'matern-5_2',
             'Type'      : 'separable',
             'Isotropic' : False,
-            'Nugget'    : 0.0,
+            'Nugget'    : PEPITE_PAR_DEFAUT,
         }
 
     # -----------------------------------------------------------------------

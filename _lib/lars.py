@@ -141,7 +141,7 @@ def uq_blockwise_inverse(Ainv, B, C, D):
 
     # (lines 22-31)  Schur complement SC = D - C Ainv B
     if D.shape == (1, 1):                  # isscalar(D) in MATLAB
-        sc_val  = float(D[0, 0]) - float(C @ Ainv @ B)
+        sc_val  = float(D[0, 0]) - float(np.asarray(C @ Ainv @ B).item())
         if sc_val == 0.0:
             sc_val = np.finfo(float).tiny
         SCinv   = float(1.0 / sc_val)     # scalar
