@@ -1,0 +1,35 @@
+# Etude de flexion pure -- cas de validation.
+#
+# Ce fichier ne contient QUE ce qui s'ecarte des defauts de
+# `_config/schema.py`. Tout le reste -- une quarantaine de parametres --
+# est commun aux deux etudes et n'a donc pas a etre recopie ici.
+#
+# Section beton : b = h = 0,8 m, L = 5,0 m, 3 lits de 8 HA32, d = 0,691 m.
+# beta analytique de reference : 4,7726 (cf. tests/reference/limit_states.py).
+
+modelname = "test_pure_flexion"
+storage = 'C:\workspace\storage\admin\SF'
+
+# --- metamodele
+modele = "PCK"
+max_degree = 0            # base PCE reduite a la constante : le krigeage fait tout
+max_of_maxdegree = 2
+
+# --- enrichissement
+EFF_criteria = "at_least_one"
+n_max_EFF_points = 30
+
+# --- FORM
+tol_FORM = 0.002          # cas de validation : on veut l'etat limite serre
+do_FORM_filter = false
+
+# --- execution
+n_workers_DOE = 3
+restart_enrich_only = false
+save_history = true       # petit modele : l'historique SOCP reste raisonnable
+
+# --- graphiques
+n_grid_hf = 7             # grille 7x7 = 49 appels SOCP, suffisant en 2 variables
+print_fullHF = true
+do_custom_hf = false
+print_ana = false         # courbe analytique superposee (propre a cette etude)

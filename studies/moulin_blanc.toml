@@ -1,0 +1,35 @@
+# Pont du Moulin Blanc -- trafic LM1, deux resistances d'acier.
+#
+# Ce fichier ne contient QUE ce qui s'ecarte des defauts de
+# `_config/schema.py`.
+#
+# Modele a ~13 000 aciers repartis en deux groupes (fyd1 / fyd2). Un appel
+# SOCP y coute des minutes, contre une dizaine de secondes en flexion pure :
+# d'ou un enrichissement bien plus long et l'historique SOCP desactive.
+
+modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
+storage = 'C:\workspace\storage\admin\Moulin_Blanc'
+
+# --- metamodele
+modele = "GEPCK"
+max_degree = 2
+max_of_maxdegree = 2
+seuil_pce = 0.90
+
+# --- enrichissement
+EFF_criteria = "BS"
+n_max_EFF_points = 360    # le pic EFF est etroit : il faut du budget
+
+# --- FORM
+tol_FORM = 0.05
+do_FORM_filter = true     # rejeter les u* hors bornes avant DBSCAN
+
+# --- execution
+n_workers_DOE = 6
+restart_enrich_only = true
+save_history = false      # ~424 Mo par appel SOCP : le disque n'y suffirait pas
+
+# --- graphiques
+n_grid_hf = 15
+print_fullHF = false
+do_custom_hf = true

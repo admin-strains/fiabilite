@@ -11,3 +11,5 @@ numpy>=2.1
 scipy>=1.15
 threadpoolctl>=3.6      # _lib/_parallel_is.py -- brida le sur-abonnement BLAS
 pytest>=8.0             # harness tests/
+tomli>=2.0; python_version < "3.11"   # lecture des fichiers d'etude .toml
+                        # (stdlib sous le nom tomllib a partir de 3.11)
