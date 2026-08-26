@@ -57,12 +57,25 @@ SOLVEURS_LINEAIRES = {"mumps": 3, "cudss": 4}
 #: cinematique, et le solveur statique n'intervient pas dans la chaine.
 IPARM0_SOLVEUR_LINEAIRE_CINEMATIQUE = 21
 
-#: Champs dont depend la VALEUR de `g` en un point donne. Un cache de plan
-#: d'experiences calcule sous d'autres valeurs n'est pas reutilisable -- voir
+#: Champs qui rendent un cache de plan d'experiences INUTILISABLE. Voir
 #: `Configuration.signature_solveur` et `_cache/doe.py:load_doe_cache`.
-CHAMPS_QUI_INVALIDENT_UN_POINT = (
+#:
+#: Deux familles, et il faut les deux :
+#:
+#: * ce dont depend la VALEUR de `g` en un point -- modele, solveur, solveur
+#:   lineaire, tailles de maille. Un point calcule autrement est faux ici.
+#: * ce dont depend le CHOIX des points -- les bornes du domaine. Le plan est
+#:   tire par `ot.Uniform(eff_bounds_min[i], eff_bounds_max[i])` : les points
+#:   restent des evaluations correctes, mais ils ne couvrent plus le domaine
+#:   demande. Ajoute le 26/08/2026 en bornant le domaine du Moulin Blanc, ou
+#:   le cache complet de +/- 7,5 aurait ete relu tel quel a +/- 6,0.
+#:
+#: N'y figurent PAS les parametres qui font autre chose des memes points --
+#: metamodele, enrichissement, FORM : ceux-la n'invalident rien.
+CHAMPS_QUI_INVALIDENT_LE_CACHE = (
     "modelname", "storage", "solveur", "solveur_lineaire",
     "global_size", "geo_min_approx", "max_size",
+    "eff_bound_min", "eff_bound_max",
 )
 
 #: Champs que PLUS AUCUN code vivant ne lit, et pourquoi. Mesure du 26/08/2026
@@ -159,6 +172,36 @@ class Configuration:
     #:
     #: Le champ est de categorie ETUDE : il change les nombres.
     solveur_lineaire: Optional[str] = None
+
+    #: Bornes du domaine de recherche, en ecarts-types de l'espace standard U.
+    #: S'appliquent a TOUTES les variables. Elles gouvernent le plan
+    #: d'experiences (tirage LHS), la recherche EFF, les points de depart FORM
+    #: et le filtre `do_FORM_filter` -- donc les points qu'on DEMANDE AU
+    #: SOLVEUR. Categorie ETUDE.
+    #:
+    #: POURQUOI CE CHAMP EXISTE -- crash du 26/08/2026
+    #: Elles etaient codees en dur a +/- 7,5 dans les deux scripts AC (oubli
+    #: de la phase 4b). Or l'espace standard n'a pas de sens physique : ce
+    #: sont les LOIS qui le lui donnent, et une loi non bornee ne borne rien.
+    #:
+    #: Sur le Moulin Blanc, `fy ~ Normal(235 ; 30,15)`, non bornee en bas :
+    #:
+    #:     u = -7,5   ->  fy =   8,88 MPa   (plus faible que le beton)
+    #:     u = -7,79  ->  fy =   0
+    #:     u = -8,5   ->  fy = -21,27 MPa   (negative)
+    #:
+    #: Le point u = [+7,5 ; -7,5] donne fy1/fy2 = 461/8,9, soit un rapport de
+    #: 52 entre les deux groupes d'aciers. `docs/mesh/` documente qu'un
+    #: rapport >= ~5 mal-conditionne les cones SOCP. A 52, Digital Structure a
+    #: TERMINE LE PROCESSUS -- sans exception Python, sans trace, en pleine
+    #: iteration IPM, apres deux heures de calcul.
+    #:
+    #: Le defaut reste +/- 7,5 : c'est la valeur sous laquelle toutes les
+    #: etudes ont tourne, et la flexion pure ne pose pas de probleme
+    #: (`fy ~ Normal(550 ; 30,15)` vaut encore 324 MPa a u = -7,5). Une etude
+    #: dont les lois ne sont pas bornees doit choisir sa valeur.
+    eff_bound_min: float = -7.5
+    eff_bound_max: float = 7.5
 
     #: Rejeter les points que le solveur declare non converges, au lieu de les
     #: laisser entrer dans le plan d'experiences.
@@ -316,6 +359,9 @@ class Configuration:
             problemes.append("q=%r doit etre dans ]0, 1]" % (self.q,))
         if self.n_workers_DOE < 1:
             problemes.append("n_workers_DOE=%d" % self.n_workers_DOE)
+        if self.eff_bound_min >= self.eff_bound_max:
+            problemes.append("eff_bound_min=%r >= eff_bound_max=%r : domaine vide"
+                             % (self.eff_bound_min, self.eff_bound_max))
         if self.u1_min >= self.u1_max or self.u2_min >= self.u2_max:
             problemes.append("bornes de trace vides : %s" % (self.bornes_u,))
         for nom in ("tol_EFF", "tol_BB", "tol_BS", "tol_FORM", "cov_IS", "tol_all_modes"):
@@ -346,18 +392,18 @@ class Configuration:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     def signature_solveur(self) -> dict:
-        """Ce dont depend la VALEUR d'un point du plan d'experiences.
+        """Ce qui rend un cache de plan d'experiences inutilisable.
 
-        Sert a invalider un cache de DOE calcule sous une autre configuration.
         Jusqu'au 26/08/2026 le cache n'etait valide que sur `n0` : basculer le
         solveur lineaire de CuDss a MUMPS aurait rendu des points issus de
-        l'autre backend, sans une ligne de journal pour le dire.
+        l'autre backend, sans une ligne de journal pour le dire. Et borner le
+        domaine aurait relu un plan tire sur l'ancien.
 
-        Volontairement RESTREINT a ce qui change `g` en un point donne. Le
-        metamodele (`modele`, `max_degree`, `q`...) et l'enrichissement
-        n'invalident pas un point deja calcule : ils en font autre chose.
+        Volontairement RESTREINT : le metamodele et l'enrichissement font
+        autre chose des memes points, ils n'invalident rien. Voir
+        `CHAMPS_QUI_INVALIDENT_LE_CACHE`.
         """
-        return {nom: getattr(self, nom) for nom in CHAMPS_QUI_INVALIDENT_UN_POINT}
+        return {nom: getattr(self, nom) for nom in CHAMPS_QUI_INVALIDENT_LE_CACHE}
 
 
 # ------------------------------------------------------------------------- #
@@ -436,6 +482,7 @@ CATEGORIES = {
     # --- ETUDE : le probleme pose -------------------------------------------
     "modelname": "etude", "storage": "etude", "solveur": "etude",
     "solveur_lineaire": "etude",
+    "eff_bound_min": "etude", "eff_bound_max": "etude",
     "modele": "etude", "n0": "etude", "max_degree": "etude", "q": "etude",
     "do_EFF": "etude", "epsilon_factor": "etude", "tol_EFF": "etude",
     "tol_BB": "etude", "tol_BS": "etude", "EFF_criteria": "etude",

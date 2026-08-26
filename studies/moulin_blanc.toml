@@ -38,6 +38,39 @@ seuil_pce = 0.90
 EFF_criteria = "BS"
 n_max_EFF_points = 360
 
+# --- domaine de recherche : BORNE (decision d'Agnes, 26/08/2026)
+#
+# CECI CHANGE LE RESULTAT DE L'ETUDE, et c'est voulu : le domaine precedent
+# contenait des points que le modele mecanique ne sait pas representer.
+#
+# Les bornes valaient +/- 7,5, codees en dur dans le script (oubli de la phase
+# 4b). Or `fy ~ Normal(235 ; 30,15)` n'est pas bornee en bas :
+#
+#     u = -7,5   ->  fy =   8,88 MPa   (plus faible que le beton)
+#     u = -7,79  ->  fy =   0
+#     u = -8,5   ->  fy = -21,27 MPa
+#
+# Le run du 26/08 est mort au point u = [+7,5 ; -7,5] : fy1/fy2 = 461/8,9,
+# soit un rapport de 52 entre les deux groupes d'aciers, quand `docs/mesh/`
+# donne ~5 comme seuil de mauvais conditionnement des cones SOCP. Digital
+# Structure a termine le processus, sans exception ni trace.
+#
+# 6,0 est un COMPROMIS entre deux exigences inconciliables :
+#   - contenir le point de conception (|u| ~ 5,3 d'apres le plan) : b >= 5,5
+#   - garder le rapport aux coins <= 5                            : b <= 5,2
+# Il reste donc un rapport de 7,7 aux coins. Justification complete et tableau
+# dans `studies/moulin_blanc_fumee.toml`.
+eff_bound_min = -6.0
+eff_bound_max = 6.0
+
+# La grille HF lit u1_min..u2_max, PAS eff_bounds : sans ces quatre lignes
+# elle retournerait balayer les coins a +/- 7,5, c'est-a-dire exactement le
+# point qui a tue le run.
+u1_min = -6.0
+u1_max = 6.0
+u2_min = -6.0
+u2_max = 6.0
+
 # --- FORM
 tol_FORM = 0.05
 do_FORM_filter = true     # rejeter les u* hors bornes avant DBSCAN

@@ -149,7 +149,7 @@ def test_il_est_classe_comme_parametre_d_etude():
 # --------------------------------------------------------------------- #
 def test_les_champs_invalidants_existent_vraiment():
     noms = {f.name for f in schema.fields(schema.Configuration)}
-    inconnus = [n for n in schema.CHAMPS_QUI_INVALIDENT_UN_POINT if n not in noms]
+    inconnus = [n for n in schema.CHAMPS_QUI_INVALIDENT_LE_CACHE if n not in noms]
     assert not inconnus, "champs inexistants : %s" % inconnus
 
 
@@ -256,3 +256,53 @@ def test_les_deux_InitSolver_du_depot_sont_lisibles_et_documentes():
         assert int(m.group(1)) in set(params_ipm.SOLVEURS_LINEAIRES.values()), (
             "%s : IPARM0[21] = %s, valeur hors des backends proposes (Pardiso "
             "est deprecie)" % (rel, m.group(1)))
+
+
+# --------------------------------------------------------------------- #
+# bornes du domaine de recherche
+# --------------------------------------------------------------------- #
+def test_les_bornes_du_domaine_invalident_le_cache():
+    """Elles ne changent pas la VALEUR d'un point, mais le CHOIX des points :
+    le plan est tire par `ot.Uniform(eff_bounds_min, eff_bounds_max)`. Un
+    cache tire sur +/- 7,5 ne couvre pas le domaine +/- 6,0."""
+    assert "eff_bound_min" in schema.CHAMPS_QUI_INVALIDENT_LE_CACHE
+    assert "eff_bound_max" in schema.CHAMPS_QUI_INVALIDENT_LE_CACHE
+    large = schema.Configuration(modelname="x").signature_solveur()
+    serre = schema.Configuration(modelname="x", eff_bound_min=-6.0,
+                                 eff_bound_max=6.0).signature_solveur()
+    assert large != serre
+
+
+def test_un_domaine_vide_est_refuse():
+    with pytest.raises(ValueError, match="domaine vide"):
+        schema.Configuration(modelname="x", eff_bound_min=2.0,
+                             eff_bound_max=1.0).valider()
+
+
+def test_le_defaut_reproduit_la_valeur_codee_en_dur():
+    """+/- 7,5 est ce que les deux scripts portaient. Le defaut ne doit rien
+    changer aux etudes qui ne se prononcent pas -- la flexion pure notamment,
+    ou `fy ~ Normal(550 ; 30,15)` vaut encore 324 MPa a u = -7,5."""
+    cfg = schema.Configuration(modelname="x")
+    assert (cfg.eff_bound_min, cfg.eff_bound_max) == (-7.5, 7.5)
+
+
+def test_les_etudes_moulin_blanc_sont_bornees():
+    """Le domaine +/- 7,5 y donne fy = 8,88 MPa et a tue le solveur."""
+    import glob
+    for chemin in sorted(glob.glob(os.path.join(_REPO, "studies", "moulin_blanc*.toml"))):
+        cfg = schema.charger(chemin)
+        nom = os.path.basename(chemin)
+        assert cfg.eff_bound_min >= -6.5, "%s : borne inf %s trop large" % (nom, cfg.eff_bound_min)
+        assert cfg.eff_bound_max <= 6.5, "%s : borne sup %s trop large" % (nom, cfg.eff_bound_max)
+        # la grille HF a ses propres bornes : elles doivent suivre, sinon la
+        # figure retourne balayer les coins qui ont tue le run.
+        assert cfg.u1_min >= cfg.eff_bound_min and cfg.u1_max <= cfg.eff_bound_max, (
+            "%s : la grille HF (u1) sort du domaine de recherche" % nom)
+        assert cfg.u2_min >= cfg.eff_bound_min and cfg.u2_max <= cfg.eff_bound_max, (
+            "%s : la grille HF (u2) sort du domaine de recherche" % nom)
+
+
+def test_les_bornes_sont_classees_comme_etude():
+    assert schema.CATEGORIES["eff_bound_min"] == "etude"
+    assert schema.CATEGORIES["eff_bound_max"] == "etude"

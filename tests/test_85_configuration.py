@@ -73,6 +73,26 @@ ECARTS_ASSUMES = {
         "LE RUN COMPLET, depuis le plan d'experiences.",
 }
 
+#: Le domaine de recherche, reduit de +/- 7,5 a +/- 6,0 sur le Moulin Blanc.
+#: Meme raison pour les quatre champs, donc une seule redaction.
+_RAISON_DOMAINE = (
+    "Agnes, 26/08/2026 : BORNER LE DOMAINE. `fy ~ Normal(235 ; 30,15)` n'est "
+    "pas bornee en bas -- u = -7,5 donne fy = 8,88 MPa (plus faible que le "
+    "beton) et fy s'annule a u = -7,79. Le run du 26/08 est mort au point "
+    "u = [+7,5 ; -7,5] : fy1/fy2 = 461/8,9, soit un rapport de 52 entre les "
+    "deux groupes d'aciers, quand docs/mesh/ donne ~5 comme seuil de mauvais "
+    "conditionnement des cones SOCP. Digital Structure a termine le processus "
+    "sans exception ni trace, apres deux heures. 6,0 est un compromis assume : "
+    "contenir le point de conception (|u| ~ 5,3) exigeait b >= 5,5, garder le "
+    "rapport <= 5 exigeait b <= 5,2 -- aucune valeur ne satisfait les deux. "
+    "Il reste 7,7 aux coins. CECI CHANGE LE RESULTAT DE L'ETUDE, et c'est "
+    "voulu : le domaine precedent contenait des points que le modele "
+    "mecanique ne sait pas representer. Tableau complet dans "
+    "studies/moulin_blanc_fumee.toml.")
+for _champ in ("u1_min", "u1_max", "u2_min", "u2_max"):
+    ECARTS_ASSUMES[("moulin_blanc", _champ)] = _RAISON_DOMAINE
+del _champ
+
 
 def _golden(nom):
     chemin = os.path.join(TESTS, "golden", "config_%s.json" % nom)

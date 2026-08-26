@@ -374,9 +374,58 @@ if __name__ == '__main__':
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 
-    eff_bounds_min = [-7.5, -7.5]     # bornes inf de la recherche EFF [fy1, fy2]
-    eff_bounds_max = [+7.5, +7.5]     # bornes sup de la recherche EFF [fy1, fy2]
-    
+    # Bornes du domaine de recherche. Codees en dur a +/- 7,5 jusqu'au
+    # 26/08/2026 (oubli de la phase 4b), elles viennent maintenant du fichier
+    # d'etude. L'espace standard n'a pas de sens physique par lui-meme : ce
+    # sont les LOIS qui le lui donnent, et une loi non bornee ne borne rien.
+    # Voir `_config/schema.py:eff_bound_min` -- un point a fy = 8,9 MPa a tue
+    # le solveur.
+    eff_bounds_min = [CFG.eff_bound_min] * n_var
+    eff_bounds_max = [CFG.eff_bound_max] * n_var
+
+    def _tracer_domaine_physique():
+        """Ce que les bornes valent EN MPA, et non en ecarts-types.
+
+        Personne ne lit `[-7.5, +7.5]` comme « de 8,9 a 461 MPa ». C'est
+        pourtant ce que cela veut dire ici, et c'est ce qui a fait mourir un
+        run de deux heures. On l'ecrit donc noir sur blanc, au demarrage.
+        """
+        try:
+            dist = dist_jointe()
+        except Exception as exc:                       # noqa: BLE001
+            print("  [DOMAINE] loi jointe indisponible (%s)" % exc, flush=True)
+            return
+        print("  DOMAINE DE RECHERCHE -- ce que les bornes valent physiquement")
+        extremes = []
+        for i, nom in enumerate(params_names):
+            marginale = dist.getMarginal(i)
+            lo = float(marginale.computeQuantile(
+                float(ot.Normal().computeCDF(CFG.eff_bound_min)))[0])
+            hi = float(marginale.computeQuantile(
+                float(ot.Normal().computeCDF(CFG.eff_bound_max)))[0])
+            extremes.append((lo, hi))
+            alerte = ""
+            if lo <= 0:
+                alerte = "  <-- NEGATIF OU NUL"
+            elif lo < 0.1 * float(marginale.getMean()[0]):
+                alerte = "  <-- moins d'un dixieme de la moyenne"
+            print("    %-8s u in [%+.2f, %+.2f]  ->  [%.2f, %.2f]%s"
+                  % (nom, CFG.eff_bound_min, CFG.eff_bound_max, lo, hi, alerte))
+        # Rapport le plus defavorable atteignable a un COIN du domaine : la
+        # variable la plus haute contre la plus basse. C'est lui qui gouverne
+        # le conditionnement des cones, pas la valeur absolue des bornes.
+        if len(extremes) >= 2:
+            bas = min(l for l, _ in extremes)
+            haut = max(h for _, h in extremes)
+            pire = haut / bas if bas > 0 else float('inf')
+            print("    rapport le plus defavorable aux coins : %.1f" % pire)
+            if pire >= 5:
+                print("    ATTENTION : au-dela de ~5 les cones SOCP sont mal")
+                print("    conditionnes (docs/mesh/). A 52, le 26/08/2026,")
+                print("    Digital Structure a termine le processus.")
+        print(flush=True)
+
+
     def _is_position_var(sens):
         """Detecte si une region de sensibilite est une variable de position (axis='position')."""
         return sens.get('axis') == 'position'
@@ -396,6 +445,10 @@ if __name__ == '__main__':
         le script lui-meme sera restructure.
         """
         return _lois.dist_jointe(PARAM_CONFIG, params_names)
+
+    # Appele ICI, et pas au moment ou les bornes sont posees : la trace a
+    # besoin de `dist_jointe`, qui n'est definie qu'au-dessus.
+    _tracer_domaine_physique()
 
     # --- APPELS AU SOLVEUR -----------------------------------------------
     # Toute la mecanique Digital Structure -- reecriture du dsCad, maillage,

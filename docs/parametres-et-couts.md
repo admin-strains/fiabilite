@@ -82,6 +82,7 @@ calcul.
 | `do_multistart`, `start_from_LHS`, `n_sp` | points de depart FORM | n0+1 ou n_sp departs, metamodele |
 | `tol_all_modes` | distance DBSCAN entre deux modes | decide n_modes, donc autant de `run_HF(u*)` |
 | `do_warmstart`, `tol_warmstart` | reprise FORM si non convergence | — |
+| `eff_bound_min`, `eff_bound_max` | bornes du domaine de recherche, en ecarts-types | decident QUELS points sont demandes au solveur, cf. ci-dessous |
 | `do_FORM_filter` | rejeter les u* hors bornes avant DBSCAN | reduit n_modes |
 | `exclure_points_non_converges` | rejeter les points que le solveur declare douteux | change ce qui entre au plan d'experiences ; **false par defaut**, cf. ci-dessous |
 
@@ -126,13 +127,77 @@ lineaire, une autre taille de maille ou un autre modele -- et le cas s'est
 presente le jour meme, en basculant CuDss vers MUMPS.
 
 Une **signature** est desormais ecrite dans le cache et comparee a la
-relecture. Elle porte les champs de `CHAMPS_QUI_INVALIDENT_UN_POINT` :
-`modelname`, `storage`, `solveur`, `solveur_lineaire`, `global_size`,
-`geo_min_approx`, `max_size` -- c'est-a-dire ce dont depend la VALEUR de `g`
-en un point donne, pas ce qui en fait autre chose ensuite (metamodele,
-enrichissement). Un cache **sans** signature est refuse : le cout est un
-recalcul du plan initial, le prix de l'alternative est un resultat faux et
-silencieux.
+relecture. Elle porte les champs de `CHAMPS_QUI_INVALIDENT_LE_CACHE`, en deux
+familles :
+
+* ce dont depend la **valeur** de `g` en un point -- `modelname`, `storage`,
+  `solveur`, `solveur_lineaire`, `global_size`, `geo_min_approx`, `max_size` ;
+* ce dont depend le **choix** des points -- `eff_bound_min`, `eff_bound_max`.
+  Le plan est tire par `ot.Uniform(eff_bounds_min, eff_bounds_max)` : les
+  points restent des evaluations correctes, mais ils ne couvrent plus le
+  domaine demande.
+
+N'y figure PAS ce qui fait autre chose des memes points -- metamodele,
+enrichissement, FORM : cela n'invalide rien.
+
+Un cache **sans** signature est refuse : le cout est un recalcul du plan
+initial, le prix de l'alternative est un resultat faux et silencieux.
+
+### Le domaine de recherche n'etait borne que par un nombre magique
+
+`eff_bounds_min/max` valaient `+/- 7,5`, **codes en dur** dans les deux
+scripts AC (oubli de la phase 4b). Ils gouvernent pourtant le tirage du plan
+d'experiences, la recherche EFF, les points de depart FORM et le filtre
+`do_FORM_filter` -- c'est-a-dire les points qu'on DEMANDE AU SOLVEUR.
+
+L'espace standard n'a aucun sens physique par lui-meme : ce sont les **lois**
+qui le lui donnent. Et une loi non bornee ne borne rien. Sur le Moulin Blanc,
+`fy ~ Normal(235 ; 30,15)` :
+
+| u | fy (MPa) | |
+|---:|---:|---|
+| −8,5 | **−21,3** | negative |
+| −7,79 | 0 | |
+| −7,5 | 8,9 | plus faible que le beton |
+| 0 | 235,0 | |
+| +7,5 | 461,1 | |
+
+**Le 26/08/2026, un run est mort au point `u = [+7,5 ; −7,5]`** : `fy1/fy2 =
+461/8,9`, soit un rapport de **52** entre les deux groupes d'aciers, quand
+`docs/mesh/mesh-first-vs-cad-first-yield-comparison.md` donne **~5** comme
+seuil de mauvais conditionnement des cones SOCP. Digital Structure a termine
+le processus -- sans exception Python, sans trace, en pleine iteration IPM,
+apres deux heures de calcul.
+
+Le choix de la borne oppose **deux exigences inconciliables** :
+
+| | exige |
+|---|---|
+| contenir le point de conception (mesure a `\|u\| ~ 5,3`) | `b >= 5,5` |
+| garder le rapport aux coins `<= 5` | `b <= 5,2` |
+
+| `b` | fy min | fy max | rapport au coin |
+|---:|---:|---:|---:|
+| 5,2 | 78,2 | 391,8 | 5,0 |
+| **6,0** | **54,1** | **415,9** | **7,7** |
+| 7,5 | 8,9 | 461,1 | 52,0 |
+
+Les etudes Moulin Blanc retiennent **6,0**, qui privilegie la premiere
+exigence : exclure le point de conception ferait chercher a FORM un optimum
+qu'il n'a pas le droit d'atteindre. **Risque assume** : 7,7 reste au-dessus du
+seuil de 5, donc les points de coin peuvent revenir `NUMERICAL_ERROR` -- c'est
+desormais signale (`Evaluation.sain`) au lieu d'etre fatal, a condition que le
+solveur rende la main. Seule la **grille HF** visite les coins ; la recherche
+EFF vise `g = 0`, ou le rapport vaut ~5 et ou le solveur tient.
+
+⚠️ **La grille HF a ses PROPRES bornes** : `_get_hf_slice` lit
+`u1_min..u2_max`, pas `eff_bounds`. Les deux jeux doivent etre regles
+ensemble, sinon la figure retourne balayer l'ancien domaine.
+
+Au demarrage, les scripts AC impriment desormais ce que les bornes valent **en
+MPa**, avec le rapport le plus defavorable atteignable aux coins. Personne ne
+lit `[-7,5 ; +7,5]` comme « de 8,9 a 461 MPa » -- c'est pourtant ce que cela
+voulait dire.
 
 ### Les tailles de maille sont RELATIVES, pas en metres
 

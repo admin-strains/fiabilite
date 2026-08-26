@@ -56,6 +56,55 @@ seuil_pce = 0.90
 EFF_criteria = "BS"
 n_max_EFF_points = 5
 
+# --- domaine de recherche : BORNE (decision d'Agnes, 26/08/2026)
+#
+# Les bornes etaient a +/- 7,5, codees en dur dans le script. L'espace
+# standard n'a pas de sens physique par lui-meme : ce sont les LOIS qui le lui
+# donnent, et `fy ~ Normal(235 ; 30,15)` n'est pas bornee en bas.
+#
+#     u = -7,5   ->  fy =   8,88 MPa   (plus faible que le beton)
+#     u = -7,79  ->  fy =   0
+#     u = -8,5   ->  fy = -21,27 MPa
+#
+# Le run du 26/08 est mort au point u = [+7,5 ; -7,5], soit fy1/fy2 = 461/8,9,
+# un rapport de 52 entre les deux groupes d'aciers. `docs/mesh/` documente
+# qu'au-dela de ~5 les cones SOCP sont mal conditionnes. Digital Structure a
+# termine le processus -- sans exception Python, en pleine iteration IPM,
+# apres deux heures.
+#
+# POURQUOI 6,0 ET PAS MOINS -- deux contraintes qui se CONCURRENCENT :
+#
+#   1. Contenir le point de conception. Le point 1 du plan, u=[+4,69 ; -5,29],
+#      donne g = +0,026 : l'etat limite passe a |u| ~ 5,3. Une borne en deca
+#      l'excluerait, et FORM chercherait un optimum qu'il n'a pas le droit
+#      d'atteindre. -> exige b >= ~5,5.
+#   2. Garder les cones conditionnes, rapport <= 5. -> exige b <= 5,2.
+#
+# AUCUNE valeur ne satisfait les deux. 6,0 privilegie la premiere :
+#
+#     b      fy_min    fy_max   rapport au coin
+#     5,2     78,2      391,8       5,0   (exclut le point de conception)
+#     6,0     54,1      415,9       7,7   <-- retenu
+#     7,5      8,9      461,1      52,0   (a tue le solveur)
+#
+# RISQUE ASSUME : 7,7 reste au-dessus du seuil documente de 5. Les points de
+# COIN peuvent donc revenir NUMERICAL_ERROR. C'est desormais SIGNALE
+# (`Evaluation.sain`) au lieu d'etre fatal -- a condition que le solveur rende
+# la main plutot que de mourir, ce qu'on ne sait pas a 7,7. A 52 il mourait ;
+# le point de conception, a 5,0, tourne OPTIMAL en 700 s.
+#
+# A noter : seule la GRILLE HF visite les coins. La recherche EFF vise g = 0,
+# c'est-a-dire l'etat limite, ou le rapport vaut ~5 et ou le solveur tient.
+eff_bound_min = -6.0
+eff_bound_max = 6.0
+
+# La grille HF a ses propres bornes (`_get_hf_slice` lit u1_min..u2_max, pas
+# eff_bounds) : sans cette ligne elle retournerait balayer +/- 7,5.
+u1_min = -6.0
+u1_max = 6.0
+u2_min = -6.0
+u2_max = 6.0
+
 # --- FORM : identique a l'etude reelle
 tol_FORM = 0.05
 do_FORM_filter = true
