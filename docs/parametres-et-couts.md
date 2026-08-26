@@ -63,6 +63,7 @@ calcul.
 |---|---|---|
 | `modelname`, `storage` | designe le `.ds` a evaluer | — |
 | `solveur` | `digital_structure` ou `analytique` | **facteur 4,6·10⁶** |
+| `solveur_lineaire` | `IPARM0[21]` du point interieur : `mumps` ou `cudss` | change les nombres, cf. ci-dessous |
 | `modele` | PCK, GEPCK, KRG, GEK, PCKRG, HF | GEPCK ajuste un systeme (m+1)x plus grand |
 | `n0` | taille du plan initial | **n0 appels solveur** |
 | `max_degree`, `q` | base PCE candidate, tri hyperbolique | ajustement seul |
@@ -83,6 +84,55 @@ calcul.
 | `do_warmstart`, `tol_warmstart` | reprise FORM si non convergence | — |
 | `do_FORM_filter` | rejeter les u* hors bornes avant DBSCAN | reduit n_modes |
 | `exclure_points_non_converges` | rejeter les points que le solveur declare douteux | change ce qui entre au plan d'experiences ; **false par defaut**, cf. ci-dessous |
+
+### Le solveur lineaire etait invisible, et les deux etudes divergeaient
+
+Jusqu'au 26/08/2026, le solveur lineaire du point interieur se decidait dans
+l'`InitSolver.py` de chaque etude -- en clair, mais sans que rien ne le
+remonte : ni le resume de journal, ni la configuration, ni les caches n'en
+savaient quoi que ce soit. Les deux etudes du depot avaient donc **diverge en
+silence** :
+
+| etude | `IPARM0[21]` | backend |
+|---|---|---|
+| `pure_flexion/InitSolver.py` | 3 | MUMPS |
+| `Moulinblanc/InitSolver.py` | 4 | CuDss |
+
+Or c'est exactement la que se separent les deux reproductibilites mesurees :
+**2,9e-11** sur la flexion pure, **7,7e-06** sur le Moulin Blanc. Ce n'est pas
+une preuve -- les deux modeles n'ont ni la meme taille ni le meme
+conditionnement -- mais tant que le backend n'etait pas un parametre visible,
+l'hypothese n'etait meme pas formulable.
+
+`solveur_lineaire` accepte `"mumps"`, `"cudss"`, ou l'omission (= laisser
+l'`InitSolver.py` decider, comportement d'avant). **Pardiso n'est pas
+propose : il est deprecie.** La valeur effective est affichee EN TETE du
+resume de journal, pas noyee dans le bloc des cinquante parametres :
+
+```
+  solveur  digital_structure
+  lineaire mumps (IPARM0[21] = 3, impose par le fichier d'etude)
+```
+
+Le code vit dans `solver/params_ipm.py`, qui **n'importe pas Digital
+Structure** : le reglage est donc verifiable sans licence ni GPU
+(`tests/test_89_solveur_lineaire.py`, 20 tests).
+
+#### Le cache de DOE ne melange plus deux backends
+
+`load_doe_cache` ne validait QUE `n0` et le drapeau `complet`. Il reutilisait
+donc sans broncher un plan d'experiences calcule avec un autre solveur
+lineaire, une autre taille de maille ou un autre modele -- et le cas s'est
+presente le jour meme, en basculant CuDss vers MUMPS.
+
+Une **signature** est desormais ecrite dans le cache et comparee a la
+relecture. Elle porte les champs de `CHAMPS_QUI_INVALIDENT_UN_POINT` :
+`modelname`, `storage`, `solveur`, `solveur_lineaire`, `global_size`,
+`geo_min_approx`, `max_size` -- c'est-a-dire ce dont depend la VALEUR de `g`
+en un point donne, pas ce qui en fait autre chose ensuite (metamodele,
+enrichissement). Un cache **sans** signature est refuse : le cout est un
+recalcul du plan initial, le prix de l'alternative est un resultat faux et
+silencieux.
 
 ### Les tailles de maille sont RELATIVES, pas en metres
 

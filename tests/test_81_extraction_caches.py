@@ -59,6 +59,25 @@ def _lire(chemin):
         return json.load(fh)
 
 
+#: Clefs AJOUTEES volontairement apres l'extraction, avec la raison. Le temoin
+#: reste un temoin : on ne regenere pas l'oracle, on declare l'ecart et on le
+#: retire de la comparaison -- puis on le teste a part.
+CLEFS_AJOUTEES = {
+    # 26/08/2026 : `load_doe_cache` ne validait QUE `n0` et le drapeau
+    # `complet`. Il relisait donc un plan d'experiences calcule avec un autre
+    # solveur lineaire, une autre taille de maille ou un autre modele. Le cas
+    # s'est presente en basculant CuDss -> MUMPS sur le Moulin Blanc : le
+    # point 1 etait deja en cache. La signature est ecrite puis comparee a la
+    # relecture. Couverte par `tests/test_89_solveur_lineaire.py`.
+    "signature": "signature de configuration, comparee a la relecture",
+}
+
+
+def _sans_clefs_ajoutees(d):
+    """Le contenu du cache, prive des clefs ajoutees apres l'extraction."""
+    return {k: v for k, v in d.items() if k not in CLEFS_AJOUTEES}
+
+
 # --------------------------------------------------------------------------- #
 # DOE                                                                          #
 # --------------------------------------------------------------------------- #
@@ -70,7 +89,7 @@ def test_signature_de_configuration(attendu):
 def test_ecriture_doe_complet(attendu, tmp_path):
     f = str(tmp_path / "doe.json")
     cache_doe.save_doe_cache(f, 3, XT, YT, AG)
-    assert _lire(f) == attendu["save_doe_cache"]
+    assert _sans_clefs_ajoutees(_lire(f)) == attendu["save_doe_cache"]
 
 
 def test_relecture_doe_complet(attendu, tmp_path):
@@ -83,7 +102,28 @@ def test_relecture_doe_complet(attendu, tmp_path):
 def test_ecriture_doe_incrementale(attendu, tmp_path):
     f = str(tmp_path / "doe.json")
     cache_doe.save_doe_cache_incremental(f, 3, NOMS, SOL, 2)
-    assert _lire(f) == attendu["save_doe_cache_incremental"]
+    assert _sans_clefs_ajoutees(_lire(f)) == attendu["save_doe_cache_incremental"]
+
+
+def test_les_clefs_ajoutees_le_sont_vraiment(tmp_path):
+    """Garde-fou du garde-fou : si une clef declaree n'est plus ecrite, elle
+    ne doit pas continuer a etre retiree de la comparaison en silence -- sinon
+    l'exemption masque une regression au lieu de documenter un choix."""
+    f = str(tmp_path / "doe.json")
+    cache_doe.save_doe_cache(f, 3, XT, YT, AG)
+    ecrit = _lire(f)
+    absentes = [k for k in CLEFS_AJOUTEES if k not in ecrit]
+    assert not absentes, (
+        "CLEFS_AJOUTEES declare %s, que save_doe_cache n'ecrit plus. "
+        "Retirer la declaration au lieu de la laisser desarmer le temoin."
+        % absentes)
+
+    g = str(tmp_path / "doe_incr.json")
+    cache_doe.save_doe_cache_incremental(g, 3, NOMS, SOL, 2)
+    absentes = [k for k in CLEFS_AJOUTEES if k not in _lire(g)]
+    assert not absentes, (
+        "CLEFS_AJOUTEES declare %s, que save_doe_cache_incremental n'ecrit "
+        "plus." % absentes)
 
 
 @pytest.mark.parametrize("cas", ["n0_different", "config_differente",

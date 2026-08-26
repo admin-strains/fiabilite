@@ -426,6 +426,7 @@ if __name__ == '__main__':
                 global_size=global_size,
                 geo_min_approx=geo_min_approx,
                 max_size=CFG.max_size,
+                solveur_lineaire=CFG.solveur_lineaire,
                 archiver=save_history,
             )
         return _solveurs[nom]
@@ -660,15 +661,24 @@ if __name__ == '__main__':
     # --- Caches : la logique est dans _cache/doe.py et _cache/hf.py.
     # Ces delegues gardent les sites d'appel intacts et disparaitront
     # avec la refonte de la configuration (phase 4).
+    # La signature est ce qui rend un cache reutilisable OU NON : elle porte
+    # le modele, le solveur, le solveur lineaire et les tailles de maille.
+    # Sans elle, basculer CuDss -> MUMPS aurait relu des points de l'autre
+    # backend en silence (constat du 26/08/2026).
+    _SIG_SOLVEUR = CFG.signature_solveur()
+
     def _load_doe_cache():
-        return _cache_doe.load_doe_cache(_DOE_CACHE_FILE, n0, config_is_identical)
+        return _cache_doe.load_doe_cache(_DOE_CACHE_FILE, n0, config_is_identical,
+                                         signature=_SIG_SOLVEUR)
 
     def _save_doe_cache(xt, yt, all_grad):
-        return _cache_doe.save_doe_cache(_DOE_CACHE_FILE, n0, xt, yt, all_grad)
+        return _cache_doe.save_doe_cache(_DOE_CACHE_FILE, n0, xt, yt, all_grad,
+                                         signature=_SIG_SOLVEUR)
 
     def _save_doe_cache_incremental(SOL, n_done):
         return _cache_doe.save_doe_cache_incremental(
-            _DOE_CACHE_FILE, n0, params_names, SOL, n_done)
+            _DOE_CACHE_FILE, n0, params_names, SOL, n_done,
+            signature=_SIG_SOLVEUR)
 
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():

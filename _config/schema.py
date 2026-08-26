@@ -42,6 +42,29 @@ CRITERES_EFF = ("BB", "BS", "both", "at_least_one")
 #: doit rester aligne sur `solver/fabrique.py:IMPLEMENTATIONS` -- verifie par test
 SOLVEURS = ("digital_structure", "analytique")
 
+#: Solveur lineaire du point interieur : nom -> valeur de `IPARM0[21]`.
+#: Les valeurs viennent du commentaire des `InitSolver.py` :
+#: « PT INT (1 = MKL PARDISO, 3 = MUMPS, 4 = CuDss) ».
+#:
+#: MKL Pardiso (valeur 1) et MyPardiso ne sont PAS exposes : Pardiso est
+#: deprecie (Agnes, 26/08/2026). Les blocs `MKLPardiso_params` et
+#: `MyPardiso_params` des `InitSolver.py` restent transmis au solveur, mais
+#: aucune valeur d'`IPARM0[21]` proposee ici ne les selectionne.
+SOLVEURS_LINEAIRES = {"mumps": 3, "cudss": 4}
+
+#: L'indice IPARM0 qui porte ce choix pour l'approche cinematique. Le pendant
+#: statique est `IPARM0[11]`, laisse tel quel : l'analyse a la rupture est
+#: cinematique, et le solveur statique n'intervient pas dans la chaine.
+IPARM0_SOLVEUR_LINEAIRE_CINEMATIQUE = 21
+
+#: Champs dont depend la VALEUR de `g` en un point donne. Un cache de plan
+#: d'experiences calcule sous d'autres valeurs n'est pas reutilisable -- voir
+#: `Configuration.signature_solveur` et `_cache/doe.py:load_doe_cache`.
+CHAMPS_QUI_INVALIDENT_UN_POINT = (
+    "modelname", "storage", "solveur", "solveur_lineaire",
+    "global_size", "geo_min_approx", "max_size",
+)
+
 #: Champs que PLUS AUCUN code vivant ne lit, et pourquoi. Mesure du 26/08/2026
 #: sur les deux scripts AC : chaque nom n'y apparait que dans le bloc de
 #: liaison, jamais en lecture ensuite (`historique/` mis a part).
@@ -116,6 +139,26 @@ class Configuration:
     #: "digital_structure" = un SOCP par point, licence requise.
     #: "analytique" = la meme chaine sur un etat limite ferme, en secondes.
     solveur: str = "digital_structure"
+
+    #: Solveur LINEAIRE du point interieur : "mumps" ou "cudss".
+    #: None = ne rien imposer, laisser l'`InitSolver.py` de l'etude decider.
+    #: Pardiso n'est pas propose : il est deprecie.
+    #:
+    #: POURQUOI CE CHAMP EXISTE -- constat du 26/08/2026
+    #: Le choix vivait dans `InitSolver.py`, en clair mais sans que rien ne
+    #: le remonte. Les deux etudes du depot avaient DIVERGE sans le dire :
+    #:
+    #:     pure_flexion/InitSolver.py    IPARM0[21] = 3   MUMPS
+    #:     Moulinblanc/InitSolver.py     IPARM0[21] = 4   CuDss
+    #:
+    #: Or c'est exactement la ou se separent les deux reproductibilites
+    #: mesurees : la flexion pure rejoue un point a 2,9e-11 pres, le Moulin
+    #: Blanc a 7,7e-06 pres. Cela ne prouve rien -- les deux modeles n'ont ni
+    #: la meme taille ni le meme conditionnement -- mais tant que le backend
+    #: n'est pas un parametre visible, l'hypothese n'est meme pas testable.
+    #:
+    #: Le champ est de categorie ETUDE : il change les nombres.
+    solveur_lineaire: Optional[str] = None
 
     #: Rejeter les points que le solveur declare non converges, au lieu de les
     #: laisser entrer dans le plan d'experiences.
@@ -258,6 +301,12 @@ class Configuration:
         if self.solveur not in SOLVEURS:
             problemes.append("solveur=%r inconnu (attendu : %s)"
                              % (self.solveur, ", ".join(SOLVEURS)))
+        if self.solveur_lineaire is not None \
+                and self.solveur_lineaire not in SOLVEURS_LINEAIRES:
+            problemes.append(
+                "solveur_lineaire=%r inconnu (attendu : %s, ou omis pour "
+                "laisser InitSolver.py decider)"
+                % (self.solveur_lineaire, ", ".join(sorted(SOLVEURS_LINEAIRES))))
         if self.max_degree > self.max_of_maxdegree:
             problemes.append("max_degree=%d depasse max_of_maxdegree=%d"
                              % (self.max_degree, self.max_of_maxdegree))
@@ -295,6 +344,20 @@ class Configuration:
 
     def en_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self)}
+
+    def signature_solveur(self) -> dict:
+        """Ce dont depend la VALEUR d'un point du plan d'experiences.
+
+        Sert a invalider un cache de DOE calcule sous une autre configuration.
+        Jusqu'au 26/08/2026 le cache n'etait valide que sur `n0` : basculer le
+        solveur lineaire de CuDss a MUMPS aurait rendu des points issus de
+        l'autre backend, sans une ligne de journal pour le dire.
+
+        Volontairement RESTREINT a ce qui change `g` en un point donne. Le
+        metamodele (`modele`, `max_degree`, `q`...) et l'enrichissement
+        n'invalident pas un point deja calcule : ils en font autre chose.
+        """
+        return {nom: getattr(self, nom) for nom in CHAMPS_QUI_INVALIDENT_UN_POINT}
 
 
 # ------------------------------------------------------------------------- #
@@ -372,6 +435,7 @@ def charger(chemin) -> Configuration:
 CATEGORIES = {
     # --- ETUDE : le probleme pose -------------------------------------------
     "modelname": "etude", "storage": "etude", "solveur": "etude",
+    "solveur_lineaire": "etude",
     "modele": "etude", "n0": "etude", "max_degree": "etude", "q": "etude",
     "do_EFF": "etude", "epsilon_factor": "etude", "tol_EFF": "etude",
     "tol_BB": "etude", "tol_BS": "etude", "EFF_criteria": "etude",
@@ -430,10 +494,23 @@ def resume(cfg: "Configuration") -> str:
     contredire l'intention de l'utilisateur -- en haute fidelite, un
     `do_EFF = True` n'enrichit rien.
     """
+    # Le solveur lineaire est sorti du bloc et mis en tete : c'est le
+    # parametre qu'on ne voyait PAS jusqu'au 26/08/2026, alors qu'il vaut
+    # MUMPS dans une etude du depot et CuDss dans l'autre. Un
+    # `solveur_lineaire=None` dans un bloc de cinquante valeurs ne se
+    # remarque pas -- ici la ligne dit aussi ce que None veut dire.
+    if cfg.solveur_lineaire is None:
+        _lin = "(non impose -- valeur de IPARM0[21] dans l'InitSolver.py de l'etude)"
+    else:
+        _lin = "%s (IPARM0[21] = %d, impose par le fichier d'etude)" % (
+            cfg.solveur_lineaire, SOLVEURS_LINEAIRES[cfg.solveur_lineaire])
+
     lignes = ["-" * 70,
               "CONFIGURATION : %s" % (getattr(cfg, "_origine", None) or "(defauts)"),
               "-" * 70,
-              "  modele   %s" % cfg.chemin_ds]
+              "  modele   %s" % cfg.chemin_ds,
+              "  solveur  %s" % cfg.solveur,
+              "  lineaire %s" % _lin]
 
     def _bloc(titre, noms):
         if not noms:

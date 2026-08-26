@@ -43,6 +43,7 @@ import STRAINS.rupt.core.CetMESH as CetMESH
 from STRAINS.rupt.core import CetSOLV
 
 from interface import Evaluation
+from params_ipm import imposer_solveur_lineaire
 
 
 def options_maillage(global_size, geo_min_approx, model_handle, max_size=None):
@@ -128,7 +129,8 @@ def options_maillage(global_size, geo_min_approx, model_handle, max_size=None):
     }
 
 
-def options_solveur(init_solver, model_handle, regions_sensibilite=None):
+def options_solveur(init_solver, model_handle, regions_sensibilite=None,
+                    solveur_lineaire=None):
     """Options passees a `CetSOLV.SOLV`. Recopiees de `run_one_SOL`.
 
     `init_solver` est le contenu du `InitSolver.py` de l'etude, execute dans
@@ -136,9 +138,14 @@ def options_solveur(init_solver, model_handle, regions_sensibilite=None):
     (`exec(..., globals())`), ce qui y injectait cinq dictionnaires sans que
     rien ne l'indique -- l'auteur en doutait lui-meme en commentaire :
     « je ne suis pas sure que ca marche comme ca ».
+
+    `solveur_lineaire` ("mumps" ou "cudss") impose `IPARM0[21]`. None laisse
+    l'`InitSolver.py` decider, comme avant l'existence du parametre.
     """
     ns = {}
     exec(init_solver, ns)                            # noqa: S102
+    imposer_solveur_lineaire(ns["cinematic_params"], solveur_lineaire,
+                             tracer=lambda m: print(m, flush=True))
     kwargs = {
         "scaling": 1,
         "write_debug_files": "true",
@@ -218,6 +225,7 @@ class SolveurDS:
 
     def __init__(self, chemin_ds, dossier_etude, params_names, regions,
                  global_size=0.05, geo_min_approx=4, max_size=None,
+                 solveur_lineaire=None,
                  analyse="Yield_analysis0", iteration=0,
                  archiver=False, verbeux=True):
         self.chemin_ds = chemin_ds
@@ -230,6 +238,8 @@ class SolveurDS:
         #: borne haute du mailleur. None = suit `global_size`. Voir
         #: `options_maillage` : c'est une taille RELATIVE, pas des metres.
         self.max_size = max_size
+        #: "mumps" | "cudss" | None. None = ce que dit l'InitSolver.py.
+        self.solveur_lineaire = solveur_lineaire
         self.analyse = analyse
         self.iteration = iteration
         self.archiver = archiver
@@ -291,7 +301,9 @@ class SolveurDS:
         regions = self.regions if sensibilite else None
         t0 = time.perf_counter()
         CetSOLV.SOLV(self.analyse, self.iteration, path,
-                     **options_solveur(self._init_solver(), model.GETHANDLEPTR(), regions))
+                     **options_solveur(self._init_solver(), model.GETHANDLEPTR(),
+                                       regions,
+                                       solveur_lineaire=self.solveur_lineaire))
         t_solv = time.perf_counter() - t0
         self._appels += 1
 

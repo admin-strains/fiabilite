@@ -60,6 +60,24 @@ n_max_EFF_points = 5
 tol_FORM = 0.05
 do_FORM_filter = true
 
+# --- solveur lineaire du point interieur
+# MUMPS et non CuDss. Deux raisons.
+#
+# 1. Decision d'Agnes, 26/08/2026 : en local, MUMPS. (Pardiso est deprecie et
+#    n'est plus propose.)
+# 2. `Moulinblanc/InitSolver.py` portait `IPARM0[21] = 4` (CuDss) tandis que
+#    `pure_flexion/InitSolver.py` porte `3` (MUMPS). Les deux etudes avaient
+#    donc DIVERGE sans que rien ne le dise -- et c'est exactement la que se
+#    separent les deux reproductibilites mesurees : 2,9e-11 sur la flexion
+#    pure, 7,7e-06 sur le Moulin Blanc. Ce n'est pas une preuve (les modeles
+#    n'ont ni la meme taille ni le meme conditionnement), mais le backend
+#    devient enfin un parametre visible, donc testable.
+#
+# Mesure du premier point de ce DOE sous CuDss, avant bascule, pour comparaison
+# ulterieure : g = 0,025923959153475  (journal C:\tmp\mb_fumee_cudss_pt1.log ;
+# 90 appels cuDSS, 48,5 s cumules, dont 35,1 s de factorisation).
+solveur_lineaire = "mumps"
+
 # =========================================================================== #
 # SESSION                                                                     #
 # =========================================================================== #
