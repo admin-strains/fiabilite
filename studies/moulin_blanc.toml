@@ -27,7 +27,14 @@ do_FORM_filter = true     # rejeter les u* hors bornes avant DBSCAN
 # --- execution
 n_workers_DOE = 6
 restart_enrich_only = true
-save_history = false      # ~424 Mo par appel SOCP : le disque n'y suffirait pas
+
+# save_history -- note de Mohamad Moussa, 04/07/2026, conservee telle quelle :
+#   passe a false pour le run grille HF (q, s_convoi). ~424 Mo par appel SOCP
+#   x 187 appels = ~79 Go, alors qu'il ne restait que ~24 Go sur C: et que
+#   SOCP_history pesait deja 135 Go. Le disque aurait ete plein au quart de la
+#   grille -- crash, et danger pour les AUTRES projets du poste.
+#   A discuter avec Semia : purger ou archiver SOCP_history avant de reactiver.
+save_history = false
 
 # --- graphiques
 n_grid_hf = 15

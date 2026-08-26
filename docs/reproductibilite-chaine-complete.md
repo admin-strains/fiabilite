@@ -107,6 +107,42 @@ La grille de visualisation haute fidelite (`print_HF`) a ete desactivee :
 Le script `AC3_moulinblanc` n'a pas ete execute : un appel solveur y coute
 des minutes, non des secondes.
 
+## Verification de la phase 4b (26/08/2026)
+
+Un quatrieme run, apres le debranchement de la configuration, compare a la
+repetition qui donne le plancher :
+
+```bat
+python tools\comparer_runs.py sortie_actuel.txt sortie_4b.txt ^
+                              --repetition sortie_actuel2.txt
+```
+
+| grandeur | ecart 4b | plancher mesure | verdict |
+|---|---|---|---|
+| `beta FORM` | **0** | 4,7 · 10⁻² | identique |
+| `u*` | **0** | 1,8 | identique |
+| `COV` | **0** | 3,4 | identique |
+| `theta` | 6,7 · 10⁻⁵ | 3,3 · 10⁻¹ | dans le bruit |
+| `Pf_IS` | 1,7 · 10⁻³ | 1,1 | dans le bruit |
+| `LOO` | 1,3 · 10⁻⁴ | 7,3 | dans le bruit |
+
+Resultat final identique au chiffre imprime pres :
+`Pf_IS = 2,3278e-07`, `beta_IS = 5,0400`. Les quatre runs s'etalent de
+2,1892e-07 a 2,4770e-07 — les 12,3 % deja mesures.
+
+Deux enseignements pour l'outil, tous deux corriges :
+
+1. **Le seuil doit venir d'une repetition, pas d'une constante.** Avec le
+   `rtol = 1e-9` d'origine, huit grandeurs etaient annoncees « ECART » — dont
+   toutes celles ou deux runs du meme code s'ecartent davantage.
+   `comparer_runs.py` prend desormais `--repetition` et derive le plancher de
+   la mesure.
+2. **Le plancher ne peut pas descendre sous la resolution d'impression.** Au
+   premier essai, `EFF initial` a ete signale pour 3,2 · 10⁻⁶ — soit
+   exactement un digit du dernier chiffre ecrit (1e-6 / 0,310336) : le
+   journal ecrit `0.310336` d'un cote, `0.310337` de l'autre. La repetition
+   donnait par hasard un plancher nul sur cette grandeur.
+
 ## Comment refaire la mesure
 
 ```bat
@@ -115,6 +151,6 @@ python tools\run_comparatif.py --patch pure_flexion\AC3_pure_flexion.py ^
 python launcher.py pure_flexion\_run_comparatif.py > C:\tmp\sortie.txt
 ```
 
-Puis comparer deux journaux avec `tools\comparer_runs.py`. Toujours produire
-**trois** runs : deux versions et une repetition, sans quoi la mesure ne dit
-rien.
+Puis comparer avec `tools\comparer_runs.py`. Toujours produire **trois**
+runs : deux versions et une repetition. Sans `--repetition`, l'outil le dit
+et refuse de presenter son tableau comme un verdict.

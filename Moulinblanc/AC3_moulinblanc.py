@@ -23,9 +23,13 @@ def getFile(nameFile):
     return res
 
 
-catalogTopo = getFile("C:\\workspace\\front\\STRAINS\\common\\Catalog\\CatalogTopo.json")
-catalogDimensions = getFile("C:\\workspace\\front\\STRAINS\\common\\Catalog\\CatalogDimensions.json")
-catalogBolt = getFile("C:\\workspace\\front\\STRAINS\\common\\Catalog\\CatalogBolts.json")
+#: racine du depot, deduite de ce fichier -- aucun chemin absolu.
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import launcher as _launcher
+_CATALOG = os.path.join(_launcher.find_ds_root(), "STRAINS", "common", "Catalog")
+catalogTopo = getFile(os.path.join(_CATALOG, "CatalogTopo.json"))
+catalogDimensions = getFile(os.path.join(_CATALOG, "CatalogDimensions.json"))
+catalogBolt = getFile(os.path.join(_CATALOG, "CatalogBolts.json"))
 INITCATALOG(catalogTopo, catalogDimensions, catalogBolt)
 
 import openturns as ot
@@ -57,6 +61,7 @@ import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
 import graphiques as _graphiques
+import schema as _schema
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -68,119 +73,115 @@ def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
-    modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
-    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or modelname
-    _path_ds = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+    # ------------------------------------------------------------------------ #
+    # CONFIGURATION                                                             #
+    # ------------------------------------------------------------------------ #
+    # Voir `studies/moulin_blanc.toml` et `_config/schema.py`. Meme dispositif
+    # que pour l'etude de flexion pure : les cinquante-quatre parametres de
+    # reglage quittent le script, les sept drapeaux `do_*` deviennent derives,
+    # et une cle mal orthographiee est refusee au lieu d'etre ignoree.
+    #
+    # Le bloc de liaison ci-dessous n'est pas une destination : il existe tant
+    # que les 2 800 lignes suivantes lisent des variables globales. Une
+    # affectation posee APRES ce bloc l'emporte encore.
+    CFG = _schema.charger(os.environ.get("FIABILITE_ETUDE")
+                          or os.path.join(_REPO, "studies", "moulin_blanc.toml"))
+    print(_schema.resume(CFG), flush=True)
+
+    # Dossier de l'etude : celui de CE fichier. Ce script portait le chemin
+    # absolu du poste de l'auteur en clair a quatre endroits
+    # (C:\_workingDir\_SF\test flexion\Moulinblanc), sans meme la variable
+    # `path_dir` que l'etude de flexion pure utilisait.
+    path_dir = os.path.dirname(os.path.abspath(__file__))
+    storage = CFG.storage
+
+    # --- liaison aux noms attendus par la suite du script --------------------
+    modele              = CFG.modele
+    n0                  = CFG.n0
+    max_degree          = CFG.max_degree
+    max_of_maxdegree    = CFG.max_of_maxdegree
+    q                   = CFG.q
+    seuil_pce           = CFG.seuil_pce
+    reduc_PLS           = CFG.reduc_PLS
+    do_analytic_grad    = CFG.do_analytic_grad
+    do_EFF              = CFG.eff_actif
+    epsilon_factor      = CFG.epsilon_factor
+    tol_EFF             = CFG.tol_EFF
+    tol_BB              = CFG.tol_BB
+    tol_BS              = CFG.tol_BS
+    EFF_criteria        = CFG.EFF_criteria
+    n_NLopt_EFF         = CFG.n_NLopt_EFF
+    n_max_EFF_points    = CFG.n_max_EFF_points
+    n_batch_EFF         = CFG.n_batch_EFF
+    eps_taylor          = CFG.eps_taylor
+    n_max_FORM          = CFG.n_max_FORM
+    tol_FORM            = CFG.tol_FORM
+    tol_all_modes       = CFG.tol_all_modes
+    tol_warmstart       = CFG.tol_warmstart
+    do_multistart       = CFG.do_multistart
+    do_warmstart        = CFG.do_warmstart
+    start_from_LHS      = CFG.start_from_LHS
+    n_sp                = CFG.n_sp
+    do_FORM_filter      = CFG.do_FORM_filter
+    do_IS               = CFG.is_actif
+    n_IS                = CFG.n_IS
+    cov_IS              = CFG.cov_IS
+    global_size         = CFG.global_size
+    geo_min_approx      = CFG.geo_min_approx
+    n_workers_DOE       = CFG.n_workers_DOE
+    config_is_identical = CFG.config_is_identical
+    restart_enrich_only = CFG.restart_enrich_only
+    save_history        = CFG.save_history
+    u1_min              = CFG.u1_min
+    u1_max              = CFG.u1_max
+    u2_min              = CFG.u2_min
+    u2_max              = CFG.u2_max
+    n_grid              = CFG.n_grid
+    n_grid_hf           = CFG.n_grid_hf
+    print_HF            = CFG.print_HF
+    print_fullHF        = CFG.print_fullHF
+    print_DOE           = CFG.print_DOE
+    print_3D            = CFG.print_3D
+    print_Pf            = CFG.print_Pf
+    print_grad_sp       = CFG.print_grad_sp
+    print_EFF_progres   = CFG.print_EFF_progres
+    print_gepck_calls   = CFG.print_gepck_calls
+    do_custom_hf        = CFG.do_custom_hf
+    hf_2d_grid_fixed    = CFG.hf_2d_grid_fixed
+    hf_3d_grid_fixed    = CFG.hf_3d_grid_fixed
+
+    # Les sept drapeaux de modele : derives, donc mutuellement exclusifs par
+    # construction.
+    do_KRG       = CFG.do_KRG
+    do_GEK       = CFG.do_GEK
+    do_HF        = CFG.do_HF
+    do_PCKRG     = CFG.do_PCKRG
+    do_old_GEPCK = CFG.do_old_GEPCK
+    do_GEPCK     = CFG.do_GEPCK
+    do_PCK       = CFG.do_PCK
+
+    # Un worker de DOE parallele travaille sur une copie isolee du modele : son
+    # nom lui est impose par le processus pere, pas par le fichier d'etude.
+    modelname = os.environ.get("_DOE_WORKER_MODELNAME") or CFG.modelname
+    _path_ds = os.path.join(storage, modelname + ".ds")
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
     print("=" * 70)
     print("CALCUL DE FIABILITE -- PONT DU MOULIN BLANC -- LM1 TRAFIC")
     print("=" * 70)
-    # --------------------------------------------------------------------------- #
-    # OPTIONS UTILISATEUR                                                         #
-    # --------------------------------------------------------------------------- #
-    # --------------------------------------------------------------------------- #
-    # DEFINITION DU MODELE                                                        #
-    modele = 'GEPCK'                    #options: 'GEPCK', 'PCKRG', 'KRG', 'GEK', 'HF'
-    do_EFF = True                              #si on veut enrichir progressivement 
-    do_IS   = True                            #si on veut calculer la proba globale 
 
-    n0 = 5                      #nombre de points du plan d'expérience initial (DOE)
-    n_workers_DOE = 6             #nb de SOCP DOE en parallele
-    config_is_identical = True    #True = reutilise doe_cache.json
-    restart_enrich_only = True   #True = charger restart_state.json et continuer l'enrichissement
+    # --- Groupes d'aciers, lus dans le dsCad ---------------------------------
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
-
-
     rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
     n_rebars = len(rebar_names)
     group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
     group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES FORM                                                             #
-    n_max_FORM = 50
-    do_multistart = True #multistart : FORM depuis n0 points + [0,0]
-    do_warmstart = False #warmstart : si FORM ne converge pas, on repart du best pt
-    start_from_LHS = False #multistart : FORM depuis un LHS frais de n_sp points (sans eval HF)
-    n_sp = 200             #taille du LHS de starting points si start_from_LHS=True
-
-    tol_FORM = 0.05                 # précision acceptée par FORM pour l'état limite (moulin_blanc)
-    tol_all_modes = 0.9                            #distance DBSCAN entre deux modes
-    tol_warmstart = 0.2 # fixe la nécessité de faire le warm_start si do_warm_start
-    do_FORM_filter = True           #True = rejeter les u* FORM hors eff_bounds avant DBSCAN
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES IS                                                               #
-    n_IS    = 10000                                       # taille échantillon IS
-    cov_IS  = 0.05                                             # critère d'arrêt COV
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES MESH                                                             #
-    global_size     = 0.05   # global_physical_size (0.05 = rapide FORM, 0.007 = très fin)
-    geo_min_approx  = 4      # geometric_approximation_min (4 = fin, 35 = grossier)
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES GEK/ PCE/ EFF                                                    #
-    # 1. GEK
-    do_analytic_grad = False
-    reduc_PLS = 0
-
-    # 2. PCE
-    seuil_pce = 0.90                              # seuil de validation de l'erreur
-    q = 0.75                                              # tri base poly candidats
-    max_degree = 2     # (fixe) degre max base candidats — LARS gere P > N
-    max_of_maxdegree = 2                                # (fixe) degre max autorisé
-
-    # 3. EFF
-    epsilon_factor = 2                               # eps = epsilon_factor * sigma
-    tol_EFF = 0.001                                              # critere d'arret EFF
-    tol_BB       = 0.05         # critere BB : |beta_IS_sup - beta_IS_inf| / beta_IS
-    tol_BS       = 0.01        # critere BS : |beta_IS - beta_IS_prec| / beta_IS
-    EFF_criteria = 'BS'             # critere : 'BB' | 'BS' | 'both' | 'at_least_one'
-
-    n_NLopt_EFF = 30                            # budget evaluations NLopt GN_DIRECT par recherche EFF
-    n_max_EFF_points = 360                       # plafond de points EFF ajoutes (arret force si atteint)
-    n_batch_EFF = 1                             # nombre de points EFF par iteration (1 = sequentiel, >1 = KB batch)
-    eps_taylor = 0.0                            # PCK uniquement : si > 0, ajoute n_var points virtuels par Taylor ordre 1 a chaque iter EFF
-    print_EFF_progres = True                  # True = prints debug EFF a chaque iter
-    print_gepck_calls = False                 # True = log chaque appel _exec GEPCK (debug)
-    print_Pf = False                          # True = calcule Pf_IS mid/sup/inf a chaque iter EFF (3 FORM+IS) + graphes
-    save_history = False                      # True = copie le dsmed dans SOCP_history/ (~8.8 MB/pt)
-    # 2026-07-04 (MM) : passe a False pour le run grille HF (q, s_convoi). ~424 MB/appel x 187
-    # SOCP = ~79 GB alors qu'il ne reste que ~24 GB sur C: (SOCP_history pese deja 135 GB) ->
-    # le disque serait plein au 1/4 de la grille (crash + danger pour les AUTRES projets).
-    # A discuter avec Semia : purger/archiver SOCP_history avant de reactiver.
-
-    # --------------------------------------------------------------------------- #
-    # PARAMETRES ET OPTIONS DE PRINT                                              #
-    
-    # Paramètres de print ---
-    u1_max = 7.5
-    u2_max = 7.5
-    u1_min = -7.5
-    u2_min = -7.5
-    n_grid = 300
-    n_grid_hf = 15
-
-    # --- Options de print ---
-    print_HF = True
-    print_fullHF = False             #False pour n_var=2 (grille 2D 7x7=49 suffit)
-    print_DOE = True
-    print_3D = False
-    
-    # --- Print facultatifs, par défaut à False ---
-    print_grad_sp = False #option si on veut afficher les gradients des points de départ
-
-
-    # --- Résultats fixés ---
-    hf_3d_grid_fixed = None
-    hf_2d_grid_fixed = None
-    # do_custom_hf : True = utiliser la grille custom pour le contour HF (au lieu de linspace 7x7)
-    do_custom_hf = True
-    _custom_grid_file = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output', 'custom_hf_grid.json')
+    # --- Grille HF sur mesure ------------------------------------------------
+    # do_custom_hf : utiliser la grille du fichier plutot qu'un linspace.
+    _custom_grid_file = os.path.join(path_dir, 'output', 'custom_hf_grid.json')
     if do_custom_hf and os.path.exists(_custom_grid_file):
         hf_custom_points = json.load(open(_custom_grid_file))['grid_u']
         print(f"[HF CUSTOM] grille chargee : {len(hf_custom_points)} points depuis {_custom_grid_file}", flush=True)
@@ -338,18 +339,9 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = os.path.join(r'C:\_workingDir\_SF\test flexion\Moulinblanc\output\png EFF', f'png_EFF_{timestamp}')
+    out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{timestamp}')
     os.makedirs(out_dir_eff, exist_ok=True)
-
-    do_KRG = True if modele == 'KRG' else False
-    do_GEK = True if modele == 'GEK' else False #on ajoute peut etre plus de points avec GEK car plus précis donc voit plus derreur
-    do_HF = True if modele == 'HF' else False # penser à jouer avec des bornes différentes
-    do_PCKRG = True if modele == 'PCKRG' else False
-    do_old_GEPCK = True if modele == 'old_GEPCK' else False
-    do_GEPCK     = True if modele == 'GEPCK'     else False
-    do_PCK       = True if modele == 'PCK'       else False
-    do_IS   = do_IS and modele != 'HF'                        # IS impraticable en HF
-    do_EFF   = do_EFF and modele != 'HF'                     # EFF impraticable en HF
+    _schema.ecrire_trace(CFG, out_dir_eff)   # configuration effective, a cote des figures
 
     # --------------------------------------------------------------------------- #
     # DEFINTION DE FONCTIONS                                                      #
@@ -479,7 +471,7 @@ if __name__ == '__main__':
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
         Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
         SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
-        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+        path = os.path.join(storage, modelname + ".ds")
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         dist_X = dist_jointe()
@@ -529,7 +521,7 @@ if __name__ == '__main__':
             CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
             kwargs = {"scaling": 1, "write_debug_files": "true"}
-            exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals())
+            exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals())
             kwargs["static_params"] = static_params
             kwargs["cinematic_params"] = cinematic_params
             kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -605,7 +597,7 @@ if __name__ == '__main__':
         T_inv = dist_X.getInverseIsoProbabilisticTransformation() 
         u_point = ot.Point(u)
         x_point = T_inv(u_point)
-        path = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\" + modelname + ".ds"
+        path = os.path.join(storage, modelname + ".ds")
         AnalysisName = 'Yield_analysis0'
         iteration = 0
         params={params_names[i]: x_point[i] for i in range(n_var)}
@@ -652,7 +644,7 @@ if __name__ == '__main__':
         CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
 
         kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-        exec(open(r"C:\_workingDir\_SF\test flexion\Moulinblanc\InitSolver.py").read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
+        exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
         kwargs["static_params"] = static_params
         kwargs["cinematic_params"] = cinematic_params
         kwargs["MKLPardiso_params"] = MKLPardiso_params
@@ -716,10 +708,13 @@ if __name__ == '__main__':
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
         """Parallelise les SOCP du DOE via subprocesses independants.
-        Chaque worker = launcher3.py relance en mode _DOE_WORKER sur une copie .ds isolee."""
+        Chaque worker = launcher.py relance en mode _DOE_WORKER sur une copie .ds isolee.
+
+        Les workers passaient jusqu'ici par `launcher3.py`, une copie du lanceur
+        portant en dur les chemins du poste de l'auteur : ce chemin de code ne
+        pouvait pas s'executer ailleurs."""
         import subprocess as _sp
-        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
-        base_ds = storage + base_modelname + ".ds"
+        base_ds = os.path.join(storage, base_modelname + ".ds")
         npts = len(SOL)
         n_workers = max(1, min(n_workers, npts))
         threads_per = max(1, 32 // n_workers)
@@ -732,7 +727,7 @@ if __name__ == '__main__':
             if not idxs:
                 continue
             wname = base_modelname + ".ds\\_doe_workers\\doew%d" % w
-            wds = storage + wname + ".ds"
+            wds = os.path.join(storage, wname + ".ds")
             os.makedirs(wds, exist_ok=True)
             shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
             shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
@@ -750,7 +745,7 @@ if __name__ == '__main__':
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_doe_worker.log", "w")
             print(f"    -> worker {w}: points {idxs}", flush=True)
-            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\Moulinblanc\launcher3.py"],
+            p = _sp.Popen([sys.executable, os.path.join(_REPO, "launcher.py"), "--garder-cwd", __file__],
                           env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         for p, out_file, wlog, w, idxs in procs:
@@ -784,8 +779,7 @@ if __name__ == '__main__':
         npts = len(SOL)
         n_workers = max(1, min(n_workers, npts))
         threads_per = max(1, 32 // n_workers)
-        storage = "C:\\workspace\\storage\\admin\\Moulin_Blanc\\"
-        base_ds = storage + modelname + ".ds"
+        base_ds = os.path.join(storage, modelname + ".ds")
         batches = [[] for _ in range(n_workers)]
         for i in range(npts):
             batches[i % n_workers].append(i)
@@ -795,7 +789,7 @@ if __name__ == '__main__':
             if not idxs:
                 continue
             wname = modelname + ".ds\\_hf_workers\\hfw%d" % w
-            wds = storage + wname + ".ds"
+            wds = os.path.join(storage, wname + ".ds")
             os.makedirs(wds, exist_ok=True)
             shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
             shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
@@ -813,7 +807,7 @@ if __name__ == '__main__':
                        MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
             wlog = open(wds + "\\_hf_worker.log", "w")
             print(f"    -> hf_worker {w}: {len(idxs)} points", flush=True)
-            p = _sp.Popen([sys.executable, r"C:\_workingDir\_SF\test flexion\Moulinblanc\launcher3.py"],
+            p = _sp.Popen([sys.executable, os.path.join(_REPO, "launcher.py"), "--garder-cwd", __file__],
                           env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
             procs.append((p, out_file, wlog, w, idxs))
         g_results = [None] * npts

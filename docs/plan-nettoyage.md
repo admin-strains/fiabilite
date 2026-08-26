@@ -214,6 +214,68 @@ remonte en tete, dans un commit separe.
 Les deux etapes n'ont regenere AUCUN golden et laisse la baseline identique
 au bit pres.
 
+**Phases 3b a 3f — sortie du code hors de `main`, FAIT.** Ce qui vivait en
+fonctions imbriquees dans les deux scripts AC devient des modules, chacun
+avec son golden preleve AVANT deplacement par `tools/extraction_temoin.py` :
+
+| commit | ce qui sort de `main` | vers |
+|---|---|---|
+| `93c2f43` | les 7 lois JCSS et la loi jointe | `_model/lois.py` |
+| `e530870` | 10 fonctions de cache, parametres explicites | `_cache/doe.py`, `hf.py` |
+| `5da97e7` | le critere EFF | `_reliability/eff.py` + `eff_ot.py` |
+| `a77eafc` | FORM multimodal et tirage d'importance | `_reliability/form.py` |
+| `9cc2ffc` | les traces | `_reliability/graphiques.py` |
+
+Deux enseignements de ces etapes, tous deux devenus des tests :
+
+- **`eff.py` a d'abord menti dans sa docstring** : annonce « numpy et scipy
+  seulement », il importait openturns. Neuf tests rouges dans un interpreteur
+  sans OpenTURNS. D'ou la scission `eff.py` / `eff_ot.py`, et le test qui
+  verifie la couche d'appartenance de chaque module.
+- **`run_IS_proj` existait en TROIS exemplaires** : extrait dans `form.py`
+  mais jamais retire des deux AC, alors que le message de commit affirmait le
+  contraire (`6bdef67` corrige). Chaque extraction porte desormais un test qui
+  exige que l'AC ne contienne plus qu'une delegation.
+
+Duplication entre les deux scripts AC : **3 273 -> 2 760** lignes identiques.
+
+**Phase 4a — schema de configuration, FAIT (`259425b`).** `_config/schema.py`
+(dataclass gelee, 57 champs) et un `.toml` par etude. L'inventaire prealable a
+montre que deux etudes ne different pas par soixante parametres mais par
+**douze** : le reste appartient aux defauts. Sept `do_*` et deux corrections
+tardives (`do_IS = do_IS and modele != 'HF'`) deviennent des valeurs derivees,
+qui ne peuvent plus se contredire.
+
+**Phase 4b — debranchement des scripts, FAIT.** Les 53 et 54 affectations
+litterales quittent les scripts AC ; ne restent que 14 accumulateurs d'etat.
+Trois consequences qui depassent la configuration :
+
+1. **Zero chemin absolu du poste de l'auteur.** Ils etaient 25. Le dernier
+   verrou etait `launcher3.py`, une copie du lanceur portant
+   `C:\_workingDir\_SF\test flexion\_lib` : les workers de DOE parallele
+   passaient par lui. Ce chemin de code **ne pouvait pas s'executer ailleurs
+   que sur le poste de son auteur** — ce qui explique qu'il n'ait jamais ete
+   couvert. Les deux copies sont supprimees au profit de `launcher.py
+   --garder-cwd`.
+2. **Chaque run porte sa configuration**, imprimee en tete de journal
+   (`schema.resume`) et deposee en JSON a cote des figures
+   (`schema.ecrire_trace`). Sans cela, un ecart de reglage et un ecart de code
+   se lisent pareil dans un journal — cf. la mesure de reproductibilite.
+3. **L'oracle a change de support.** Tant que les scripts portaient leurs
+   valeurs, ils etaient la reference et `test_85` comparait le TOML au script.
+   Une fois debranches, cette comparaison serait devenue vide : l'oracle a donc
+   ete recopie a la revision anterieure dans `tests/golden/config_*.json` par
+   `tools/golden_config.py`, et trois tests interdisent qu'il se vide en
+   silence.
+
+**La mesure la plus importante du chantier** n'est pas une etape du plan mais
+son resultat : `docs/reproductibilite-chaine-complete.md`. Digital Structure
+n'est pas reproductible au bit pres — meme point, meme maillage, memes 23
+iterations, `alpha` differe au onzieme chiffre. Amplifie x4·10⁹ le long de la
+chaine, cela donne **12,3 % d'etendue sur `Pf_IS`** entre trois executions du
+meme code, pour un critere d'arret a COV = 5 %. Toute comparaison A/B sur
+cette chaine exige donc **trois** runs, dont une repetition.
+
 ---
 
 ## 3. Cible
@@ -318,18 +380,21 @@ fiabilite elle-meme.
 *Sortie : les 61 fonctions communes aux deux AC existent en un seul
 exemplaire, importables et testees.*
 
-### Phase 4 — Configuration declarative · 2 j
+### Phase 4 — Configuration declarative · FAIT
 
 Les 57 variables de `main` deviennent un schema valide (dataclass + fichier
 `.toml` par etude). Une etude n'est plus un fork de 3 500 lignes mais un
-fichier de configuration de 60 lignes.
+fichier de configuration d'une trentaine de lignes.
 
-Effet de bord attendu : les 25 chemins absolus disparaissent (racines
-resolues par configuration et variables d'environnement), et le depot devient
-utilisable sur un autre poste que celui de son auteur.
+L'effet de bord attendu s'est produit : les 25 chemins absolus ont disparu et
+le depot s'installe ailleurs que sur le poste de son auteur. Voir §2 pour ce
+qui a ete mesure en chemin.
 
-*Sortie : `AC3_pure_flexion` et `AC3_moulinblanc` deviennent deux fichiers de
-configuration et un runner commun.*
+Ce qui reste de la cible : les deux AC ne sont pas encore « deux fichiers de
+configuration et un runner commun ». Le bloc de liaison
+(`n0 = CFG.n0`, ...) subsiste tant que les 2 700 lignes suivantes lisent des
+variables globales — il tombe avec la phase 5, quand `CFG` sera passe en
+argument.
 
 ### Phase 5 — Isoler Digital Structure · 3 j
 

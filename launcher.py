@@ -122,14 +122,15 @@ def setup(ds_root):
             print("           " + d, file=sys.stderr)
 
     # 3. chemins d'import : DS, puis les modules du depot
-    for p in (ds_root, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
+    for p in (ds_root, REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
               os.path.join(REPO, "_cache"),
-              os.path.join(REPO, "_reliability")):
+              os.path.join(REPO, "_reliability"),
+              os.path.join(REPO, "_config")):
         if p not in sys.path:
             sys.path.insert(0, p)
 
 
-def run(script, extra=()):
+def run(script, extra=(), garder_cwd=False):
     """Execute l'etude avec __name__ == '__main__'.
 
     Les scripts AC ont 98 % de leur code dans `if __name__ == '__main__':` :
@@ -138,6 +139,11 @@ def run(script, extra=()):
 
     `extra` est transmis via sys.argv, pour les outils qui prennent des
     arguments (tools/solve_one.py).
+
+    `garder_cwd` laisse le repertoire courant tel que l'appelant l'a pose.
+    C'est ce dont ont besoin les workers de DOE parallele : chacun travaille
+    dans sa copie isolee du modele, et se placer tous dans le dossier de
+    l'etude les ferait ecrire leurs fichiers de debogage au meme endroit.
     """
     script = os.path.abspath(script)
     if not os.path.isfile(script):
@@ -148,7 +154,8 @@ def run(script, extra=()):
         sys.path.insert(0, dossier)
 
     sys.argv = [script] + list(extra)
-    os.chdir(dossier)
+    if not garder_cwd:
+        os.chdir(dossier)
     with open(script, "r", encoding="utf-8", errors="replace") as fh:
         source = fh.read()
     exec(compile(source, script, "exec"), {"__name__": "__main__", "__file__": script})
@@ -192,10 +199,15 @@ def check(ds_root, etude=None):
 
 
 def main(argv):
+    argv = list(argv)
+    garder_cwd = "--garder-cwd" in argv
+    if garder_cwd:
+        argv.remove("--garder-cwd")
+
     if len(argv) < 2:
         raise SystemExit(
-            "usage : python launcher.py <etude.py>\n"
-            "        python launcher.py --check")
+            "usage : python launcher.py [--garder-cwd] <etude.py>\n"
+            "        python launcher.py --check [etude.py]")
 
     check_python()
     ds_root = find_ds_root()
@@ -209,7 +221,7 @@ def main(argv):
 
     print("[launcher] etude  : %s" % argv[1], flush=True)
     setup(ds_root)
-    run(argv[1], argv[2:])
+    run(argv[1], argv[2:], garder_cwd=garder_cwd)
 
 
 if __name__ == "__main__":

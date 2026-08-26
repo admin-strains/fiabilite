@@ -40,6 +40,26 @@ from typing import Optional, Tuple
 MODELES = ("GEPCK", "PCK", "PCKRG", "KRG", "GEK", "HF", "old_GEPCK")
 CRITERES_EFF = ("BB", "BS", "both", "at_least_one")
 
+#: Champs que PLUS AUCUN code vivant ne lit, et pourquoi. Mesure du 26/08/2026
+#: sur les deux scripts AC : chaque nom n'y apparait que dans le bloc de
+#: liaison, jamais en lecture ensuite (`historique/` mis a part).
+#:
+#: Ils sont conserves plutot que supprimes, parce que leur disparition est une
+#: question a poser aux auteurs et non une decision d'outillage : AC et AC2
+#: portaient une boucle de montee en degre (`while ... max_degree + 1 <=
+#: max_of_maxdegree`) que AC3 a abandonnee. Etait-ce voulu ?
+#:
+#: En attendant, `valider()` refuse qu'on les regle a autre chose que leur
+#: defaut. Un parametre sans effet qui accepte une valeur est un piege : il
+#: laisse croire qu'on a change quelque chose.
+SANS_EFFET = {
+    "reduc_PLS": "composantes PLS du GEK -- le chemin GEK n'est plus cable dans AC3",
+    "do_analytic_grad": "gradients analytiques du GEK -- meme raison",
+    "max_of_maxdegree": "plafond de la montee en degre PCE, boucle presente dans "
+                        "AC et AC2, absente de AC3",
+    "seuil_pce": "seuil de validation de l'erreur PCE, lu par AC et AC2 seulement",
+}
+
 
 @dataclass(frozen=True)
 class Configuration:
@@ -211,6 +231,14 @@ class Configuration:
                 problemes.append("%s=%r doit etre strictement positif" % (nom, v))
         if self.n_batch_EFF > 1 and self.eps_taylor > 0:
             problemes.append("n_batch_EFF>1 et eps_taylor>0 : combinaison non prevue")
+        for nom, pourquoi in SANS_EFFET.items():
+            defaut = _DEFAUTS[nom]
+            if getattr(self, nom) != defaut:
+                problemes.append(
+                    "%s=%r : ce parametre n'est lu par AUCUN code vivant (%s). "
+                    "Le regler ne changerait rien -- laisser %r, ou recabler le "
+                    "chemin qui le lisait et retirer le nom de SANS_EFFET."
+                    % (nom, getattr(self, nom), pourquoi, defaut))
         if problemes:
             raise ValueError("Configuration invalide :\n  - " + "\n  - ".join(problemes))
 
@@ -228,6 +256,10 @@ class Configuration:
 # ------------------------------------------------------------------------- #
 # Chargement                                                                #
 # ------------------------------------------------------------------------- #
+#: valeurs par defaut du schema, pour comparer sans instancier
+_DEFAUTS = {f.name: f.default for f in fields(Configuration)}
+
+
 def _lire_toml(chemin):
     try:
         import tomllib                     # Python >= 3.11
@@ -253,4 +285,77 @@ def charger(chemin) -> Configuration:
             % (os.path.basename(chemin), inconnues, ", ".join(sorted(connus))))
     cfg = Configuration(**donnees)
     cfg.valider()
+    # Provenance : ce n'est pas un parametre de calcul, donc pas un champ (il
+    # n'a rien a faire dans `en_dict()` ni dans une comparaison de deux
+    # configurations). L'objet etant gele, il faut passer par object.
+    object.__setattr__(cfg, "_origine", os.path.abspath(chemin))
     return cfg
+
+
+# ------------------------------------------------------------------------- #
+# Tracabilite d'un run                                                      #
+# ------------------------------------------------------------------------- #
+#: champs dont la valeur decide de ce qui est calcule, par opposition a ceux
+#: qui ne decident que de ce qui est TRACE. La mesure du 25/08/2026 a montre
+#: qu'une comparaison de deux runs ne vaut rien si leur configuration differe :
+#: le resume met donc ces champs-la en premier.
+CHAMPS_DECISIFS = (
+    "modele", "n0", "max_degree", "q", "do_analytic_grad", "reduc_PLS",
+    "do_EFF", "EFF_criteria", "epsilon_factor", "tol_EFF", "tol_BB", "tol_BS",
+    "n_NLopt_EFF", "n_max_EFF_points", "n_batch_EFF", "eps_taylor",
+    "n_max_FORM", "tol_FORM", "tol_all_modes", "do_multistart", "do_warmstart",
+    "start_from_LHS", "n_sp", "do_FORM_filter",
+    "do_IS", "n_IS", "cov_IS",
+    "global_size", "geo_min_approx",
+    "n_workers_DOE", "config_is_identical", "restart_enrich_only",
+)
+
+
+def resume(cfg: "Configuration") -> str:
+    """Configuration effective, en clair, pour l'en-tete du journal d'un run.
+
+    Un journal qui ne porte pas sa configuration ne peut pas etre compare a un
+    autre : c'est ce qui manquait aux runs de l'auteur, ou les cinquante
+    parametres n'apparaissaient nulle part dans la sortie. Les valeurs
+    derivees (`eff_actif`, `is_actif`) figurent aussi, parce qu'elles peuvent
+    contredire l'intention de l'utilisateur -- en haute fidelite, un
+    `do_EFF = True` n'enrichit rien.
+    """
+    lignes = ["-" * 70,
+              "CONFIGURATION : %s" % (getattr(cfg, "_origine", None) or "(defauts)"),
+              "-" * 70,
+              "  etude    %s   (%s)" % (cfg.modelname, cfg.chemin_ds)]
+    tampon = []
+    for nom in CHAMPS_DECISIFS:
+        tampon.append("%s=%r" % (nom, getattr(cfg, nom)))
+    ligne = "   "
+    for morceau in tampon:
+        if len(ligne) + len(morceau) > 68:
+            lignes.append(ligne)
+            ligne = "   "
+        ligne += " " + morceau
+    lignes.append(ligne)
+    if cfg.do_EFF != cfg.eff_actif or cfg.do_IS != cfg.is_actif:
+        lignes.append("  CORRIGE  modele=%s : eff_actif=%s  is_actif=%s"
+                      % (cfg.modele, cfg.eff_actif, cfg.is_actif))
+    lignes.append("-" * 70)
+    return "\n".join(lignes)
+
+
+def ecrire_trace(cfg: "Configuration", dossier: str) -> str:
+    """Depose la configuration effective en JSON a cote des sorties du run.
+
+    Complement du resume : lisible par `tools/comparer_runs.py`, qui peut
+    ainsi refuser de comparer deux runs dont la configuration differe au lieu
+    d'imputer l'ecart au code.
+    """
+    import json
+    os.makedirs(dossier, exist_ok=True)
+    cible = os.path.join(dossier, "configuration.json")
+    donnees = cfg.en_dict()
+    donnees["_origine"] = getattr(cfg, "_origine", None)
+    donnees["_derive"] = {"eff_actif": cfg.eff_actif, "is_actif": cfg.is_actif,
+                          "chemin_ds": cfg.chemin_ds}
+    with open(cible, "w", encoding="utf-8") as fh:
+        json.dump(donnees, fh, indent=1, sort_keys=True, ensure_ascii=False)
+    return cible

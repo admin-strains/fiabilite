@@ -32,3 +32,6 @@ mix_fonctionnement_global.md
 
 # Caches d'outils
 .pytest_cache/
+
+# Script genere par tools/run_comparatif.py
+_run_comparatif.py
