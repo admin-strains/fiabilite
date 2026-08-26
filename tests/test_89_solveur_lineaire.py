@@ -306,3 +306,55 @@ def test_les_etudes_moulin_blanc_sont_bornees():
 def test_les_bornes_sont_classees_comme_etude():
     assert schema.CATEGORIES["eff_bound_min"] == "etude"
     assert schema.CATEGORIES["eff_bound_max"] == "etude"
+
+
+# --------------------------------------------------------------------- #
+# points sans gradient -- defaut du 26/08/2026
+# --------------------------------------------------------------------- #
+def test_le_parametre_existe_et_est_classe():
+    """Digital Structure peut rendre `Sensitivity = {fy1: None, fy2: None}`
+    sur un point NUMERICAL_ERROR. Le plan partait alors en
+    `TypeError: unsupported format string passed to NoneType.__format__`."""
+    cfg = schema.Configuration(modelname="x")
+    assert cfg.exclure_points_sans_gradient is True
+    assert schema.CATEGORIES["exclure_points_sans_gradient"] == "etude"
+
+
+def test_c_est_bien_DEUX_decisions_distinctes():
+    """`exclure_points_non_converges` porte sur l'OPINION du solveur, jugee
+    peu fiable donc ignoree (Agnes, 26/08). `exclure_points_sans_gradient`
+    porte sur une ABSENCE de donnee. Les confondre reviendrait a fabriquer un
+    gradient nul, que le metamodele ajusterait."""
+    cfg = schema.Configuration(modelname="x")
+    assert cfg.exclure_points_non_converges is False, "l'opinion du solveur est ignoree"
+    assert cfg.exclure_points_sans_gradient is True, "l'absence de donnee ne l'est pas"
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_le_plan_ecarte_au_lieu_de_fabriquer(script):
+    """Garde-fou statique : `.get(f'dg_{p}', 0.0)` ne protegeait RIEN -- la
+    clef existe, avec la valeur None, donc le defaut 0.0 n'etait jamais
+    utilise. Le motif ne doit pas revenir dans l'assemblage du plan."""
+    import re
+    chemin = os.path.join(_REPO, script)
+    with open(chemin, "r", encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "exclure_points_sans_gradient" in src, (
+        "%s n'honore pas le parametre" % script)
+    # le motif trompeur ne doit plus servir a construire all_grad du plan
+    assert not re.search(r"all_grad = np\.array\(\[\[SOL\[i\]\.get\(f'dg_\{p\}', 0\.0\)", src), (
+        "%s reconstruit all_grad avec le defaut 0.0 illusoire" % script)
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_run_HF_leve_et_explique_l_asymetrie(script):
+    """`run_HF` LEVE la ou le plan ECARTE, et le message doit dire pourquoi :
+    un point d'enrichissement est demande PARCE QUE l'algorithme le veut la."""
+    chemin = os.path.join(_REPO, script)
+    with open(chemin, "r", encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "exclure_points_sans_gradient`." in src or \
+           "`exclure_points_sans_gradient`" in src, (
+        "%s : le message de run_HF ne renvoie pas au parametre" % script)

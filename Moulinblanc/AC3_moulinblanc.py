@@ -593,7 +593,18 @@ if __name__ == '__main__':
         if ev.gradient_complet:
             grad_HF_U = _grad_vers_U(grad_HF_X, u, T_inv)
         if any(v is None for v in grad_HF_U):
-            raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que le solveur a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
+            # On LEVE ici, la ou le plan d'experiences ECARTE (cf.
+            # `exclure_points_sans_gradient`). La difference est voulue : un
+            # point d'enrichissement est demande PARCE QUE l'algorithme le
+            # veut la ; l'ecarter en silence lui ferait reproposer le meme
+            # point, indefiniment.
+            raise ValueError(
+                "run_HF en u=%s : le solveur n'a rendu aucun gradient "
+                "(grad_HF_X=%s). Un gradient fabrique a 0 affirmerait que "
+                "l'etat limite est plat ici, et le metamodele l'ajusterait. "
+                "Le plan d'experiences, lui, ecarte ces points -- voir "
+                "`exclure_points_sans_gradient`."
+                % (list(u), grad_HF_X))
         _append_point_log(_point_log_phase[0], u, x_point, g_HF)
         return g_HF, grad_HF_U, grad_HF_X
 
@@ -849,19 +860,54 @@ if __name__ == '__main__':
                 SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
             else:
                 SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
-            # run_one_SOL a deja converti les gradients en U
-            yt = np.array([SOL[i]['g'] for i in range(n_doe)]).reshape(-1, 1)
-            all_grad = np.array([[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_doe)])
-            for i in range(n_doe):
+            # run_one_SOL a deja converti les gradients en U.
+            #
+            # UN POINT PEUT N'AVOIR AUCUN GRADIENT. Digital Structure rend
+            # alors `Sensitivity = {fy1: None, fy2: None}` -- c'est arrive le
+            # 26/08/2026 sur un point NUMERICAL_ERROR, et le plan partait en
+            # `TypeError: unsupported format string passed to NoneType`, apres
+            # cinq appels au solveur.
+            #
+            # `.get(f'dg_{p}', 0.0)` ne protegeait rien : la clef EXISTE, avec
+            # la valeur None. Le defaut 0.0 n'etait donc jamais utilise -- et
+            # tant mieux, un gradient nul affirmerait que l'etat limite est
+            # plat en ce point, ce que GEPCK ajusterait.
+            _complets = [i for i in range(n_doe)
+                         if all(SOL[i].get(f'dg_{p}') is not None for p in params_names)]
+            _sans = [i for i in range(n_doe) if i not in _complets]
+            if _sans:
+                for i in _sans:
+                    print("  [PLAN] point %d SANS GRADIENT (le solveur n'en rend "
+                          "aucun) u=%s g=%+.6f -- %s"
+                          % (i, [round(float(v), 4) for v in U_doe[i]], SOL[i]['g'],
+                             "ECARTE" if CFG.exclure_points_sans_gradient
+                             else "CONSERVE avec un gradient FABRIQUE a 0"),
+                          flush=True)
+                if CFG.exclure_points_sans_gradient:
+                    print("  [PLAN] %d point(s) ecarte(s) : le plan passe de %d a %d."
+                          % (len(_sans), n_doe, len(_complets)), flush=True)
+                    if not _complets:
+                        raise RuntimeError(
+                            "aucun point du plan d'experiences n'a de gradient : "
+                            "il n'y a rien a ajuster. Verifier que les regions de "
+                            "sensibilite du modele correspondent aux variables.")
+                else:
+                    _complets = list(range(n_doe))
+
+            xt = xt[_complets]
+            yt = np.array([SOL[i]['g'] for i in _complets]).reshape(-1, 1)
+            all_grad = np.array([[SOL[i].get(f'dg_{p}') or 0.0 for p in params_names]
+                                 for i in _complets], dtype=float)
+            for i in _complets:
                 _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
             if print_DOE:
                 print("yt_doe = [")
-                for i in range(n_doe):
-                    print(f"    {yt[i][0]:.16f},")
+                for k in range(len(_complets)):
+                    print(f"    {yt[k][0]:.16f},")
                 print("]", flush=True)
                 print("all_grad_doe = [")
-                for i in range(n_doe):
-                    print(f"    [{all_grad[i][0]:.10f}, {all_grad[i][1]:.10f}],")
+                for k in range(len(_complets)):
+                    print("    [" + ", ".join(f"{v:.10f}" for v in all_grad[k]) + "],")
                 print("]", flush=True)
             _save_doe_cache(xt, yt, all_grad)
             if do_PCK and eps_taylor > 0:

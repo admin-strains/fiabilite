@@ -173,6 +173,34 @@ class Configuration:
     #: Le champ est de categorie ETUDE : il change les nombres.
     solveur_lineaire: Optional[str] = None
 
+    #: Ecarter du plan d'experiences les points dont le solveur ne rend AUCUN
+    #: gradient, au lieu de les y laisser entrer avec des trous.
+    #:
+    #: A NE PAS CONFONDRE avec `exclure_points_non_converges`, qui porte sur
+    #: l'OPINION de Digital Structure -- « ce point me parait douteux » --
+    #: jugee peu fiable, donc ignoree. Ici il ne s'agit pas d'une opinion mais
+    #: d'une ABSENCE : le solveur a rendu `Sensitivity = {fy1: None,
+    #: fy2: None}`. Il n'y a rien a conserver.
+    #:
+    #: VRAI PAR DEFAUT, parce que les deux alternatives sont pires :
+    #:
+    #: * fabriquer un gradient nul serait un MENSONGE que le metamodele
+    #:   ajusterait -- un gradient de zero affirme que l'etat limite est plat
+    #:   en ce point, et GEPCK entraine sur les gradients autant que sur les
+    #:   valeurs ;
+    #: * planter, ce que faisait le code jusqu'au 26/08/2026 -- et de la pire
+    #:   maniere, par un `TypeError: unsupported format string passed to
+    #:   NoneType.__format__` a l'impression du plan, apres cinq appels au
+    #:   solveur et plus d'une heure de calcul.
+    #:
+    #: Le prix est reel : le plan perd un point (n0 - 1). Il est annonce dans
+    #: le journal, avec les coordonnees du point ecarte.
+    #:
+    #: `run_HF` (enrichissement, grille, FOSM) LEVE deja dans ce cas au lieu
+    #: d'ecarter : un point d'enrichissement est demande PARCE QUE l'algorithme
+    #: le veut la, et l'ecarter en silence ferait reproposer le meme point.
+    exclure_points_sans_gradient: bool = True
+
     #: Bornes du domaine de recherche, en ecarts-types de l'espace standard U.
     #: S'appliquent a TOUTES les variables. Elles gouvernent le plan
     #: d'experiences (tirage LHS), la recherche EFF, les points de depart FORM
@@ -483,6 +511,7 @@ CATEGORIES = {
     "modelname": "etude", "storage": "etude", "solveur": "etude",
     "solveur_lineaire": "etude",
     "eff_bound_min": "etude", "eff_bound_max": "etude",
+    "exclure_points_sans_gradient": "etude",
     "modele": "etude", "n0": "etude", "max_degree": "etude", "q": "etude",
     "do_EFF": "etude", "epsilon_factor": "etude", "tol_EFF": "etude",
     "tol_BB": "etude", "tol_BS": "etude", "EFF_criteria": "etude",
