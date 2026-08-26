@@ -3,10 +3,26 @@
 # Ce fichier ne contient QUE ce qui s'ecarte des defauts de
 # `_config/schema.py`.
 #
-# Modele a ~13 000 aciers repartis en deux groupes (fyd1 / fyd2). Un appel
-# SOCP y coute des minutes, contre une dizaine de secondes en flexion pure :
-# d'ou un enrichissement bien plus long et l'historique SOCP desactive.
+# Modele a 15 346 aciers repartis en deux groupes -- 13 858 en fyd1, 1 488 en
+# fyd2. Mesure du 26/08/2026, UN point evalue de bout en bout :
+#
+#     construction CAD      ~105 s   (dsCad de 10 Mo, 188 094 lignes)
+#     maillage                 9 s   (13 804 tetraedres)
+#     solveur                353 s   (50 iterations, systeme 79 521)
+#     ---------------------------
+#     total                  466 s   soit 7,8 minutes PAR POINT
+#
+# C'est ce chiffre qui gouverne toutes les decisions ci-dessous.
+#
+# TROIS SORTES DE PARAMETRES, ET LA DIFFERENCE COMPTE
+#   ETUDE    definit le probleme, change le RESULTAT.
+#   SESSION  decrit comment CE run tourne ICI. Ne change pas le resultat.
+#   SORTIE   ce qui est trace -- mais certains declenchent des centaines
+#            d'appels au solveur, ce qui se compte ici en JOURS.
 
+# =========================================================================== #
+# ETUDE                                                                       #
+# =========================================================================== #
 modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
 storage = 'C:\workspace\storage\admin\Moulin_Blanc'
 
@@ -17,16 +33,33 @@ max_of_maxdegree = 2
 seuil_pce = 0.90
 
 # --- enrichissement
+# 360 points a 466 s = 47 HEURES. Le pic EFF est etroit et demande du budget,
+# mais ce plafond doit etre choisi en connaissance du cout, pas recopie.
 EFF_criteria = "BS"
-n_max_EFF_points = 360    # le pic EFF est etroit : il faut du budget
+n_max_EFF_points = 360
 
 # --- FORM
 tol_FORM = 0.05
 do_FORM_filter = true     # rejeter les u* hors bornes avant DBSCAN
 
-# --- execution
+# =========================================================================== #
+# SESSION -- ce run, sur ce poste. Rien ici ne change le resultat.            #
+# =========================================================================== #
 n_workers_DOE = 6
-restart_enrich_only = true
+
+# restart_enrich_only -- CHANGE DELIBEREMENT le 26/08/2026 (decision d'Agnes).
+#
+# Le script portait `true` : c'etait l'etat de TRAVAIL de son auteur, qui
+# reprenait un enrichissement en cours a partir d'un `restart_state.json`. Ce
+# fichier vit dans le `.ds` du modele et n'est pas dans le depot -- l'etude
+# etait donc injouable ailleurs que sur le poste ou le dump existait.
+#
+# L'intention ici est de REJOUER LE RUN COMPLET, depuis le plan d'experiences.
+# C'est exactement le genre de parametre qui n'a rien a faire dans une
+# definition d'etude : il decrit une session, pas un probleme.
+# `tests/test_85_configuration.py` connait cet ecart au golden et exige cette
+# note.
+restart_enrich_only = false
 
 # save_history -- note de Mohamad Moussa, 04/07/2026, conservee telle quelle :
 #   passe a false pour le run grille HF (q, s_convoi). ~424 Mo par appel SOCP
@@ -36,7 +69,14 @@ restart_enrich_only = true
 #   A discuter avec Semia : purger ou archiver SOCP_history avant de reactiver.
 save_history = false
 
-# --- graphiques
+# =========================================================================== #
+# SORTIE -- ce qui est trace                                                  #
+# =========================================================================== #
+# ATTENTION, ET C'EST LE POINT LE PLUS COUTEUX DE CE FICHIER :
+# `print_HF` declenche n_grid_hf^2 appels au solveur. A 15, cela fait
+# 225 appels a 466 s, soit 29 HEURES -- pour une seule figure de contour, qui
+# ne change aucun resultat. Le resume imprime en tete de journal le rappelle
+# avant chaque run.
 n_grid_hf = 15
 print_fullHF = false
 do_custom_hf = true

@@ -44,7 +44,7 @@ for p in (os.path.join(REPO, "_config"),):
 pytest.importorskip("tomli", reason="lecture TOML (tomllib a partir de 3.11)") \
     if sys.version_info < (3, 11) else None
 
-from schema import (CHAMPS_DECISIFS, CRITERES_EFF, MODELES,  # noqa: E402
+from schema import (CRITERES_EFF, MODELES,  # noqa: E402
                     Configuration, charger, ecrire_trace, resume)
 
 ETUDES = {
@@ -58,6 +58,19 @@ HORS_COMPARAISON = {
     "dossier_sortie",     # remplace `path_dir`, chemin absolu du poste de l'auteur
     "hf_2d_grid_fixed",   # None des deux cotes, mais parfois ecrit en expression
     "hf_3d_grid_fixed",
+}
+
+#: (etude, champ) -> raison. Ecarts VOULUS entre le script d'origine et le
+#: fichier d'etude. La liste doit rester courte, et chaque entree porter sa
+#: raison : c'est ici qu'on verra, dans six mois, ce qui a ete decide et par
+#: qui. Un ecart non declare reste un echec.
+ECARTS_ASSUMES = {
+    ("moulin_blanc", "restart_enrich_only"):
+        "Agnes, 26/08/2026 : le script portait `true`, l'etat de TRAVAIL de "
+        "son auteur, qui reprenait un enrichissement depuis un "
+        "`restart_state.json`. Ce dump vit dans le `.ds` et n'est pas dans le "
+        "depot : l'etude etait injouable ailleurs. L'intention est de REJOUER "
+        "LE RUN COMPLET, depuis le plan d'experiences.",
 }
 
 
@@ -112,6 +125,8 @@ def test_les_valeurs_sont_celles_des_scripts_ac(etude):
     for champ in cfg.en_dict():
         if champ in HORS_COMPARAISON or champ not in ac:
             continue
+        if (nom, champ) in ECARTS_ASSUMES:
+            continue
         attendu, obtenu = ac[champ], getattr(cfg, champ)
         if isinstance(attendu, float) or isinstance(obtenu, float):
             egal = obtenu == pytest.approx(attendu, rel=1e-15)
@@ -119,7 +134,33 @@ def test_les_valeurs_sont_celles_des_scripts_ac(etude):
             egal = obtenu == attendu
         if not egal:
             ecarts.append("%s : script=%r  config=%r" % (champ, attendu, obtenu))
-    assert not ecarts, "%s :\n  " % nom + "\n  ".join(ecarts)
+    assert not ecarts, (
+        "%s :\n  " % nom + "\n  ".join(ecarts)
+        + "\n\nSi l'ecart est VOULU, l'inscrire dans ECARTS_ASSUMES avec sa "
+          "raison et qui l'a decide.")
+
+
+def test_les_ecarts_assumes_en_sont_vraiment(etude):
+    """Le pendant : une entree de `ECARTS_ASSUMES` qui ne correspond plus a un
+    ecart reel est une exemption qui traine. Elle masquerait le jour ou le
+    champ se remettrait a diverger pour une AUTRE raison."""
+    nom, cfg, ac = etude
+    inutiles = []
+    for (etude_nom, champ), _raison in ECARTS_ASSUMES.items():
+        if etude_nom != nom or champ not in ac:
+            continue
+        if getattr(cfg, champ) == ac[champ]:
+            inutiles.append(champ)
+    assert not inutiles, (
+        "%s : ECARTS_ASSUMES declare %s, mais le fichier d'etude a repris la "
+        "valeur du script. Retirer l'entree." % (nom, inutiles))
+
+
+def test_chaque_ecart_assume_porte_sa_raison():
+    """Une exemption sans raison est une exemption qu'on ne pourra pas
+    reexaminer."""
+    maigres = [cle for cle, raison in ECARTS_ASSUMES.items() if len(raison) < 80]
+    assert not maigres, "raison trop courte pour %s" % maigres
 
 
 def test_la_couverture_est_reelle(etude):
@@ -369,12 +410,23 @@ def test_chemin_du_modele(etude):
 def test_le_resume_porte_les_champs_decisifs(etude):
     """Un journal de run qui ne porte pas sa configuration ne peut pas etre
     compare a un autre. Mesure du 25/08/2026 : sur cette chaine, un ecart de
-    configuration et un ecart de code se lisent pareil."""
+    configuration et un ecart de code se lisent pareil.
+
+    « Decisif » veut dire : tout ce qui definit l'ETUDE, et tout ce qui decrit
+    la SESSION. Les parametres sans effet, eux, n'ont rien a faire dans un
+    journal -- les y mettre laisserait croire qu'ils comptent.
+    """
+    from schema import CATEGORIES                              # noqa: PLC0415
     nom, cfg, _ = etude
     texte = resume(cfg)
-    for champ in CHAMPS_DECISIFS:
-        assert champ in texte, "%s : %s absent du resume" % (nom, champ)
-    assert cfg.modelname in texte
+    for champ, categorie in CATEGORIES.items():
+        if categorie in ("etude", "session") and champ not in ("modelname", "storage"):
+            assert champ in texte, "%s : %s absent du resume" % (nom, champ)
+    for champ, categorie in CATEGORIES.items():
+        if categorie == "sans_effet":
+            assert champ not in texte, \
+                "%s : %s est sans effet, il ne doit pas figurer au journal" % (nom, champ)
+    assert cfg.modelname in texte or cfg.chemin_ds in texte
 
 
 def test_le_resume_signale_une_intention_corrigee():
@@ -468,3 +520,83 @@ def test_les_deux_etudes_ne_diffferent_que_par_leur_contenu_propre():
                   if getattr(a, c) != getattr(b, c)]
     assert 5 <= len(differents) <= 25, \
         "%d champs different entre les deux etudes : %s" % (len(differents), differents)
+
+
+# --------------------------------------------------------------------------- #
+# A qui appartient chaque parametre                                           #
+# --------------------------------------------------------------------------- #
+def test_chaque_champ_est_classe():
+    """Question d'Agnes, 26/08/2026 : quelles options sont liees a un run
+    utilisateur, et lesquelles sont internes au code ? Elle ne l'etait pas.
+
+    Un champ non classe est un champ dont personne ne sait s'il definit
+    l'ETUDE, decrit la SESSION, ou ne change que la SORTIE. C'est ainsi que
+    `restart_enrich_only` -- un mode de session -- s'est retrouve fige dans la
+    definition d'une etude, la rendant injouable ailleurs que sur le poste ou
+    le dump de reprise existait.
+    """
+    from schema import CATEGORIES                              # noqa: PLC0415
+    champs = set(Configuration(modelname="x").en_dict())
+    non_classes = sorted(champs - set(CATEGORIES))
+    assert not non_classes, (
+        "champ(s) sans categorie : %s\n"
+        "Choisir dans CATEGORIES de _config/schema.py : 'etude' (definit le "
+        "resultat), 'session' (ce run sur ce poste), 'sortie' (ce qui est "
+        "trace), 'sans_effet'." % non_classes)
+
+
+def test_aucune_categorie_inventee():
+    from schema import CATEGORIES                              # noqa: PLC0415
+    champs = set(Configuration(modelname="x").en_dict())
+    assert set(CATEGORIES) <= champs, \
+        "CATEGORIES nomme des champs inexistants : %s" % sorted(set(CATEGORIES) - champs)
+    valeurs = set(CATEGORIES.values())
+    assert valeurs <= {"etude", "session", "sortie", "sans_effet"}, valeurs
+
+
+def test_les_sans_effet_sont_les_memes_des_deux_cotes():
+    """Deux listes qui decrivent le meme fait ne doivent pas diverger."""
+    from schema import CATEGORIES, SANS_EFFET                  # noqa: PLC0415
+    classes = {c for c, v in CATEGORIES.items() if v == "sans_effet"}
+    assert classes == set(SANS_EFFET), \
+        "CATEGORIES=%s  SANS_EFFET=%s" % (sorted(classes), sorted(SANS_EFFET))
+
+
+def test_aucun_parametre_de_session_ne_change_le_resultat():
+    """Le critere qui definit la categorie « session » : deux runs qui ne
+    different que par elle doivent rendre le meme resultat. On ne peut pas le
+    prouver ici sans lancer un calcul -- on verifie donc la propriete qui le
+    rend possible : aucun de ces champs n'entre dans les valeurs derivees."""
+    from schema import CATEGORIES                              # noqa: PLC0415
+    session = {c for c, v in CATEGORIES.items() if v == "session"}
+    a = Configuration(modelname="x")
+    b = Configuration(modelname="x", n_workers_DOE=1, config_is_identical=False,
+                      restart_enrich_only=True, save_history=True,
+                      dossier_sortie="/ailleurs")
+    for derive in ("do_GEPCK", "do_PCK", "do_HF", "eff_actif", "is_actif",
+                   "bornes_u"):
+        assert getattr(a, derive) == getattr(b, derive), derive
+    assert session  # la categorie n'est pas vide
+
+
+def test_les_sorties_qui_coutent_des_appels_solveur_sont_recensees():
+    """Un parametre de trace qui declenche des centaines d'appels au solveur
+    n'est pas anodin : sur le Moulin Blanc, un appel coute 466 s, donc une
+    grille 15x15 represente 29 heures POUR UNE FIGURE. Le resume de journal
+    les affiche pour qu'on le sache avant de lancer, pas apres."""
+    from schema import CATEGORIES, COUTE_DES_APPELS_SOLVEUR    # noqa: PLC0415
+    for nom in COUTE_DES_APPELS_SOLVEUR:
+        assert CATEGORIES.get(nom) == "sortie", \
+            "%s coute des appels solveur mais n'est pas une sortie" % nom
+        assert len(COUTE_DES_APPELS_SOLVEUR[nom]) > 15, \
+            "%s : dire CE QUE ca coute, pas seulement que ca coute" % nom
+
+
+def test_le_resume_separe_l_etude_de_la_session(etude):
+    """Le resume doit rendre la distinction lisible dans le journal : c'est
+    la seule trace qui restera quand on relira un run dans six mois."""
+    _, cfg, _ = etude
+    texte = resume(cfg)
+    assert "ETUDE" in texte and "SESSION" in texte
+    assert texte.index("ETUDE") < texte.index("SESSION"), \
+        "l'etude se lit avant la session : c'est elle qui definit le resultat"

@@ -147,3 +147,43 @@ def test_la_raison_de_l_attente_est_ecrite_dans_le_script(nom):
     src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
     assert re.search(r"pas encore fiables", src), \
         "%s : la raison de conserver les points suspects n'est pas ecrite" % nom
+
+
+# --------------------------------------------------------------------------- #
+# Reprise d'un enrichissement : echouer tot, et le dire                       #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("nom", sorted(ETUDES))
+def test_une_reprise_sans_etat_a_reprendre_est_annoncee(nom):
+    """`restart_enrich_only = true` demande un `restart_state.json` produit par
+    un run precedent. Ce fichier vit dans le `.ds` du modele, PAS dans le
+    depot : le cas se produit des qu'on reprend une etude sur un autre poste.
+
+    Le code levait alors un `FileNotFoundError` brut -- et APRES plusieurs
+    minutes de construction du modele CAD, qui prend 15 346 aciers sur le
+    Moulin Blanc. Le controle est desormais fait tot, avec le chemin manquant
+    et la ligne exacte a changer.
+    """
+    src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
+    assert "os.path.isfile(_RESTART_STATE_FILE)" in src, \
+        "%s : rien ne verifie que l'etat a reprendre existe" % nom
+    # le message doit nommer le fichier ET la sortie
+    i_garde = src.index("os.path.isfile(_RESTART_STATE_FILE)")
+    extrait = src[i_garde:i_garde + 900]
+    assert "restart_enrich_only = false" in extrait, \
+        "%s : le message ne dit pas comment repartir de zero" % nom
+    assert "_RESTART_STATE_FILE" in extrait
+
+
+def test_aucune_etude_ne_demande_de_reprise():
+    """Le script du Moulin Blanc portait `restart_enrich_only = true` : l'etat
+    de TRAVAIL de son auteur, qui reprenait un enrichissement depuis un
+    `restart_state.json`. Ce dump vit dans le `.ds` du modele et n'est pas
+    dans le depot -- l'etude etait donc injouable ailleurs que sur le poste ou
+    il existait.
+
+    Decision d'Agnes, 26/08/2026 : on REJOUE LE RUN COMPLET. Les deux etudes
+    partent donc du plan d'experiences. Le garde-fou ci-dessus reste utile
+    pour qui remettra `true` en connaissance de cause."""
+    for nom in sorted(ETUDES):
+        cfg = charger(os.path.join(REPO, "studies", nom + ".toml"))
+        assert cfg.restart_enrich_only is False, nom

@@ -330,16 +330,80 @@ def charger(chemin) -> Configuration:
 #: qui ne decident que de ce qui est TRACE. La mesure du 25/08/2026 a montre
 #: qu'une comparaison de deux runs ne vaut rien si leur configuration differe :
 #: le resume met donc ces champs-la en premier.
-CHAMPS_DECISIFS = (
-    "modele", "n0", "max_degree", "q", "do_analytic_grad", "reduc_PLS",
-    "do_EFF", "EFF_criteria", "epsilon_factor", "tol_EFF", "tol_BB", "tol_BS",
-    "n_NLopt_EFF", "n_max_EFF_points", "n_batch_EFF", "eps_taylor",
-    "n_max_FORM", "tol_FORM", "tol_all_modes", "do_multistart", "do_warmstart",
-    "start_from_LHS", "n_sp", "do_FORM_filter",
-    "do_IS", "n_IS", "cov_IS",
-    "global_size", "geo_min_approx",
-    "n_workers_DOE", "config_is_identical", "restart_enrich_only",
-)
+# ------------------------------------------------------------------------- #
+# A QUI APPARTIENT CHAQUE PARAMETRE                                          #
+# ------------------------------------------------------------------------- #
+#
+# La question posee par Agnes le 26/08/2026 : « quelles options sont liees a
+# un run utilisateur, et lesquelles sont internes au code ? » Elle ne l'etait
+# pas. La phase 4 avait rassemble cinquante-trois affectations dans un fichier
+# plat, sans dire laquelle definit l'ETUDE et laquelle decrit seulement la
+# SESSION qui la calcule.
+#
+# L'incident qui l'a revele : `restart_enrich_only = true` figurait dans
+# `studies/moulin_blanc.toml` parce que le script le portait. Or c'est un mode
+# de session -- « reprends l'enrichissement la ou tu l'avais laisse » -- fige
+# dans ce qui ressemble a une definition d'etude. Consequence : l'etude etait
+# injouable sur tout poste depourvu du `restart_state.json`.
+#
+#   ETUDE      definit le probleme. Change le RESULTAT. Se transmet avec
+#              l'etude, se cite dans une note de calcul.
+#   SESSION    decrit comment CE run s'execute ici : parallelisme, caches,
+#              reprise, archivage. Ne change pas le resultat, depend du poste
+#              et du moment. N'a rien a faire dans la definition d'une etude,
+#              et se surcharge par `--session`.
+#   SORTIE     ce qui est TRACE. Ne change jamais le resultat -- mais peut
+#              couter tres cher, cf. `COUTE_DES_APPELS_SOLVEUR`.
+#   SANS_EFFET aucun code vivant ne les lit, cf. la constante du meme nom.
+#
+CATEGORIES = {
+    # --- ETUDE : le probleme pose -------------------------------------------
+    "modelname": "etude", "storage": "etude", "solveur": "etude",
+    "modele": "etude", "n0": "etude", "max_degree": "etude", "q": "etude",
+    "do_EFF": "etude", "epsilon_factor": "etude", "tol_EFF": "etude",
+    "tol_BB": "etude", "tol_BS": "etude", "EFF_criteria": "etude",
+    "n_NLopt_EFF": "etude", "n_max_EFF_points": "etude",
+    "n_batch_EFF": "etude", "eps_taylor": "etude",
+    "n_max_FORM": "etude", "tol_FORM": "etude", "tol_all_modes": "etude",
+    "tol_warmstart": "etude", "do_multistart": "etude",
+    "do_warmstart": "etude", "start_from_LHS": "etude", "n_sp": "etude",
+    "do_FORM_filter": "etude",
+    "do_IS": "etude", "n_IS": "etude", "cov_IS": "etude",
+    "global_size": "etude", "geo_min_approx": "etude",
+    # decide quels points entrent au plan d'experiences : change le resultat
+    "exclure_points_non_converges": "etude",
+
+    # --- SESSION : comment ce run tourne ICI ---------------------------------
+    "n_workers_DOE": "session",        # depend du nombre de coeurs du poste
+    "config_is_identical": "session",  # autorise la relecture des caches
+    "restart_enrich_only": "session",  # reprend un enrichissement en cours
+    "save_history": "session",         # archivage, 8,8 Mo a 424 Mo par point
+    "dossier_sortie": "session",       # ou vont les figures
+
+    # --- SORTIE : ce qui est trace -------------------------------------------
+    "u1_min": "sortie", "u1_max": "sortie", "u2_min": "sortie",
+    "u2_max": "sortie", "n_grid": "sortie", "n_grid_hf": "sortie",
+    "print_HF": "sortie", "print_fullHF": "sortie", "print_DOE": "sortie",
+    "print_3D": "sortie", "print_ana": "sortie", "print_Pf": "sortie",
+    "print_grad_sp": "sortie", "print_EFF_progres": "sortie",
+    "print_gepck_calls": "sortie", "do_custom_hf": "sortie",
+    "hf_2d_grid_fixed": "sortie", "hf_3d_grid_fixed": "sortie",
+
+    # --- SANS EFFET ----------------------------------------------------------
+    "reduc_PLS": "sans_effet", "do_analytic_grad": "sans_effet",
+    "max_of_maxdegree": "sans_effet", "seuil_pce": "sans_effet",
+}
+
+#: Parametres de SORTIE qui declenchent des appels au solveur. Ils ne changent
+#: pas le resultat, mais sur le Moulin Blanc un appel coute 466 s : une grille
+#: 15x15 represente deux jours de calcul pour une figure.
+COUTE_DES_APPELS_SOLVEUR = {
+    "print_HF": "grille haute fidelite : n_grid_hf^2 appels",
+    "print_fullHF": "grille complete : n_grid_hf^n_var appels",
+    "n_grid_hf": "cote de la grille HF -- le cout est son carre",
+    "do_custom_hf": "grille de points fournie par fichier",
+    "print_Pf": "3 FORM+IS supplementaires a chaque iteration EFF",
+}
 
 
 def resume(cfg: "Configuration") -> str:
@@ -355,17 +419,42 @@ def resume(cfg: "Configuration") -> str:
     lignes = ["-" * 70,
               "CONFIGURATION : %s" % (getattr(cfg, "_origine", None) or "(defauts)"),
               "-" * 70,
-              "  etude    %s   (%s)" % (cfg.modelname, cfg.chemin_ds)]
-    tampon = []
-    for nom in CHAMPS_DECISIFS:
-        tampon.append("%s=%r" % (nom, getattr(cfg, nom)))
-    ligne = "   "
-    for morceau in tampon:
-        if len(ligne) + len(morceau) > 68:
-            lignes.append(ligne)
-            ligne = "   "
-        ligne += " " + morceau
-    lignes.append(ligne)
+              "  modele   %s" % cfg.chemin_ds]
+
+    def _bloc(titre, noms):
+        if not noms:
+            return
+        lignes.append("  %s" % titre)
+        ligne = "   "
+        for nom in noms:
+            morceau = "%s=%r" % (nom, getattr(cfg, nom))
+            if len(ligne) + len(morceau) > 68:
+                lignes.append(ligne)
+                ligne = "   "
+            ligne += " " + morceau
+        lignes.append(ligne)
+
+    # L'ETUDE d'abord : c'est elle qui definit le resultat, et c'est elle
+    # qu'on recopie dans une note de calcul.
+    _bloc("ETUDE -- definit le resultat",
+          [n for n in cfg.en_dict() if CATEGORIES.get(n) == "etude"
+           and n not in ("modelname", "storage")])
+    # La SESSION ensuite, separee : elle depend du poste et du moment, jamais
+    # du probleme pose. Les confondre est ce qui avait rendu l'etude du Moulin
+    # Blanc injouable ailleurs que sur le poste de son auteur.
+    _bloc("SESSION -- ce run, sur ce poste",
+          [n for n in cfg.en_dict() if CATEGORIES.get(n) == "session"])
+
+    # Ce qui ne change pas le resultat mais coute des appels solveur : a
+    # 466 s l'appel sur le Moulin Blanc, une grille 15x15 fait deux jours.
+    couteux = [n for n in COUTE_DES_APPELS_SOLVEUR
+               if getattr(cfg, n, None) not in (False, None)]
+    if couteux:
+        lignes.append("  SORTIES QUI COUTENT DES APPELS SOLVEUR")
+        for nom in couteux:
+            lignes.append("    %-16s %-8r %s"
+                          % (nom, getattr(cfg, nom), COUTE_DES_APPELS_SOLVEUR[nom]))
+
     if cfg.do_EFF != cfg.eff_actif or cfg.do_IS != cfg.is_actif:
         lignes.append("  CORRIGE  modele=%s : eff_actif=%s  is_actif=%s"
                       % (cfg.modele, cfg.eff_actif, cfg.is_actif))

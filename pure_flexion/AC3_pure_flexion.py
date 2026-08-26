@@ -2655,6 +2655,18 @@ if __name__ == '__main__':
 
     # --- Mode restart : charger le dump et preparer le re-enrichissement ---
     if restart_enrich_only:
+        # Sans ce controle, l'absence du dump donnait un FileNotFoundError brut
+        # APRES plusieurs minutes de construction du modele CAD. Le cas se
+        # produit des qu'on reprend une etude sur un autre poste : le dump vit
+        # dans le .ds du modele, il n'est pas dans le depot.
+        if not os.path.isfile(_RESTART_STATE_FILE):
+            raise SystemExit(
+                "restart_enrich_only = true, mais aucun etat a reprendre :\n"
+                "  %s\n\n"
+                "Ce fichier est produit par un run precedent, dans le .ds du\n"
+                "modele. Pour repartir de zero, mettre\n"
+                "  restart_enrich_only = false\n"
+                "dans le fichier d'etude." % _RESTART_STATE_FILE)
         _rs = json.load(open(_RESTART_STATE_FILE))
         xt = np.array(_rs['xt'], float)
         yt = np.array(_rs['yt'], float)

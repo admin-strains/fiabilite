@@ -6,7 +6,20 @@
 #
 # Section beton : b = h = 0,8 m, L = 5,0 m, 3 lits de 8 HA32, d = 0,691 m.
 # beta analytique de reference : 4,7726 (cf. tests/reference/limit_states.py).
+#
+# TROIS SORTES DE PARAMETRES, ET LA DIFFERENCE COMPTE
+#   ETUDE    definit le probleme, change le RESULTAT. Se transmet avec
+#            l'etude, se cite dans une note de calcul.
+#   SESSION  decrit comment CE run tourne ICI : parallelisme, caches,
+#            reprise, archivage. Ne change pas le resultat, depend du poste.
+#   SORTIE   ce qui est trace. Ne change jamais le resultat -- mais certains
+#            de ces parametres declenchent des centaines d'appels au solveur.
+# La classification vit dans `_config/schema.py:CATEGORIES` et un test exige
+# que chaque champ y figure.
 
+# =========================================================================== #
+# ETUDE                                                                       #
+# =========================================================================== #
 modelname = "test_pure_flexion"
 storage = 'C:\workspace\storage\admin\SF'
 
@@ -23,13 +36,20 @@ n_max_EFF_points = 30
 tol_FORM = 0.002          # cas de validation : on veut l'etat limite serre
 do_FORM_filter = false
 
-# --- execution
+# =========================================================================== #
+# SESSION -- ce run, sur ce poste. Rien ici ne change le resultat.            #
+# =========================================================================== #
 n_workers_DOE = 3
 restart_enrich_only = false
 save_history = true       # petit modele : l'historique SOCP reste raisonnable
 
-# --- graphiques
-n_grid_hf = 7             # grille 7x7 = 49 appels SOCP, suffisant en 2 variables
+# =========================================================================== #
+# SORTIE -- ce qui est trace                                                  #
+# =========================================================================== #
+# ATTENTION : `print_HF` declenche n_grid_hf^2 appels au solveur, soit 49 ici.
+# A une dizaine de secondes l'appel sur ce modele, c'est supportable ; sur le
+# Moulin Blanc, la meme ligne coute des heures.
+n_grid_hf = 7             # grille 7x7 = 49 appels solveur, suffisant en 2 variables
 print_fullHF = true
 do_custom_hf = false
 print_ana = false         # courbe analytique superposee (propre a cette etude)
