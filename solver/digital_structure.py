@@ -45,18 +45,36 @@ from STRAINS.rupt.core import CetSOLV
 from interface import Evaluation
 
 
-def options_maillage(global_size, geo_min_approx, model_handle):
+def options_maillage(global_size, geo_min_approx, model_handle, max_size=None):
     """Options passees a `CetMESH.ANISO_MESH`. Recopiees de `run_one_SOL`.
 
-    `global_size` et `geo_min_approx` viennent de la configuration de l'etude.
-    Le reste est fige : ce sont les reglages sous lesquels toutes les etudes
-    ont tourne, et rien ne les a jamais fait varier d'une etude a l'autre.
+    `global_size`, `geo_min_approx` et `max_size` viennent de la configuration
+    de l'etude. Le reste est fige : ce sont les reglages sous lesquels toutes
+    les etudes ont tourne, et rien ne les a jamais fait varier.
+
+    POURQUOI `max_size` EST DEVENU UN PARAMETRE -- mesure du 26/08/2026
+    ------------------------------------------------------------------
+    Il valait `0.05` EN DUR, et plafonnait donc la taille des elements quelle
+    que soit la valeur de `global_physical_size`. Consequence mesuree sur le
+    Moulin Blanc, en cherchant a alleger le maillage pour un poste local :
+
+        global_size   geo_min   tetraedres   duree
+        0,05          4         13 804       454 s
+        0,15          20        13 418       458 s      <- aucun gain
+
+    Passer `global_size` de 0,05 a 0,15 ne retirait que 2,8 % des tetraedres
+    et ne faisait rien gagner, parce que `max_size` bornait tout a 0,05. Le
+    levier n'etait pas expose.
+
+    Par defaut `max_size` suit `global_size` : c'est le comportement attendu
+    d'un « maillage plus grossier », et il reproduit l'ancien quand
+    `global_size` vaut 0,05 -- sa valeur dans les deux etudes.
     """
     return {
         "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
         "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
         "global_physical_size": global_size,
-        "max_size": 0.05,
+        "max_size": global_size if max_size is None else max_size,
         "min_size": "-1",
         "gradation": 1.5,
         "volume_gradation": 1.5,
@@ -231,7 +249,8 @@ class SolveurDS:
         t0 = time.perf_counter()
         CetMESH.ANISO_MESH(self.analyse, self.iteration, path,
                            **options_maillage(self.global_size, self.geo_min_approx,
-                                              model.GETHANDLEPTR()))
+                                              model.GETHANDLEPTR(),
+                                              max_size=self.max_size))
         t_mesh = time.perf_counter() - t0
 
         regions = self.regions if sensibilite else None

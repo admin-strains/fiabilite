@@ -426,6 +426,7 @@ if __name__ == '__main__':
                 regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
                 global_size=global_size,
                 geo_min_approx=geo_min_approx,
+                max_size=CFG.max_size,
                 archiver=save_history,
             )
         return _solveurs[nom]

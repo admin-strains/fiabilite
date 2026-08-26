@@ -93,6 +93,23 @@ def _est_expression(v):
 # --------------------------------------------------------------------------- #
 # 1. Les options rassemblees sont celles des scripts AC                       #
 # --------------------------------------------------------------------------- #
+#: (famille, cle) -> raison. Options DELIBEREMENT rendues configurables, alors
+#: que les scripts les portaient en dur. Chaque entree doit dire pourquoi : un
+#: reglage de calcul qui change sans raison ecrite est un resultat qui change
+#: sans qu'on le sache.
+EXPOSEES_VOLONTAIREMENT = {
+    ("maillage", "max_size"):
+        "Valait 0.05 en dur et PLAFONNAIT la taille des elements, quelle que "
+        "soit la valeur de `global_physical_size`. Mesure du 26/08/2026 sur le "
+        "Moulin Blanc : passer global_size de 0,05 a 0,15 ne retirait que "
+        "2,8 % des tetraedres (13 804 -> 13 418) et ne faisait rien gagner sur "
+        "la duree (454 s -> 458 s). Le levier n'etait pas expose. Par defaut "
+        "`max_size` suit `global_size`, ce qui reproduit l'ancien "
+        "comportement quand global_size vaut 0,05 -- sa valeur dans les deux "
+        "etudes.",
+}
+
+
 @pytest.mark.parametrize("famille,fonction", [
     ("maillage", "options_maillage"),
     ("solveur", "options_solveur"),
@@ -104,12 +121,19 @@ def test_aucune_valeur_de_calcul_n_a_change(famille, fonction):
     pas etre comparee texto : sa forme a change en changeant de portee. Le
     test exige alors seulement qu'elle soit restee une expression -- et le
     test suivant verifie qu'aucune n'a ete perdue en route.
+
+    Une option deliberement rendue configurable est declaree dans
+    `EXPOSEES_VOLONTAIREMENT`, avec sa raison. Sans cette liste, la seule
+    facon de faire passer le test serait de regenerer le golden -- c'est-a-dire
+    d'effacer la trace de ce que le code faisait avant.
     """
     attendu = _golden()["copies"][REFERENCE][famille]
     obtenu = _dict_rendu_par(fonction)
 
     ecarts = []
     for cle, valeur in sorted(attendu.items()):
+        if (famille, cle) in EXPOSEES_VOLONTAIREMENT:
+            continue
         if cle not in obtenu:
             ecarts.append("%s : ABSENTE du module (valait %r)" % (cle, valeur))
             continue
@@ -119,7 +143,38 @@ def test_aucune_valeur_de_calcul_n_a_change(famille, fonction):
                               % (cle, valeur["_expression"], obtenu[cle]))
         elif obtenu[cle] != valeur:
             ecarts.append("%s : script=%r  module=%r" % (cle, valeur, obtenu[cle]))
-    assert not ecarts, "%s :\n  " % famille + "\n  ".join(ecarts)
+    assert not ecarts, (
+        "%s :\n  " % famille + "\n  ".join(ecarts)
+        + "\n\nSi le changement est VOULU, l'inscrire dans "
+          "EXPOSEES_VOLONTAIREMENT avec sa raison et la mesure qui la fonde.")
+
+
+@pytest.mark.parametrize("famille,fonction", [
+    ("maillage", "options_maillage"),
+    ("solveur", "options_solveur"),
+])
+def test_les_options_exposees_le_sont_vraiment(famille, fonction):
+    """Une entree de `EXPOSEES_VOLONTAIREMENT` qui ne correspond plus a un
+    ecart est une exemption qui traine : elle masquerait le jour ou l'option
+    changerait pour une AUTRE raison."""
+    attendu = _golden()["copies"][REFERENCE][famille]
+    obtenu = _dict_rendu_par(fonction)
+    inutiles = []
+    for (fam, cle) in EXPOSEES_VOLONTAIREMENT:
+        if fam != famille or cle not in attendu or cle not in obtenu:
+            continue
+        if attendu[cle] == obtenu[cle]:
+            inutiles.append(cle)
+    assert not inutiles, "%s : exemption(s) devenue(s) inutile(s) : %s" % (famille, inutiles)
+
+
+def test_chaque_option_exposee_porte_sa_mesure():
+    """La raison doit contenir des chiffres : « ca ne servait a rien » n'est
+    pas une justification pour changer un reglage de calcul."""
+    import re as _re                                            # noqa: PLC0415
+    maigres = [cle for cle, raison in EXPOSEES_VOLONTAIREMENT.items()
+               if len(raison) < 100 or not _re.search(r"\d", raison)]
+    assert not maigres, "raison sans mesure pour %s" % maigres
 
 
 @pytest.mark.parametrize("famille,fonction", [

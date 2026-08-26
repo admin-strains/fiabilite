@@ -141,6 +141,19 @@ class Configuration:
     global_size: float = 0.05        #: global_physical_size
     geo_min_approx: int = 4          #: geometric_approximation_min
 
+    #: `max_size` du mailleur. None = suit `global_size`.
+    #:
+    #: Il valait 0.05 EN DUR dans les options recopiees de `run_one_SOL`, et
+    #: plafonnait donc la taille des elements quelle que soit la valeur de
+    #: `global_size`. Mesure du 26/08/2026 sur le Moulin Blanc : passer
+    #: `global_size` de 0,05 a 0,15 ne retirait que 2,8 % des tetraedres
+    #: (13 804 -> 13 418) et ne faisait RIEN gagner sur la duree.
+    #:
+    #: Le regler explicitement permet de dissocier la taille cible de la
+    #: borne haute -- utile quand on veut un maillage grossier partout sauf
+    #: la ou la geometrie l'impose.
+    max_size: Optional[float] = None
+
     # ------------------------------------------------------------ execution
     n_workers_DOE: int = 6           #: appels SOCP du DOE en parallele
     config_is_identical: bool = True #: autorise la relecture des caches
@@ -370,6 +383,7 @@ CATEGORIES = {
     "do_FORM_filter": "etude",
     "do_IS": "etude", "n_IS": "etude", "cov_IS": "etude",
     "global_size": "etude", "geo_min_approx": "etude",
+    "max_size": "etude",
     # decide quels points entrent au plan d'experiences : change le resultat
     "exclure_points_non_converges": "etude",
 
