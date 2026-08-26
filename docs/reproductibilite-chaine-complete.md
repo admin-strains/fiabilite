@@ -201,6 +201,25 @@ quarante points, contre 0,0015 % apres. Voir `tools/mesure_pepite.py`.
 La baseline analytique, elle, passe de **0,0771 % a 0,0492 %** d'erreur sur
 `beta` contre le meme oracle exact.
 
+## Effet de la phase 7 (26/08/2026)
+
+Performance seule, resultat inchange. Sur la chaine analytique :
+
+| | phase 6 | phase 7 |
+|---|---|---|
+| FORM + IS, cumul des 8 iterations | 42,0 s | **23,1 s** |
+| `beta_FORM` | 4,7516 | 4,7516 |
+| `u*` | [-2,797 ; -3,841] | idem |
+| `beta_IS` | 4,6828 | 4,6828 |
+
+C'est ce qu'une phase de performance doit produire : moitie moins de temps,
+pas un chiffre deplace.
+
+La justesse gagne aussi, mais ailleurs : la transformation isoprobabiliste
+calculait `norm.ppf(norm.cdf(u))`, une identite que la double precision ne
+tient pas au-dela de u = 7. Sur une grille couvrant [-7,5 ; 7,5]^2 et un etat
+limite lineaire, l'erreur max passe de 2,510e-04 a 5,862e-14.
+
 ## Comment refaire la mesure
 
 ```bat

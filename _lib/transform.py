@@ -46,11 +46,47 @@ def _uq_IndepCopula(M):
     }
 
 
+def _memes_marginales(a, b):
+    """Deux marginales decrivent-elles la MEME loi ?
+
+    Comparaison stricte du type et des parametres. Une egalite approchee
+    n'aurait pas de sens ici : on cherche le cas ou la transformation est
+    l'identite exacte, pas le cas ou elle en est proche.
+    """
+    if a.get('Type', '').lower() != b.get('Type', '').lower():
+        return False
+    if ('Bounds' in a) or ('Bounds' in b):
+        return False          # bornes tronquees : la loi n'est plus la meme
+    pa = np.atleast_1d(np.asarray(a.get('Parameters', []), dtype=float))
+    pb = np.atleast_1d(np.asarray(b.get('Parameters', []), dtype=float))
+    return pa.shape == pb.shape and bool(np.array_equal(pa, pb))
+
+
 def _uq_IsopTransform(X, X_Marginals, Y_Marginals):
     """
     Transforme X marginale par marginale (cas copule indépendante) :
     X → Uniform[0,1] via CDF source → Y via CDF inverse cible.
     Supporte : Uniform, Gaussian/Normal, Lognormal, Gumbel, Exponential.
+
+    RACCOURCI SUR LES MARGINALES IDENTIQUES -- phase 7, 26/08/2026.
+    Quand la loi source et la loi cible sont la meme, le passage par la CDF
+    puis la CDF inverse est l'identite en theorie, et couteux et FAUX en
+    pratique. C'est le cas dominant de cette chaine : tout s'y passe en espace
+    standard, marginales Gaussiennes (0, 1) des deux cotes.
+
+    Ce n'est pas qu'une affaire de vitesse. `norm.cdf(u)` sature a 1.0 en
+    double precision des que u grandit, et `norm.ppf` ne peut plus revenir :
+
+        u = 5   erreur 3,0e-11
+        u = 7   erreur 5,8e-06
+        u = 8   erreur 8,4e-03
+        u > 8,3 +inf
+
+    Or les bornes de recherche EFF de ces etudes valent exactement
+    [-7,5 ; +7,5] : le metamodele perdait donc des chiffres significatifs au
+    bord meme du domaine explore, et la grille de trace frolait la falaise.
+    Cote negatif il n'y a rien de tel -- `cdf` y reste representable -- d'ou
+    une erreur ASYMETRIQUE, la pire sorte a diagnostiquer.
     """
     N, M = X.shape
     Y = np.empty_like(X)
@@ -58,6 +94,10 @@ def _uq_IsopTransform(X, X_Marginals, Y_Marginals):
     for i in range(M):
         mx = X_Marginals[i]
         my = Y_Marginals[i]
+
+        if _memes_marginales(mx, my):
+            Y[:, i] = X[:, i]
+            continue
 
         # CDF de la source → valeurs uniformes [0,1]
         u = _marginal_cdf(X[:, i], mx)

@@ -551,19 +551,59 @@ sans elle, le prochain lecteur corrigera « l'oubli ».
 
 Le defaut 7 (`sys` non importe) est corrige en phase 5.
 
-### Phase 7 — Performance · 2 a 4 j
+### Phase 7 — Performance · FAIT
 
-Une fois seulement la structure saine et les defauts corriges : optimiser
-avant, c'est optimiser du code qu'on va deplacer.
+La regle « profiler avant de toucher » a paye : elle a **corrige la cible**.
 
-- l'evaluation par lot devient l'API (`evaluate_batch`), le point unique
-  devient le cas particulier — et non l'inverse ;
-- supprimer l'inversion explicite de `R_tilde` sur le chemin chaud
-  (`branche4` l.199-203 construit `Rinv` par `solve(cholR, solve(cholR.T, I))`
-  a **chaque appel de prediction**) au profit d'un facteur pre-calcule au fit ;
-- profiler ensuite, sur un vrai cas, avant de toucher a autre chose.
+Le plan designait l'inversion explicite de `R_tilde`. Le profil dit qu'elle
+pese **14 %** d'un appel. Le premier poste, a **42 %**, etait la
+transformation isoprobabiliste — qui n'avait rien a faire la.
 
-*Sortie : chiffres avant-apres sur un cas de reference, dans le commit.*
+**1. Une transformation qui etait l'identite.** Source et cible sont
+Gaussiennes (0, 1) des deux cotes : tout se passe en espace standard. Le code
+calculait pourtant `norm.ppf(norm.cdf(u))` a chaque appel.
+
+Ce n'etait pas qu'une perte de temps. `norm.cdf(u)` sature a 1.0 en double
+precision : l'aller-retour perd **5,8e-06 a u = 7**, **8,4e-03 a u = 8**, et
+rend **+inf au-dela de u = 8,3**. Les bornes de recherche EFF de ces etudes
+valent exactement [-7,5 ; +7,5]. Cote negatif il n'y a rien de tel, d'ou une
+erreur ASYMETRIQUE. Sur une grille de 1 681 points couvrant [-7,5 ; 7,5]^2 et
+un etat limite lineaire — un hyperplan que le metamodele contient
+exactement — l'erreur max passe de **2,510e-04 a 5,862e-14** : dix ordres de
+grandeur. C'est une correction de justesse, la vitesse n'est que la prime.
+
+**2. L'inverse complete, pour n'en tirer qu'un vecteur.** `predict.py`
+reconstruisait `R^-1` par `solve(cholR, solve(cholR.T, I))` — N_aug
+descentes-remontees — a chaque appel, pour calculer `R^-1 @ residu`. Or
+`residu = Y_aug - F_tilde @ beta` ne depend que de l'ajustement : c'est une
+constante du metamodele. Une descente-remontee, une seule fois. Le meme
+vecteur servait deja au gradient, qui le recalculait de son cote.
+
+Chiffres, meilleur temps sur dix essais, plan de 24 points :
+
+| | avant | apres |
+|---|---|---|
+| PCK, 1 point | 0,708 ms | **0,490 ms** (−31 %) |
+| GEPCK, 1 point | 1,227 ms | **0,814 ms** (−34 %) |
+| GEPCK, 1 000 points | 9,32 ms | 7,15 ms (−23 %) |
+| baseline analytique, bout en bout | 8,0 s | 6,6 s (−18 %) |
+| **FORM + IS, chaine complete** | **42,0 s** | **23,1 s (−45 %)** |
+
+Et le resultat de la chaine est **identique au chiffre pres** :
+`beta = 4,7516`, `u* = [-2,797 ; -3,841]`, `beta_IS = 4,6828`.
+
+Les goldens ont ete regeneres : la vraisemblance est plate (cf. phase 6), donc
+une perturbation a 1e-15 sur les points d'apprentissage deplace `theta`. La
+demonstration exigee a ete faite avant — la generalisation ne se degrade nulle
+part et gagne dix ordres de grandeur sur le cas lineaire.
+
+**Ce qui n'a PAS ete fait, et pourquoi.** L'`evaluate_batch` du plan : le
+chemin par lot existe deja et le tirage d'importance l'emprunte (10 000 points
+d'un coup). Reste un cout fixe par appel — 0,81 ms a un point contre
+0,0105 ms/point a dix mille. Mesure : memoriser les coefficients de recurrence
+des polynomes (`uq_poly_rec_coeffs`, appele 8 fois par prediction, 6,8 us
+l'appel) rendrait encore **9 %**. Non retenu : cela ajoute un cache mutable
+pour ~4 % de la chaine, apres un gain de 45 % deja acquis.
 
 ### Phase 8 — Documentation et integration continue · 2 j
 

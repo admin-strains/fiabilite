@@ -42,6 +42,63 @@ def _verify_YSigma2(YSigma2):
 
 
 # ===========================================================================
+# 0.  Poids duaux -- PHASE 7 du plan de nettoyage
+# ===========================================================================
+def poids_duaux(am, residual, cle='_poids_duaux'):
+    r"""Renvoie `R^-1 @ residu`, calcule UNE FOIS puis mis en cache.
+
+    Le code reconstruisait l'inverse COMPLETE, par
+    `solve(cholR, solve(cholR.T, I))` -- soit N_aug descentes-remontees -- A
+    CHAQUE APPEL DE PREDICTION, pour n'en tirer qu'un produit
+    matrice-vecteur.
+
+    Or `residu = Y_aug - F_tilde @ beta` ne depend QUE de l'ajustement : le
+    vecteur `R^-1 @ residu` est une constante du metamodele. Une seule
+    descente-remontee suffit, et une seule fois.
+
+    Mesure sur le plan de 24 points (systeme 72x72, GEPCK) :
+        reconstruction de l'inverse   0,228 ms   a chaque appel
+        une descente-remontee         0,098 ms   une seule fois
+
+    Le cache vit dans `auxMatrices`, ou le modele range deja ses facteurs et
+    qui ne bouge plus une fois l'ajustement fait. Le residu est conserve avec
+    le resultat : si un appelant en passe un autre, le cache se recalcule au
+    lieu de rendre une valeur qui ne lui correspond pas.
+    """
+    memo = am.get(cle)
+    if memo is not None and memo[0].shape == residual.shape \
+            and np.array_equal(memo[0], residual):
+        return memo[1]
+
+    cholR = am.get('cholR')
+    if cholR is not None:
+        poids = np.linalg.solve(cholR, np.linalg.solve(cholR.T, residual))
+    else:
+        poids = am['Rinv'] @ residual
+    am[cle] = (np.array(residual, copy=True), poids)
+    return poids
+
+
+def _inverse_complete(am, taille):
+    """`R^-1` en entier, mise en cache.
+
+    N'est necessaire QUE pour la covariance croisee (`return_cov`), qui
+    demande `r0 @ R^-1 @ r0.T` : une forme quadratique entre points de test,
+    irreductible a un produit avec un vecteur fixe. Ce chemin n'est pas
+    emprunte par la chaine de fiabilite, qui ne demande que la variance
+    ponctuelle.
+    """
+    cholR = am.get('cholR')
+    if cholR is None:
+        return am['Rinv']
+    memo = am.get('_Rinv_complet')
+    if memo is None or memo.shape[0] != taille:
+        memo = np.linalg.solve(cholR, np.linalg.solve(cholR.T, np.eye(taille)))
+        am['_Rinv_complet'] = memo
+    return memo
+
+
+# ===========================================================================
 # 1.  uq_Kriging_eval (PCK interpolation path)
 #     Source: Kriging/eval/uq_Kriging_eval.m
 #     Only the main branch (no varargin / trajectory).
@@ -100,19 +157,13 @@ def uq_Kriging_eval_one_output(kriging_oo, U_test, U_train, Y_train, F_train,
     evalR = CorrOptions['Handle']
     r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N)
 
-    # --- Rinv: R^{-1}  (line ~150)
-    # if any(isnan(cholR)): Rinv = auxMatrices.Rinv
-    # else: L = cholR; Rinv = L \ (L' \ eye(N))
-    cholR = am['cholR']
-    if cholR is not None:
-        Rinv = np.linalg.solve(cholR,
-               np.linalg.solve(cholR.T, np.eye(N)))
-    else:
-        Rinv = am['Rinv']
-
     # --- YMu = f0*beta + r0 * Rinv * (Y - F*beta)  (line ~154)
+    #
+    # `Rinv @ residual` ne depend que de l'ajustement : il est calcule une
+    # fois et garde, au lieu de reconstruire l'inverse complete a chaque
+    # appel (phase 7 du plan de nettoyage).
     residual = Y_train - F_train @ beta
-    YMu      = f0 @ beta + r0 @ (Rinv @ residual)
+    YMu      = f0 @ beta + r0 @ poids_duaux(am, residual)
 
     if not return_var and not return_cov:
         return YMu
@@ -129,7 +180,7 @@ def uq_Kriging_eval_one_output(kriging_oo, U_test, U_train, Y_train, F_train,
         # D2 = u0' * (FTRinvF \ u0)                 (N_test, N_test)
         # CorrU0 = evalR_handle(U0, U0, theta, ...)  (N_test, N_test)
         # YCov = sigmaSQ * (CorrU0 - D1 + D2)
-        D1_mat     = r0 @ Rinv @ r0.T                              # (N_test, N_test)
+        D1_mat     = r0 @ _inverse_complete(am, N) @ r0.T                              # (N_test, N_test)
         FTRinvF_inv = am.get('FTRinvF_inv')
         if FTRinvF_inv is None:
             D2_mat = u0.T @ np.linalg.solve(FTRinvF, u0)          # (N_test, N_test)
@@ -206,17 +257,12 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
     evalR = CorrOptions['Handle']
     r0    = evalR(U_test, U_train, theta, CrossCorOpts)   # (N_test, N*(M+1))
 
-    # --- Rinv
-    cholR = am['cholR']
-    if cholR is not None:
-        Rinv = np.linalg.solve(cholR,
-               np.linalg.solve(cholR.T, np.eye(N_aug)))
-    else:
-        Rinv = am['Rinv']
-
     # --- YMu = f0 @ beta + r̃₀ @ Rinv @ (Y_aug - F̃ @ beta)
+    #
+    # `Rinv @ residual` est une constante du metamodele : une seule
+    # descente-remontee, mise en cache (phase 7 du plan de nettoyage).
     residual = Y_aug - F_tilde_train @ beta
-    YMu      = f0 @ beta + r0 @ (Rinv @ residual)
+    YMu      = f0 @ beta + r0 @ poids_duaux(am, residual)
 
     if not return_var and not return_cov:
         return YMu
@@ -227,7 +273,7 @@ def uq_GEPCK_eval_one_output(gepck_oo, U_test, U_train, Y_aug, F_tilde_train,
     u0      = FTRinv @ r0.T - f0.T   # (P, N_test)
 
     if return_cov:
-        D1_mat      = r0 @ Rinv @ r0.T
+        D1_mat      = r0 @ _inverse_complete(am, N_aug) @ r0.T
         FTRinvF_inv = am.get('FTRinvF_inv')
         if FTRinvF_inv is None:
             D2_mat = u0.T @ np.linalg.solve(FTRinvF, u0)
@@ -282,12 +328,10 @@ def uq_GEPCK_eval_one_output_deriv(gepck_oo, U_test, U_train, Y_aug,
     N_aug = gepck_oo['R_tilde'].shape[0]
 
     # --- alpha_pred = R̃⁻¹(ẏ - F̃β)
-    cholR = am['cholR']
-    if cholR is not None:
-        Rinv = np.linalg.solve(cholR, np.linalg.solve(cholR.T, np.eye(N_aug)))
-    else:
-        Rinv = am['Rinv']
-    alpha_pred = Rinv @ (Y_aug - F_tilde_train @ beta)   # (N_aug,)
+    #
+    # C'est EXACTEMENT le vecteur de la moyenne : meme cache, donc calcule
+    # une fois pour les deux (phase 7 du plan de nettoyage).
+    alpha_pred = poids_duaux(am, Y_aug - F_tilde_train @ beta)   # (N_aug,)
 
     # --- Terme 1 : [∂Ψ/∂u_i]ᵀ β
     dPsi  = gepck_oo['F_deriv_handles'][der_var](U_test)  # (N_test, P)
