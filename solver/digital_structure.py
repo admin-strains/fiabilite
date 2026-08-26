@@ -52,23 +52,47 @@ def options_maillage(global_size, geo_min_approx, model_handle, max_size=None):
     de l'etude. Le reste est fige : ce sont les reglages sous lesquels toutes
     les etudes ont tourne, et rien ne les a jamais fait varier.
 
-    POURQUOI `max_size` EST DEVENU UN PARAMETRE -- mesure du 26/08/2026
-    ------------------------------------------------------------------
-    Il valait `0.05` EN DUR, et plafonnait donc la taille des elements quelle
-    que soit la valeur de `global_physical_size`. Consequence mesuree sur le
-    Moulin Blanc, en cherchant a alleger le maillage pour un poste local :
+    CES TAILLES SONT RELATIVES, PAS EN METRES -- lecture du code, 26/08/2026
+    -----------------------------------------------------------------------
+    `physical_size_type` n'est pas dans ce dictionnaire. Le defaut du mailleur
+    n'est PAS « ignorer la taille » : c'est `CmnMESH_PhysicalSizeTypeRelative`
+    (`CetMESH_SessionAbstract.cpp:140`). En mode relatif, `RunCadSurf` suffixe
+    la valeur d'un « r » avant de la passer a MeshGems (ligne 666) : c'est une
+    FRACTION DE LA DIAGONALE de la boite englobante.
 
-        global_size   geo_min   tetraedres   duree
-        0,05          4         13 804       454 s
-        0,15          20        13 418       458 s      <- aucun gain
+    Sur le Moulin Blanc, la boite mesure 96,2 x 14,1 x 12,7 m, soit une
+    diagonale de 98,1 m. Donc :
 
-    Passer `global_size` de 0,05 a 0,15 ne retirait que 2,8 % des tetraedres
-    et ne faisait rien gagner, parce que `max_size` bornait tout a 0,05. Le
-    levier n'etait pas expose.
+        global_physical_size = 0,05  ->  4,90 m d'element
+        max_size             = 0,05  ->  4,90 m
+        min_size             = "-1"  ->  jamais transmis (garde `> 0`)
 
-    Par defaut `max_size` suit `global_size` : c'est le comportement attendu
-    d'un « maillage plus grossier », et il reproduit l'ancien quand
-    `global_size` vaut 0,05 -- sa valeur dans les deux etudes.
+    Des elements de 4,90 m sur un tablier de 14 m de haut : la consigne est
+    tres au-dessus de ce que la geometrie permet, elle ne mord sur rien. Le
+    maillage est a son PLANCHER GEOMETRIQUE -- 13 804 tetraedres imposes par
+    la topologie des faces et la carte de courbure, pas par la taille demandee.
+
+    C'est ce qu'a montre la mesure du 26/08/2026 :
+
+        global_size   geo_min   equivalent   tetraedres   duree
+        0,05          4          4,90 m      13 804       454 s
+        0,15          20        14,71 m      13 418       458 s
+        0,30          35        29,42 m      13 092       455 s
+
+    Aucun gain de temps, et les 5 % de tetraedres en moins viennent de
+    `geo_min_approx` (4 -> 35), pas de la taille : les trois consignes sont
+    inertes. On ne peut donc PAS faire plus grossier ici.
+
+    RECTIFICATION : le commentaire precedent attribuait ce plateau a un
+    `max_size` fige a 0,05 qui aurait plafonne les elements a 5 cm. C'etait
+    faux -- il valait 4,90 m et etait aussi inerte que le reste. Seule
+    l'observation tenait.
+
+    `max_size` reste un parametre d'etude (il suit `global_size` par defaut,
+    ce qui reproduit l'ancien comportement), mais ce n'est pas le levier.
+    Pour piloter reellement la taille sur un grand modele, il faudrait passer
+    `physical_size_type = "absolute"` et donner des metres -- changement de
+    maillage, donc de resultat : a decider, pas a subir.
     """
     return {
         "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
@@ -86,8 +110,16 @@ def options_maillage(global_size, geo_min_approx, model_handle, max_size=None):
         "geometric_approximation_on_face": "true",
         "use_surface_proximity": "false",
         "surface_proximity_ratio": 0,
-        "approach": "kinematic",
         "write_debug_files": "true",
+        # Les cinq clefs suivantes ne sont lues que par
+        # `CetMESH_SessionAnisoRemesh::SetOptions`, donc a partir de
+        # l'iteration 1. A l'iteration 0 -- la seule que cette chaine
+        # utilise -- c'est `CetMESH_SessionAnisoMesh` qui tourne, et il ne
+        # surcharge pas `SetOptions` : ces valeurs tombent dans le vide,
+        # sans avertissement. Gardees telles quelles pour rester fidele aux
+        # scripts d'origine ; a retirer le jour ou on passe a un remaillage
+        # adaptatif, ou elles reprendront leur sens.
+        "approach": "kinematic",
         "is_iso": "true",
         "coeff_on_error": 0.01,
         "remesh_type": 1,

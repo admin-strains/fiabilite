@@ -66,8 +66,9 @@ calcul.
 | `modele` | PCK, GEPCK, KRG, GEK, PCKRG, HF | GEPCK ajuste un systeme (m+1)x plus grand |
 | `n0` | taille du plan initial | **n0 appels solveur** |
 | `max_degree`, `q` | base PCE candidate, tri hyperbolique | ajustement seul |
-| `global_size` | `global_physical_size` du maillage | gouverne le nombre de tetraedres, donc le cout de CHAQUE appel |
-| `geo_min_approx` | `geometric_approximation_min` | idem |
+| `global_size` | `global_physical_size` du maillage | **taille RELATIVE**, cf. ci-dessous |
+| `geo_min_approx` | `geometric_approximation_min` | secteur angulaire en degres ; sur le Moulin Blanc c'est le seul des deux qui morde |
+| `max_size` | borne haute du mailleur | relative elle aussi ; suit `global_size` par defaut |
 | `do_EFF` | enrichissement actif | conditionne toute la boucle |
 | `n_max_EFF_points` | plafond de points ajoutes | **jusqu'a autant d'appels solveur, en sequentiel** |
 | `EFF_criteria`, `tol_BB`, `tol_BS`, `tol_EFF` | critere d'arret de l'enrichissement | decide n_EFF reel |
@@ -82,6 +83,45 @@ calcul.
 | `do_warmstart`, `tol_warmstart` | reprise FORM si non convergence | — |
 | `do_FORM_filter` | rejeter les u* hors bornes avant DBSCAN | reduit n_modes |
 | `exclure_points_non_converges` | rejeter les points que le solveur declare douteux | change ce qui entre au plan d'experiences ; **false par defaut**, cf. ci-dessous |
+
+### Les tailles de maille sont RELATIVES, pas en metres
+
+Le piege coute cher, alors il est ecrit ici en toutes lettres.
+
+`solver/digital_structure.py` ne passe pas `physical_size_type`. Le defaut du
+mailleur n'est pas « ignorer la taille » : c'est
+`CmnMESH_PhysicalSizeTypeRelative` (`back/rupt/02_CetMESH/CetMESH_SessionAbstract.cpp:140`).
+En mode relatif, `RunCadSurf` suffixe la valeur d'un « r » avant de la donner a
+MeshGems (ligne 666) : **une fraction de la diagonale de la boite englobante**.
+
+L'echelle du modele decide donc de tout :
+
+| modele | diagonale | `global_size = 0,05` vaut |
+|---|---|---|
+| flexion pure | quelques metres | quelques centimetres -- le parametre mord |
+| Moulin Blanc | **98,1 m** (96,2 x 14,1 x 12,7) | **4,90 m** -- inerte |
+
+Sur le Moulin Blanc, les trois consignes de taille sont hors d'echelle
+(`min_size = "-1"` n'est meme jamais transmis, la garde `> 0` l'ecarte). Le
+maillage tombe a son **plancher geometrique** : 13 804 tetraedres imposes par
+la topologie des faces et la carte de courbure. Mesure du 26/08/2026 :
+
+| `global_size` | `geo_min` | equivalent | tetraedres | duree |
+|---|---|---|---|---|
+| 0,05 | 4 | 4,90 m | 13 804 | 454 s |
+| 0,15 | 20 | 14,71 m | 13 418 | 458 s |
+| 0,30 | 35 | 29,42 m | 13 092 | 455 s |
+
+Aucun gain de temps, et les 5 % de tetraedres en moins viennent de
+`geo_min_approx`, pas de la taille. **On ne peut pas faire plus grossier.**
+Pour piloter reellement la taille sur un grand modele il faudrait passer
+`physical_size_type = "absolute"` et donner des metres : cela change le
+maillage, donc le resultat -- c'est une decision, pas un reglage.
+
+Cinq autres clefs du dictionnaire (`approach`, `is_iso`, `coeff_on_error`,
+`remesh_type`, `old_size_factor`) ne sont lues qu'a partir de l'iteration 1,
+par `CetMESH_SessionAnisoRemesh`. La chaine tourne a l'iteration 0 : elles
+tombent dans le vide, sans avertissement.
 
 ---
 
