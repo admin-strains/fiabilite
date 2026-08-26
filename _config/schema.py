@@ -117,6 +117,26 @@ class Configuration:
     #: "analytique" = la meme chaine sur un etat limite ferme, en secondes.
     solveur: str = "digital_structure"
 
+    #: Rejeter les points que le solveur declare non converges, au lieu de les
+    #: laisser entrer dans le plan d'experiences.
+    #:
+    #: FAUX PAR DEFAUT, ET C'EST DELIBERE. Decision d'Agnes, 26/08/2026 : les
+    #: criteres de convergence rendus par Digital Structure ne sont pas encore
+    #: fiables -- un point sain peut etre marque non converge, et sans doute
+    #: l'inverse. Les exclure aujourd'hui reviendrait a jeter des evaluations
+    #: correctes, chacune coutant un SOCP.
+    #:
+    #: Ce que fait la chaine en attendant : elle SIGNALE chaque point suspect
+    #: dans le journal, avec son statut et son alpha, et le garde. Rien n'est
+    #: donc perdu et rien n'est masque -- ce qui n'etait pas le cas avant la
+    #: phase 5, ou `Primal_bound` etait lu sans que `converged` ni
+    #: `solver_status` n'apparaissent nulle part (zero occurrence dans les
+    #: deux scripts).
+    #:
+    #: Le jour ou ces criteres seront fiables, basculer ce champ a `true` dans
+    #: le fichier d'etude suffit : aucune modification de code.
+    exclure_points_non_converges: bool = False
+
     # ------------------------------------------------------------- maillage
     global_size: float = 0.05        #: global_physical_size
     geo_min_approx: int = 4          #: geometric_approximation_min

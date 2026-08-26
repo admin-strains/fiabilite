@@ -529,12 +529,27 @@ de 0,0771 % a 0,0492 % d'erreur sur `beta` contre le meme oracle exact.
 `TOL_BETA` de `test_40` passe de 0,5 %/2 % — des seuils cales sur le defaut —
 au critere du plan, 0,05 % pour les deux.
 
-**Reste ouvert.** Le defaut 6 (les scripts lisaient `Primal_bound` sans
-regarder `converged`) est instrumente en phase 5 : `Evaluation.sain` et
-`exige_sain()` existent, et un point non converge est desormais SIGNALE dans
-le journal — mais il entre encore au plan d'experiences, comme avant. En
-faire une erreur est un choix d'exploitation, a arbitrer avec Semia et
-Mohamad. Le defaut 7 (`sys` non importe) est corrige en phase 5.
+**Defaut 6 — tranche par Agnes le 26/08/2026 ; l'attente est DELIBEREE.**
+Les scripts lisaient `Primal_bound` sans jamais regarder `converged` ni
+`solver_status` — zero occurrence. A `global_physical_size = 0.018`, Digital
+Structure sort NUMERICAL_ERROR avec `alpha = 1,5197` au lieu de ~1,3188, et
+ce point entrait au plan d'experiences comme une evaluation valide.
+
+Mais **les criteres de convergence rendus par Digital Structure ne sont pas
+encore fiables**. Les exclure aujourd'hui reviendrait a jeter des evaluations
+correctes, chacune coutant un SOCP — des secondes en flexion pure, des
+minutes sur le Moulin Blanc. Le jour ou ils le seront, ces points seront
+exclus de l'enrichissement.
+
+D'ou un comportement qui n'est ni l'ancien ni le futur : chaque point suspect
+est SIGNALE dans le journal, avec son statut et son alpha, et CONSERVE. La
+bascule tient dans un booleen du fichier d'etude,
+`exclure_points_non_converges` — aucune ligne de code a changer le jour venu.
+Seize tests tiennent les trois proprietes (`test_52_points_non_converges.py`),
+dont un qui exige que la RAISON de l'attente reste ecrite dans les scripts :
+sans elle, le prochain lecteur corrigera « l'oubli ».
+
+Le defaut 7 (`sys` non importe) est corrige en phase 5.
 
 ### Phase 7 — Performance · 2 a 4 j
 

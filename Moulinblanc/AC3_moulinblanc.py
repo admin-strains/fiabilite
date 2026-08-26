@@ -464,9 +464,16 @@ if __name__ == '__main__':
             ev = solveur.evaluer({p: SOL[i][p] for p in params_names},
                                  sensibilite=sensitivity, etiquette=etiquette)
             if not ev.sain:
-                print("  [SOLVEUR] point %s NON CONVERGE (%s), alpha=%.6f -- il entre "
-                      "quand meme au DOE, comme avant la phase 5"
-                      % (p_vals, ev.diagnostic.get("solver_status"), ev.alpha), flush=True)
+                # Les criteres de convergence rendus par Digital Structure ne
+                # sont pas encore fiables (Agnes, 26/08/2026) : on SIGNALE,
+                # on ne jette pas. Basculer `exclure_points_non_converges` a
+                # true dans le fichier d'etude le jour ou ils le seront.
+                print("  [SOLVEUR] point %s NON CONVERGE (%s), alpha=%.6f -- %s"
+                      % (p_vals, ev.diagnostic.get("solver_status"), ev.alpha,
+                         "EXCLU du plan d'experiences" if CFG.exclure_points_non_converges
+                         else "conserve : critere DS juge non fiable"), flush=True)
+                if CFG.exclure_points_non_converges:
+                    ev.exige_sain("point %s du plan d'experiences" % (p_vals,))
             SOL[i]['g'] = ev.g
 
             # --- Conversion X -> U ---
@@ -505,8 +512,14 @@ if __name__ == '__main__':
         ev = solveur.evaluer({params_names[i]: x_point[i] for i in range(n_var_local)},
                              sensibilite=True, etiquette=etiquette)
         if not ev.sain:
-            print("  [SOLVEUR] run_HF %s NON CONVERGE (%s), alpha=%.6f"
-                  % (list(u), ev.diagnostic.get("solver_status"), ev.alpha), flush=True)
+            # Meme regle qu'au plan d'experiences : ce point rejoint le
+            # metamodele, il doit donc etre traite pareil.
+            print("  [SOLVEUR] run_HF %s NON CONVERGE (%s), alpha=%.6f -- %s"
+                  % (list(u), ev.diagnostic.get("solver_status"), ev.alpha,
+                     "EXCLU" if CFG.exclure_points_non_converges
+                     else "conserve : critere DS juge non fiable"), flush=True)
+            if CFG.exclure_points_non_converges:
+                ev.exige_sain("point d'enrichissement %s" % (list(u),))
         g_HF = ev.g
 
         grad_HF_X = list(ev.grad_x)
