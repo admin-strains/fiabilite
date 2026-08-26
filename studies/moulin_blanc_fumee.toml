@@ -13,16 +13,25 @@
 #   n_max_EFF_points         5              360
 #   n_grid_hf                2               15
 #
-# COUT ATTENDU, a 466 s le point :
+# COUT ATTENDU :
 #
 #   plan d'experiences        5 appels  (sequentiel)
 #   enrichissement EFF        5 appels
 #   grille HF (2x2)           4 appels
 #   FOSM aux modes           ~2 appels
 #   ------------------------------------
-#   total                   ~16 appels  ~=  2 h 05
+#   total                   ~16 appels
 #
-# contre ~592 appels et ~76 h pour l'etude reelle.
+# contre ~592 appels pour l'etude reelle. Le prix d'un appel depend fortement
+# de la charge du poste -- deux mesures du 26/08/2026, meme point, meme
+# machine :
+#
+#   poste au repos    466 s   (CAO 105 s + maillage  9 s + solveur 353 s)
+#   poste charge      786 s   (CAO 179 s + maillage 11 s + solveur 595 s)
+#
+# soit entre 2 h 05 et 3 h 30 pour ce run de fumee. L'ecart vient de la
+# concurrence memoire : le processus DS culmine a 3,1 Go et la RAM libre est
+# descendue a 184 Mo pendant la mesure.
 #
 # S'utilise via la variable d'environnement qui choisit le fichier d'etude :
 #
@@ -56,10 +65,11 @@ do_FORM_filter = true
 # =========================================================================== #
 # SEQUENTIEL, et c'est une decision mesuree, pas un defaut recopie.
 #
-# Un processus Digital Structure culmine a 2,5 Go sur ce modele (mesure du
-# 26/08/2026, pic RSS echantillonne toutes les 2 s). Le poste a 15,8 Go mais
-# n'en laissait que 1,8 de libres, l'editeur et ses serveurs d'indexation
-# C++ en occupant environ 5. Un second worker ne rentre pas.
+# Un processus Digital Structure culmine a 3,1 Go sur ce modele (mesure du
+# 26/08/2026, pic RSS echantillonne toutes les 2 s pendant un point complet).
+# Le poste a 15,8 Go, mais la RAM libre est descendue a 184 Mo AVEC UN SEUL
+# processus, l'editeur et ses serveurs d'indexation C++ en occupant environ 5.
+# Un second worker n'y tient pas -- il aurait tue le run.
 #
 # Le gain aurait de toute facon ete faible : ce reglage ne concerne QUE les
 # 5 points du plan initial. Avec `n_batch_EFF = 1` (le defaut), la boucle
