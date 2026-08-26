@@ -390,19 +390,30 @@ if __name__ == '__main__':
         pourtant ce que cela veut dire ici, et c'est ce qui a fait mourir un
         run de deux heures. On l'ecrit donc noir sur blanc, au demarrage.
         """
-        try:
-            dist = dist_jointe()
-        except Exception as exc:                       # noqa: BLE001
-            print("  [DOMAINE] loi jointe indisponible (%s)" % exc, flush=True)
-            return
+        dist = dist_jointe()
+        # T_inv est EXACTEMENT la transformation que `run_one_SOL` et `run_HF`
+        # emploient pour passer de u a x. En utiliser une autre ici ferait
+        # afficher un domaine qui n'est pas celui qu'on evalue.
+        #
+        # La voie « naive » -- computeQuantile(Normal().computeCDF(u)) -- est
+        # de surcroit FAUSSE dans la queue haute : `1 - p` y perd toute
+        # precision. Mesure du 26/08/2026 sur Normal(235 ; 30,15) :
+        #
+        #     u = +6,0   ecart 2,7e-07
+        #     u = +7,5   ecart 5,6e-03
+        #     u = +8,5   ecart 11,3 MPa      (479,99 au lieu de 491,28)
+        #
+        # C'est le defaut corrige en phase 7 dans `_lib/transform.py`, et il
+        # etait sur le point d'etre reintroduit ici. T_inv : 5,7e-14 partout.
+        T_inv = dist.getInverseIsoProbabilisticTransformation()
+        bas_u = ot.Point([CFG.eff_bound_min] * n_var)
+        haut_u = ot.Point([CFG.eff_bound_max] * n_var)
+        bas_x, haut_x = T_inv(bas_u), T_inv(haut_u)
         print("  DOMAINE DE RECHERCHE -- ce que les bornes valent physiquement")
         extremes = []
         for i, nom in enumerate(params_names):
             marginale = dist.getMarginal(i)
-            lo = float(marginale.computeQuantile(
-                float(ot.Normal().computeCDF(CFG.eff_bound_min)))[0])
-            hi = float(marginale.computeQuantile(
-                float(ot.Normal().computeCDF(CFG.eff_bound_max)))[0])
+            lo, hi = sorted((float(bas_x[i]), float(haut_x[i])))
             extremes.append((lo, hi))
             alerte = ""
             if lo <= 0:

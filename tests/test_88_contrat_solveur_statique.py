@@ -140,6 +140,13 @@ def test_tout_attribut_lu_est_affecte_quelque_part(impl, chemin_impl, classe):
     `evaluer` lisait `self.max_size`, que rien n'affectait. Le test est
     volontairement permissif -- une affectation N'IMPORTE OU dans la classe
     suffit -- pour ne signaler que le cas indefendable.
+
+    LIMITE CONNUE : l'analyse ne regarde QUE la classe, pas ses bases. C'est
+    exact aujourd'hui -- `solver/interface.py:Solveur` dit en toutes lettres
+    qu'« une implementation n'a pas a heriter de cette classe, seule la
+    signature compte », et aucune des deux n'en herite. Le jour ou l'une
+    heritera, les attributs poses par la base seront signales a tort : il
+    faudra alors remonter la chaine des bases.
     """
     cls = _classe(_arbre(chemin_impl), classe)
 

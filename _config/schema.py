@@ -548,9 +548,16 @@ def resume(cfg: "Configuration") -> str:
     # remarque pas -- ici la ligne dit aussi ce que None veut dire.
     if cfg.solveur_lineaire is None:
         _lin = "(non impose -- valeur de IPARM0[21] dans l'InitSolver.py de l'etude)"
-    else:
+    elif cfg.solveur_lineaire in SOLVEURS_LINEAIRES:
         _lin = "%s (IPARM0[21] = %d, impose par le fichier d'etude)" % (
             cfg.solveur_lineaire, SOLVEURS_LINEAIRES[cfg.solveur_lineaire])
+    else:
+        # `charger()` valide avant d'arriver ici, mais `resume()` sert aussi a
+        # diagnostiquer une configuration construite a la main. Une fonction
+        # dont le role est de DIRE CE QUI SE PASSE ne doit pas lever : elle
+        # signale l'anomalie et laisse `valider()` la refuser.
+        _lin = "%r INCONNU -- valider() le refusera (attendu : %s)" % (
+            cfg.solveur_lineaire, ", ".join(sorted(SOLVEURS_LINEAIRES)))
 
     lignes = ["-" * 70,
               "CONFIGURATION : %s" % (getattr(cfg, "_origine", None) or "(defauts)"),
