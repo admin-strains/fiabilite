@@ -42,6 +42,31 @@ n_max_EFF_points = 360
 tol_FORM = 0.05
 do_FORM_filter = true     # rejeter les u* hors bornes avant DBSCAN
 
+# --- solveur lineaire du point interieur
+# DECLARE EXPLICITEMENT depuis le 26/08/2026, a la valeur que
+# `Moulinblanc/InitSolver.py` portait deja (IPARM0[21] = 4) : le resultat de
+# cette etude est INCHANGE.
+#
+# Ce qui change, c'est qu'elle est visible. `pure_flexion` demandait MUMPS,
+# cette etude CuDss, et rien ne le disait -- alors que c'est exactement la que
+# se separent les deux reproductibilites mesurees (2,9e-11 contre 7,7e-06).
+#
+# MESURE DU 26/08/2026, meme point du plan, les deux backends :
+#     cuDSS  alpha = 1,025923959153475
+#     MUMPS  alpha = 1,025933553813083   ecart relatif 9,35e-06
+# soit l'ORDRE DE GRANDEUR du bruit run-a-run sous un seul backend (7,7e-06).
+# Un point unique ne permet donc pas de separer le biais du bruit : la
+# question reste ouverte, mais elle est desormais mesurable.
+#
+# COUT : MUMPS rend l'algebre lineaire 3,4x plus chere (50 -> 174 s), mais
+# comme elle ne pese que 9 % du solveur, le total monte de 21 % (+122 s par
+# point). Sur ~592 appels, cela ferait +20 heures. A trancher pour le serveur,
+# selon la disponibilite du GPU.
+#
+# Le run de fumee local (`moulin_blanc_fumee.toml`) tourne lui sur MUMPS,
+# decision d'Agnes.
+solveur_lineaire = "cudss"
+
 # =========================================================================== #
 # SESSION -- ce run, sur ce poste. Rien ici ne change le resultat.            #
 # =========================================================================== #

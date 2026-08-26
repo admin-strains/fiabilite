@@ -217,6 +217,27 @@ def test_ce_qui_est_ecrit_est_relisible(tmp_path):
 # --------------------------------------------------------------------- #
 # ce que portent les etudes du depot
 # --------------------------------------------------------------------- #
+def test_toute_etude_sur_DS_declare_son_backend():
+    """Une etude qui ne le declare pas retombe sur son `InitSolver.py` -- et
+    c'est precisement ce silence qui avait laisse les deux etudes diverger.
+
+    Les etudes qui n'emploient pas Digital Structure (solveur analytique) sont
+    hors sujet : il n'y a pas de point interieur a regler.
+    """
+    import glob
+    muettes = []
+    for chemin in sorted(glob.glob(os.path.join(_REPO, "studies", "*.toml"))):
+        cfg = schema.charger(chemin)
+        if cfg.solveur != "digital_structure":
+            continue
+        if cfg.solveur_lineaire is None:
+            muettes.append(os.path.basename(chemin))
+    assert not muettes, (
+        "ces etudes tournent sur Digital Structure sans dire quel solveur "
+        "lineaire elles emploient : %s.\nLa valeur reste alors celle de "
+        "l'InitSolver.py, que personne ne lit." % muettes)
+
+
 def test_les_deux_InitSolver_du_depot_sont_lisibles_et_documentes():
     """Constat fige : les deux etudes ne demandaient pas le meme backend.
 

@@ -36,6 +36,17 @@ n_max_EFF_points = 30
 tol_FORM = 0.002          # cas de validation : on veut l'etat limite serre
 do_FORM_filter = false
 
+# --- solveur lineaire du point interieur
+# DECLARE EXPLICITEMENT depuis le 26/08/2026. La valeur ne change rien : c'est
+# celle que `pure_flexion/InitSolver.py` portait deja (IPARM0[21] = 3).
+#
+# Ce qui change, c'est qu'elle est desormais VISIBLE. Le choix vivait dans
+# l'InitSolver.py sans que rien ne le remonte, et les deux etudes du depot
+# avaient diverge sans le dire -- MUMPS ici, CuDss sur le Moulin Blanc. Or
+# c'est aussi la que se separent les deux reproductibilites mesurees :
+# 2,9e-11 sur cette etude, 7,7e-06 sur le Moulin Blanc.
+solveur_lineaire = "mumps"
+
 # =========================================================================== #
 # SESSION -- ce run, sur ce poste. Rien ici ne change le resultat.            #
 # =========================================================================== #
