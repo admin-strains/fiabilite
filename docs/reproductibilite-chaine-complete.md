@@ -1,0 +1,120 @@
+# Reproductibilite de la chaine complete — mesure du 25/08/2026
+
+> Mesure faite pour repondre a une question simple : apres huit etapes de
+> restructuration, le script AC rend-il encore les memes chiffres ?
+> La reponse est oui. Mais la mesure en a donne une autre, plus importante.
+
+## Ce qui a ete fait
+
+`AC3_pure_flexion` execute **trois fois de bout en bout** sur Digital
+Structure, avec la meme configuration d'essai (`n0 = 5`, budget
+d'enrichissement 8, DOE sequentiel, caches desactives) :
+
+| run | version du code |
+|---|---|
+| `origine` | revision `d0ef283`, avant toute restructuration |
+| `actuel` | apres les phases 2, 3a-3f et 4a |
+| `actuel2` | **la meme** que `actuel`, relancee |
+
+Le troisieme run est celui qui compte : sans lui, tout ecart entre les deux
+premiers aurait ete attribue au refactoring.
+
+## Resultat 1 — la restructuration n'a rien casse
+
+Les grandeurs deterministes sont **identiques** entre `origine` et `actuel` :
+
+```
+mode 1 : beta = 5.1309   Pf = 1.442e-07   u* = [-2.363, -4.555]
+mode 2 : beta = 5.3599   Pf = 4.164e-08   u* = [-4.904, -2.162]
+```
+
+Le plan d'experiences final contient **le meme ensemble de points**, et les
+quatre premieres iterations d'enrichissement coincident a quatre decimales.
+
+Deux points d'enrichissement sont ajoutes dans un **ordre different** :
+
+```
+origine : ... [-5.0, -1.667]  [-1.481, -5.0]  [-6.667, 3.333]  [1.111, -5.556] ...
+actuel  : ... [-5.0, -1.667]  [-6.667, 3.333]  [-1.481, -5.0]  [1.111, -5.556] ...
+```
+
+Ce n'est pas une divergence de logique : le critere EFF y presente deux
+maxima quasi egaux, et un ecart numerique minuscule fait basculer lequel
+l'emporte. L'ensemble final etant le meme, le metamodele final est le meme,
+et FORM retrouve les memes modes.
+
+**Le meme desordre s'observe entre `actuel` et `actuel2`** — deux executions
+du meme code. Il n'a donc rien a voir avec la restructuration.
+
+## Resultat 2 — la chaine n'est pas reproductible
+
+C'est la trouvaille reelle. Le meme point, soumis trois fois au solveur :
+
+```
+alpha = 1.332124954037
+alpha = 1.332124954018
+alpha = 1.332124954056
+```
+
+Meme maillage (1 873 tetraedres), memes 23 iterations, meme statut
+`OPTIMAL`. L'ecart est au **onzieme chiffre significatif**. Le maillage etant
+identique, la source est le solveur lineaire, pas la geometrie.
+
+Cet ecart traverse la chaine en s'amplifiant :
+
+| etape | grandeur | etendue relative | amplification |
+|---|---|---|---|
+| solveur | `alpha` | 2,9 · 10⁻¹¹ | — |
+| krigeage | `theta` | 1,5 · 10⁻⁶ | × 5 · 10⁴ |
+| resultat | `Pf_IS` | **1,2 · 10⁻¹** | × 4 · 10⁹ |
+
+```
+Pf_IS : 2,4770e-07   2,3278e-07   2,1892e-07
+```
+
+**12,3 % d'etendue sur trois runs**, pour un critere d'arret fixe a
+COV = 5 %. La dispersion d'un run a l'autre est donc plus grande que la
+precision que l'algorithme croit atteindre.
+
+## Ce que cela implique
+
+**Pour la lecture des resultats.** Publier `Pf = 2,4770e-07` a quatre
+chiffres significatifs suggere une precision qui n'existe pas. Deux chiffres
+sont deja optimistes. La barre d'erreur a annoncer n'est pas le COV du
+tirage seul : c'est la dispersion d'un run a l'autre, qui l'englobe.
+
+**Pour toute comparaison A/B.** Aucune comparaison de deux versions du code
+sur cette chaine ne peut conclure en dessous de ~12 % sur `Pf_IS`, ni en
+dessous de ~10⁻⁶ sur `theta`. C'est le plancher de bruit, et il doit etre
+mesure avant toute conclusion — c'est exactement ce que fait
+`baselines/plancher_de_bruit.json` pour la baseline analytique, ou il vaut
+zero.
+
+**Pour l'amplification elle-meme.** Un facteur 4 · 10⁹ entre l'entree et la
+sortie n'est pas une fatalite : il tient au conditionnement du krigeage,
+deja identifie comme defaut 2 et 3 du plan de nettoyage. Une reduction du
+conditionnement reduirait mecaniquement cette dispersion.
+
+## Ce qui reste a verifier
+
+Le chemin `n_workers_DOE > 1` n'a pas ete exerce : les runs sont
+sequentiels. Le DOE parallele lance des sous-processus, dont l'ordre
+d'achevement pourrait ajouter sa propre variabilite.
+
+La grille de visualisation haute fidelite (`print_HF`) a ete desactivee :
+49 appels solveur sans influence sur le resultat, mais non couverts.
+
+Le script `AC3_moulinblanc` n'a pas ete execute : un appel solveur y coute
+des minutes, non des secondes.
+
+## Comment refaire la mesure
+
+```bat
+python tools\run_comparatif.py --patch pure_flexion\AC3_pure_flexion.py ^
+                              --sortie C:\tmp\run --n-max-eff 8
+python launcher.py pure_flexion\_run_comparatif.py > C:\tmp\sortie.txt
+```
+
+Puis comparer deux journaux avec `tools\comparer_runs.py`. Toujours produire
+**trois** runs : deux versions et une repetition, sans quoi la mesure ne dit
+rien.

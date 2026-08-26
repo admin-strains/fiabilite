@@ -202,14 +202,25 @@ def main():
     import launcher
     _catalogues(launcher.find_ds_root())
 
-    g, alpha, t_mesh, t_solv = evaluate(
+    g, alpha, t_mesh, t_solv, sante = evaluate(
         dst, {"fc": args.fc, "fy": args.fy},
         global_size=args.global_size, geo_min_approx=args.geo_min)
 
-    print("\n[solve_one] RESULTAT", flush=True)
-    print("  alpha (Primal_bound) = %.10f" % alpha, flush=True)
-    print("  g = alpha - 1        = %+.10f" % g, flush=True)
+    sain = bool(sante["converged"]) and sante["solver_status"] == "OPTIMAL"
+    print("")
+    print("[solve_one] RESULTAT", flush=True)
+    print("  alpha (Primal_bound) = %.12f" % alpha, flush=True)
+    print("  g = alpha - 1        = %+.12f" % g, flush=True)
+    print("  Dual_bound           = %.12f   ecart relatif %.3f %%"
+          % (sante["Dual_bound"], 100 * sante["gap_relatif"]), flush=True)
+    print("  solveur : %s, converged=%s, %s iterations, %s tetraedres"
+          % (sante["solver_status"], sante["converged"],
+             sante["solverIterations"], sante["numTetra"]), flush=True)
     print("  maillage %.1f s   solveur %.1f s" % (t_mesh, t_solv), flush=True)
+    if not sain:
+        print("")
+        print("  *** RESULTAT NON EXPLOITABLE : le solveur n'a pas converge. ***",
+              flush=True)
 
     out = os.path.join(dst, "solve_one.json")
     with open(out, "w") as fh:
