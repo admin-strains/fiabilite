@@ -1,0 +1,12 @@
+F    = 1.0000000000
+
+with LOAD_CASE('Load_case0'):
+	SUPPORT(BOUNDARY='Boundary0',MEAN=False, RIGID=False, X=True,Y=True,Z=True)
+	LOAD(BOUNDARY='Boundary1',MEAN=True, RIGID=False, X='0',Y='0',Z='-0.9')
+
+YIELD_ANALYSIS('Yield_analysis0',DEAD_LOAD_CASES=[],LIVE_LOAD_CASES=[('Load_case0',str(F))],
+	MESH={
+	    "global_physical_size": "0.02"
+	}
+)
+ELASTOPLASTIC_ANALYSIS('Elastoplastic_analysis0',LOAD_CASES=[('Load_case0','1')])

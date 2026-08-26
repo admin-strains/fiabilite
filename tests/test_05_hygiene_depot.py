@@ -56,13 +56,29 @@ def test_les_sources_python_sont_syntaxiquement_valides():
     assert not fautifs, "\n".join(fautifs)
 
 
+#: Les gros fichiers qu'on assume, et pourquoi. Une exemption se DECLARE :
+#: elargir le filtre sans le dire reviendrait a desarmer le garde-fou pour
+#: tout le monde.
+GROS_ASSUMES = {
+    # Les deux modeles de test versionnes le 26/08/2026 sur demande d'Agnes.
+    # `dsCad.txt` du Moulin Blanc fait 9,65 Mo : 188 094 lignes, dont 15 348
+    # appels REBAR et 141 954 POINT. C'est une DONNEE de modele, pas un
+    # journal echappe -- et sans elle le depot decrit une etude que personne
+    # ne peut rejouer. Compresse par git, l'ensemble pese 1,6 Mo.
+    # Voir `modeles/README.md`.
+    "modeles": "donnees des deux modeles de test (cf. modeles/README.md)",
+}
+
+
 def test_pas_de_fichier_texte_volumineux():
     """Le depot trainait un journal de 3,8 Mo ne d'une redirection ratee
     (`> C:\\tmp\\form_out.txt` ayant perdu ses antislashes). Empecher le
-    prochain."""
+    prochain -- sans interdire les donnees de modele, qui sont declarees
+    dans `GROS_ASSUMES`."""
     gros = []
     for racine, dossiers, fichiers in os.walk(REPO):
-        dossiers[:] = [d for d in dossiers if d not in IGNORES]
+        dossiers[:] = [d for d in dossiers
+                       if d not in IGNORES and d not in GROS_ASSUMES]
         for f in fichiers:
             p = os.path.join(racine, f)
             if os.path.splitext(f)[1] in {".py", ".md", ".json", ".ini", ".bat", ".txt"} \
@@ -70,6 +86,16 @@ def test_pas_de_fichier_texte_volumineux():
                 gros.append("%s (%.1f Mo)"
                             % (os.path.relpath(p, REPO), os.path.getsize(p) / 1048576))
     assert not gros, "fichiers texte de plus de 2 Mo : %s" % gros
+
+
+def test_les_exemptions_de_taille_existent_encore():
+    """Une exemption qui ne protege plus rien doit disparaitre, sinon elle
+    devient un trou ouvert par inadvertance."""
+    manquants = [d for d in GROS_ASSUMES if not os.path.isdir(os.path.join(REPO, d))]
+    assert not manquants, (
+        "GROS_ASSUMES cite des dossiers qui n'existent plus : %s.\n"
+        "Retirer l'exemption plutot que la laisser desarmer le garde-fou."
+        % manquants)
 
 
 #: paquets qui appartiennent a la couche des ETUDES, jamais au noyau.

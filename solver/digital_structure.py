@@ -217,7 +217,7 @@ class SolveurDS:
     """Evalue g = alpha - 1 par un calcul a la rupture sur Digital Structure."""
 
     def __init__(self, chemin_ds, dossier_etude, params_names, regions,
-                 global_size=0.05, geo_min_approx=4,
+                 global_size=0.05, geo_min_approx=4, max_size=None,
                  analyse="Yield_analysis0", iteration=0,
                  archiver=False, verbeux=True):
         self.chemin_ds = chemin_ds
@@ -227,6 +227,9 @@ class SolveurDS:
         self.regions = list(regions)
         self.global_size = global_size
         self.geo_min_approx = geo_min_approx
+        #: borne haute du mailleur. None = suit `global_size`. Voir
+        #: `options_maillage` : c'est une taille RELATIVE, pas des metres.
+        self.max_size = max_size
         self.analyse = analyse
         self.iteration = iteration
         self.archiver = archiver

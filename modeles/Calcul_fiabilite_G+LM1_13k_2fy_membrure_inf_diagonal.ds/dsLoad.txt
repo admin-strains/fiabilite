@@ -1,0 +1,49 @@
+# ==============================================================================
+# LM1 trafic sur Pont Moulin Blanc - Test 15K (config fiabilite) avec CONSERVE='PRESSURE' pour UDL
+# Calque sur Test_35K_LM3_1800_200.ds : UDL = PRESSURE (charge surfacique honnete), TS = default (FORCE)
+# Unites : MPa, m, MN.
+#
+# === LM1 UDL ===
+#   V1 (voie lourde, axe Z=-1.585) : 9 kN/m2 = 0.009 MPa
+#   MID (aire residuelle) : 2.5 kN/m2 = 0.0025 MPa
+#   V2 (voie secondaire, axe Z=+1.585) : 2.5 kN/m2 = 0.0025 MPa
+#   Conservation PRESSURE : pression honnete par m2 de facette vue, pas de rescale force
+#
+# === LM1 Tandems (TS) ===
+#   Tandem V1 : 4 roues, 150 kN/roue, patch 0.4x0.4 m -> 0.9375 MPa
+#   Tandem V2 : 4 roues, 100 kN/roue, patch 0.4x0.4 m -> 0.625 MPa
+#   Conservation FORCE (default) : garantit force par roue exacte (rescale post-clip)
+# ==============================================================================
+
+with LOAD_CASE('LC_poids', VALUE=-9.81, DIR="YAxis"):
+    pass
+
+with LOAD_CASE('LC_LM1_trafic'):
+    # Appuis (memes que les autres tests Moulin Blanc)
+    SUPPORT(BOUNDARY='Support_central', MEAN=True, RIGID=True, X=True, Y=True, Z=True)
+    SUPPORT(BOUNDARY='Support_corner_pX_pZ', MEAN=True, RIGID=True, X=True, Y=True, Z=False)
+    SUPPORT(BOUNDARY='Support_corner_pX_nZ', MEAN=True, RIGID=True, X=True, Y=True, Z=False)
+    SUPPORT(BOUNDARY='Support_corner_nX_pZ', MEAN=True, RIGID=True, X=True, Y=True, Z=False)
+    SUPPORT(BOUNDARY='Support_corner_nX_nZ', MEAN=True, RIGID=True, X=True, Y=True, Z=False)
+
+    # === LM1 UDL (3 bandes) : CONSERVE='PRESSURE' (charge surfacique conservee) ===
+    LOAD(POLYGON='LM1_UDL_V1',  Y='-0.009',  CONSERVE='PRESSURE')
+    LOAD(POLYGON='LM1_UDL_MID', Y='-0.0025', CONSERVE='PRESSURE')
+    LOAD(POLYGON='LM1_UDL_V2',  Y='-0.0025', CONSERVE='PRESSURE')
+
+    # === LM1 Tandems V1 (4 roues, 150 kN/roue) : CONSERVE='FORCE' (default) ===
+    LOAD(POLYGON='LM1_TS_V1_ax1_L', Y='-0.9375')
+    LOAD(POLYGON='LM1_TS_V1_ax1_R', Y='-0.9375')
+    LOAD(POLYGON='LM1_TS_V1_ax2_L', Y='-0.9375')
+    LOAD(POLYGON='LM1_TS_V1_ax2_R', Y='-0.9375')
+
+    # === LM1 Tandems V2 (4 roues, 100 kN/roue) : CONSERVE='FORCE' (default) ===
+    LOAD(POLYGON='LM1_TS_V2_ax1_L', Y='-0.625')
+    LOAD(POLYGON='LM1_TS_V2_ax1_R', Y='-0.625')
+    LOAD(POLYGON='LM1_TS_V2_ax2_L', Y='-0.625')
+    LOAD(POLYGON='LM1_TS_V2_ax2_R', Y='-0.625')
+
+YIELD_ANALYSIS('Yield_analysis0',
+               DEAD_LOAD_CASES=[],
+               LIVE_LOAD_CASES=[('LC_poids', '1.35'), ('LC_LM1_trafic', '1.35')],
+               MESH={"global_physical_size": "0.05"})

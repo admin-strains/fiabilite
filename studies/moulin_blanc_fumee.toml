@@ -1,0 +1,84 @@
+# Moulin Blanc -- RUN DE FUMEE. Ce n'est PAS une etude.
+#
+# Objet : verifier que la chaine complete passe de bout en bout sur le vrai
+# modele -- plan d'experiences, metamodele, enrichissement, FORM, tirage
+# d'importance, grille haute fidelite, figures -- pour un cout tenable sur un
+# poste local. Le calcul de reference se fera sur serveur.
+#
+# NE PAS CITER SES RESULTATS. L'enrichissement y est volontairement tronque :
+# `n_max_EFF_points` et `n_grid_hf` sont des parametres d'ETUDE, ils changent
+# le resultat. Les valeurs reelles sont dans `moulin_blanc.toml`.
+#
+#   parametre            fumee     etude reelle
+#   n_max_EFF_points         5              360
+#   n_grid_hf                2               15
+#
+# COUT ATTENDU, a 466 s le point :
+#
+#   plan d'experiences        5 appels  (sequentiel)
+#   enrichissement EFF        5 appels
+#   grille HF (2x2)           4 appels
+#   FOSM aux modes           ~2 appels
+#   ------------------------------------
+#   total                   ~16 appels  ~=  2 h 05
+#
+# contre ~592 appels et ~76 h pour l'etude reelle.
+#
+# S'utilise via la variable d'environnement qui choisit le fichier d'etude :
+#
+#   set FIABILITE_ETUDE=C:\workspace\fiabilite\studies\moulin_blanc_fumee.toml
+#   python launcher.py Moulinblanc\AC3_moulinblanc.py
+
+# =========================================================================== #
+# ETUDE                                                                       #
+# =========================================================================== #
+modelname = "Calcul_fiabilite_G+LM1_13k_2fy_membrure_inf_diagonal"
+storage = 'C:\workspace\storage\admin\Moulin_Blanc'
+
+# --- metamodele : identique a l'etude reelle
+modele = "GEPCK"
+max_degree = 2
+max_of_maxdegree = 2
+seuil_pce = 0.90
+
+# --- enrichissement : TRONQUE. 5 points suffisent a exercer la boucle
+# (recherche EFF, evaluation HF, reconstruction du metamodele, critere
+# d'arret) sans engager les 47 heures de l'etude reelle.
+EFF_criteria = "BS"
+n_max_EFF_points = 5
+
+# --- FORM : identique a l'etude reelle
+tol_FORM = 0.05
+do_FORM_filter = true
+
+# =========================================================================== #
+# SESSION                                                                     #
+# =========================================================================== #
+# SEQUENTIEL, et c'est une decision mesuree, pas un defaut recopie.
+#
+# Un processus Digital Structure culmine a 2,5 Go sur ce modele (mesure du
+# 26/08/2026, pic RSS echantillonne toutes les 2 s). Le poste a 15,8 Go mais
+# n'en laissait que 1,8 de libres, l'editeur et ses serveurs d'indexation
+# C++ en occupant environ 5. Un second worker ne rentre pas.
+#
+# Le gain aurait de toute facon ete faible : ce reglage ne concerne QUE les
+# 5 points du plan initial. Avec `n_batch_EFF = 1` (le defaut), la boucle
+# d'enrichissement prend toujours la branche sequentielle -- il n'existe
+# aucun levier de parallelisme sur elle.
+#
+# CONSEQUENCE A ASSUMER : le chemin `run_DOE_parallel` reste NON EXERCE. Il
+# faut le tester sur le serveur, ou la memoire n'est pas la contrainte -- pas
+# ici, ou un echec par manque de RAM se confondrait avec un defaut de code.
+n_workers_DOE = 1
+
+restart_enrich_only = false
+save_history = false
+
+# =========================================================================== #
+# SORTIE                                                                      #
+# =========================================================================== #
+# 2x2 = 4 appels, contre 225 a 15x15. La figure de contour sera grossiere :
+# c'est un test de tuyauterie, pas une illustration.
+n_grid_hf = 2
+print_fullHF = false
+do_custom_hf = false

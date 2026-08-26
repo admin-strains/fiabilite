@@ -1,0 +1,183 @@
+# =============================================================================
+# Test pure flexion beton -- 3 lits de 8HA32
+#
+# b = 0.8m, h = 0.8m, L = 5.0m
+# Origine z a h/2 = 0.4m (z positif vers le haut = cote tendu)
+# Lit 1 : z = +0.334m (6.6cm du bord haut),  HA1..HA8
+# Lit 2 : z = +0.302m (9.8cm du bord haut),  HA9..HA16
+# Lit 3 : z = +0.238m (16.2cm du bord haut), HA17..HA24
+# Centroide acier : z_moy = 0.291m (10.9cm du bord haut)
+# d = h/2 + z_moy = 0.4 + 0.291 = 0.691m
+# 8 barres par lit : y = -0.35, -0.25, -0.15, -0.05, +0.05, +0.15, +0.25, +0.35
+# =============================================================================
+
+# --- Materiaux ---
+fy    = 550.0000000000
+fc    = 48.0000000000
+ft1    = 0.1
+ft2 = 3.5
+E     = 35.0  # module Young (GPa)
+
+# --- Resistances avec coefficient de sécurité ---
+gamma_s = 1.0
+gamma_c = 1.0
+fyd = fy/gamma_s
+fcd = fc/gamma_c
+
+# --- Geometrie ---
+b  = 0.8    # largeur (m)
+h  = 0.8    # hauteur (m)
+L  = 5.0    # longueur (m)
+L2 = 1.0
+phi = 32.0  # diametre des aciers (mm)
+
+
+BLOCK('Block1', L-L2, 'RECTANGLE', {'b':b, 'h':h}, 0,
+      POINT(0, 0, 0),
+      Plus_XLoc, 'XAxis',
+      Plus_ZLoc, 'ZAxis',
+      COMPRESSIVE_STRENGTH=str(fcd),
+      TENSILE_STRENGTH=str(ft1),
+      YOUNG_MODULUS=str(E),
+      POISSON_RATIO='0.1')
+BLOCK('Block2',L2 , 'RECTANGLE', {'b':b, 'h':h}, 0,
+      POINT(L-L2, 0, 0),
+      Plus_XLoc, 'XAxis',
+      Plus_ZLoc, 'ZAxis',
+      COMPRESSIVE_STRENGTH=str(fcd),
+      TENSILE_STRENGTH=str(ft2),
+      YOUNG_MODULUS=str(E),
+      POISSON_RATIO='0.1')
+# Connection glued
+CONNECT(["Block1"],["Block2"],GLUED)
+
+# Encastrement face x=0, force ponctuelle descendante face x=L (selon Z negatif)
+BOUNDARIES(
+    BOUNDARY('Boundary0', 'Block1:f1', POINT(0, 0, 0),
+             X=VECTOR(-1, 0, 0), Y=VECTOR(0, -1, 0)),
+    BOUNDARY('Boundary1', 'Block2:f2', POINT(L, 0, 0),
+             X=VECTOR(1, 0, 0), Y=VECTOR(0, 1, 0))
+)
+
+# Lit 1 (z = +0.334m, 6.6cm du bord haut) : HA1..HA8
+pts0=[]
+pts0.append(POINT(0, -0.35, 0.334))
+pts0.append(POINT(L, -0.35, 0.334))
+REBAR('HA1',E=EDGE(PS=pts0),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts1=[]
+pts1.append(POINT(0, -0.25, 0.334))
+pts1.append(POINT(L, -0.25, 0.334))
+REBAR('HA2',E=EDGE(PS=pts1),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts2=[]
+pts2.append(POINT(0, -0.15, 0.334))
+pts2.append(POINT(L, -0.15, 0.334))
+REBAR('HA3',E=EDGE(PS=pts2),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts3=[]
+pts3.append(POINT(0, -0.05, 0.334))
+pts3.append(POINT(L, -0.05, 0.334))
+REBAR('HA4',E=EDGE(PS=pts3),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts4=[]
+pts4.append(POINT(0, 0.05, 0.334))
+pts4.append(POINT(L, 0.05, 0.334))
+REBAR('HA5',E=EDGE(PS=pts4),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts5=[]
+pts5.append(POINT(0, 0.15, 0.334))
+pts5.append(POINT(L, 0.15, 0.334))
+REBAR('HA6',E=EDGE(PS=pts5),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts6=[]
+pts6.append(POINT(0, 0.25, 0.334))
+pts6.append(POINT(L, 0.25, 0.334))
+REBAR('HA7',E=EDGE(PS=pts6),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts7=[]
+pts7.append(POINT(0, 0.35, 0.334))
+pts7.append(POINT(L, 0.35, 0.334))
+REBAR('HA8',E=EDGE(PS=pts7),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+# Lit 2 (z = +0.302m, 9.8cm du bord haut) : HA9..HA16
+pts8=[]
+pts8.append(POINT(0, -0.35, 0.302))
+pts8.append(POINT(L, -0.35, 0.302))
+REBAR('HA9',E=EDGE(PS=pts8),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts9=[]
+pts9.append(POINT(0, -0.25, 0.302))
+pts9.append(POINT(L, -0.25, 0.302))
+REBAR('HA10',E=EDGE(PS=pts9),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts10=[]
+pts10.append(POINT(0, -0.15, 0.302))
+pts10.append(POINT(L, -0.15, 0.302))
+REBAR('HA11',E=EDGE(PS=pts10),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts11=[]
+pts11.append(POINT(0, -0.05, 0.302))
+pts11.append(POINT(L, -0.05, 0.302))
+REBAR('HA12',E=EDGE(PS=pts11),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts12=[]
+pts12.append(POINT(0, 0.05, 0.302))
+pts12.append(POINT(L, 0.05, 0.302))
+REBAR('HA13',E=EDGE(PS=pts12),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts13=[]
+pts13.append(POINT(0, 0.15, 0.302))
+pts13.append(POINT(L, 0.15, 0.302))
+REBAR('HA14',E=EDGE(PS=pts13),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts14=[]
+pts14.append(POINT(0, 0.25, 0.302))
+pts14.append(POINT(L, 0.25, 0.302))
+REBAR('HA15',E=EDGE(PS=pts14),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts15=[]
+pts15.append(POINT(0, 0.35, 0.302))
+pts15.append(POINT(L, 0.35, 0.302))
+REBAR('HA16',E=EDGE(PS=pts15),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+# Lit 3 (z = +0.238m, 16.2cm du bord haut) : HA17..HA24
+pts16=[]
+pts16.append(POINT(0, -0.35, 0.238))
+pts16.append(POINT(L, -0.35, 0.238))
+REBAR('HA17',E=EDGE(PS=pts16),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts17=[]
+pts17.append(POINT(0, -0.25, 0.238))
+pts17.append(POINT(L, -0.25, 0.238))
+REBAR('HA18',E=EDGE(PS=pts17),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts18=[]
+pts18.append(POINT(0, -0.15, 0.238))
+pts18.append(POINT(L, -0.15, 0.238))
+REBAR('HA19',E=EDGE(PS=pts18),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts19=[]
+pts19.append(POINT(0, -0.05, 0.238))
+pts19.append(POINT(L, -0.05, 0.238))
+REBAR('HA20',E=EDGE(PS=pts19),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts20=[]
+pts20.append(POINT(0, 0.05, 0.238))
+pts20.append(POINT(L, 0.05, 0.238))
+REBAR('HA21',E=EDGE(PS=pts20),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts21=[]
+pts21.append(POINT(0, 0.15, 0.238))
+pts21.append(POINT(L, 0.15, 0.238))
+REBAR('HA22',E=EDGE(PS=pts21),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts22=[]
+pts22.append(POINT(0, 0.25, 0.238))
+pts22.append(POINT(L, 0.25, 0.238))
+REBAR('HA23',E=EDGE(PS=pts22),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
+
+pts23=[]
+pts23.append(POINT(0, 0.35, 0.238))
+pts23.append(POINT(L, 0.35, 0.238))
+REBAR('HA24',E=EDGE(PS=pts23),DIAMETER=phi,GRADE=fyd,DISTANCE=0)
