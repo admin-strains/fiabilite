@@ -28,7 +28,12 @@ from contextlib import redirect_stdout
 import numpy as np
 import pytest
 
-import matplotlib
+# matplotlib appartient a la couche des ETUDES, pas au noyau : sur un poste
+# ou seul `requirements/core.txt` est installe -- la CI, par exemple -- ce
+# fichier doit se sauter proprement, et non interrompre la COLLECTE de toute
+# la suite. C'est ce qui arrivait avant la phase 8.
+matplotlib = pytest.importorskip(
+    "matplotlib", reason="couche etudes (requirements/studies.txt)")
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 

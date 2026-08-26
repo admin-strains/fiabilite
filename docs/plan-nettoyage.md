@@ -605,15 +605,37 @@ des polynomes (`uq_poly_rec_coeffs`, appele 8 fois par prediction, 6,8 us
 l'appel) rendrait encore **9 %**. Non retenu : cela ajoute un cache mutable
 pour ~4 % de la chaine, apres un gain de 45 % deja acquis.
 
-### Phase 8 — Documentation et integration continue · 2 j
+### Phase 8 — Documentation et integration continue · FAIT
 
-`README` (installation, lancement, resultat attendu), fichier de
-dependances, `CONTRIBUTING` avec la regle de regeneration des goldens, et la
-CI qui lance le harness a chaque push. Sans CI, l'experience de ce depot
-montre que les tests cessent d'etre lances en quelques semaines.
+`README.md` (les deux couches, installation, lancement, resultat attendu, et
+ce qu'il faut savoir avant de lire un `Pf`), `CONTRIBUTING.md` (la procedure
+de regeneration des goldens, la regle des trois runs, ce qu'on ne touche
+pas), et `.github/workflows/tests.yml`.
 
-Nettoyage du depot : `C:tmpform_out.txt` et ses 3,7 Mo, les `output_*.txt`,
-`.playwright_profile/`.
+**La CI a trouve un defaut en naissant.** Montee sur un environnement
+strictement `requirements/core.txt` -- numpy, scipy, pytest, tomli --, la
+suite ne demarrait pas : `test_84_extraction_graphiques.py` importait
+matplotlib sans garde, ce qui interrompait la **collecte** de pytest. Non pas
+un fichier saute, mais **les 300 tests qui cessent de tourner**, en silence.
+C'est exactement le mode de defaillance que la CI existe pour empecher.
+
+Corrige par `pytest.importorskip`, et deux tests ajoutes pour que cela ne
+revienne pas : l'un exige que `_lib/` n'importe que numpy et scipy, l'autre
+que tout fichier de test touchant a la couche des etudes le declare.
+
+Verifie : **276 verts / 9 sautes** avec la seule couche noyau, 312 avec la
+couche complete.
+
+Quatre combinaisons en CI (Linux et Windows, Python 3.10 et 3.13) pour le
+noyau, plus un job pour la couche des etudes. Ne peuvent PAS y tourner :
+Digital Structure (pas un paquet pip, licence) et le run de bout en bout sur
+l'etat limite analytique (il lit sa geometrie dans un `.ds` hors depot).
+
+**Nettoyage du depot.** `C:tmpform_out.txt` et ses 3,7 Mo avaient deja ete
+retires en phase 3b (`3fa528b`), et `test_05` empeche le prochain fichier
+texte de plus de 2 Mo. Les 204 fichiers `.playwright_profile/` sont sur la
+branche `moulin_blanc` : ils partiront avec la convergence des branches
+(phase 1), qui reste a arbitrer.
 
 ---
 

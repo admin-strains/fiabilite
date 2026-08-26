@@ -70,3 +70,60 @@ def test_pas_de_fichier_texte_volumineux():
                 gros.append("%s (%.1f Mo)"
                             % (os.path.relpath(p, REPO), os.path.getsize(p) / 1048576))
     assert not gros, "fichiers texte de plus de 2 Mo : %s" % gros
+
+
+#: paquets qui appartiennent a la couche des ETUDES, jamais au noyau.
+#: `_lib/` ne doit dependre que de numpy et scipy : c'est la promesse du
+#: README, celle qui rend le harness executable partout et la CI possible.
+COUCHE_ETUDES = ("openturns", "sklearn", "smt", "matplotlib", "autograd", "STRAINS")
+
+
+def test_le_noyau_ne_depend_que_de_numpy_et_scipy():
+    """Un import de trop dans `_lib/` casse la portabilite en silence.
+
+    Jusqu'a la phase 8, un tel import ne se voyait meme pas : il
+    interrompait la COLLECTE de pytest, et la suite entiere ne tournait plus
+    du tout au lieu de sauter un fichier. C'est ce qui est arrive a
+    `test_84_extraction_graphiques.py`, qui importait matplotlib sans garde.
+
+    Le meme controle tourne dans la CI, sur un runner ou seul
+    `requirements/core.txt` est installe -- ce test-ci le rend visible AVANT
+    de pousser.
+    """
+    import re
+    fautifs = []
+    for chemin in _fichiers({".py"}):
+        if os.sep + "_lib" + os.sep not in chemin:
+            continue
+        with open(chemin, encoding="utf-8", errors="replace") as fh:
+            texte = fh.read()
+        # on retire les commentaires : une docstring qui CITE openturns est
+        # legitime, un import ne l'est pas
+        code = "\n".join(l.split("#")[0] for l in texte.splitlines())
+        for nom in COUCHE_ETUDES:
+            if re.search(r"^\s*(import|from)\s+%s\b" % re.escape(nom), code, re.M):
+                fautifs.append("%s importe %s"
+                               % (os.path.relpath(chemin, REPO), nom))
+    assert not fautifs, (
+        "la couche noyau doit rester installable sans licence :\n  "
+        + "\n  ".join(fautifs))
+
+
+def test_chaque_test_qui_exige_la_couche_etudes_le_declare():
+    """Un fichier de test qui importe matplotlib, OpenTURNS ou scikit-learn
+    au niveau module DOIT le faire par `pytest.importorskip`, sinon il
+    interrompt la collecte de toute la suite sur un poste minimal."""
+    import re
+    fautifs = []
+    for chemin in _fichiers({".py"}):
+        if os.sep + "tests" + os.sep not in chemin or os.sep + "unit" + os.sep in chemin:
+            continue
+        with open(chemin, encoding="utf-8", errors="replace") as fh:
+            lignes = fh.read().splitlines()
+        code = "\n".join(l.split("#")[0] for l in lignes)
+        for nom in ("matplotlib", "openturns", "sklearn", "smt"):
+            motif = r"^\s*(import|from)\s+%s\b" % re.escape(nom)
+            if re.search(motif, code, re.M) and "importorskip" not in code:
+                fautifs.append("%s importe %s sans importorskip"
+                               % (os.path.relpath(chemin, REPO), nom))
+    assert not fautifs, "\n  ".join([""] + fautifs)
