@@ -39,6 +39,8 @@ from typing import Optional, Tuple
 
 MODELES = ("GEPCK", "PCK", "PCKRG", "KRG", "GEK", "HF", "old_GEPCK")
 CRITERES_EFF = ("BB", "BS", "both", "at_least_one")
+#: doit rester aligne sur `solver/fabrique.py:IMPLEMENTATIONS` -- verifie par test
+SOLVEURS = ("digital_structure", "analytique")
 
 #: Champs que PLUS AUCUN code vivant ne lit, et pourquoi. Mesure du 26/08/2026
 #: sur les deux scripts AC : chaque nom n'y apparait que dans le bloc de
@@ -108,6 +110,12 @@ class Configuration:
     do_IS: bool = True               #: intention de l'utilisateur, cf. `is_actif`
     n_IS: int = 10_000
     cov_IS: float = 0.05
+
+    # -------------------------------------------------------------- solveur
+    #: quelle implementation evalue l'etat limite, cf. `solver/fabrique.py`.
+    #: "digital_structure" = un SOCP par point, licence requise.
+    #: "analytique" = la meme chaine sur un etat limite ferme, en secondes.
+    solveur: str = "digital_structure"
 
     # ------------------------------------------------------------- maillage
     global_size: float = 0.05        #: global_physical_size
@@ -214,6 +222,9 @@ class Configuration:
         if self.EFF_criteria not in CRITERES_EFF:
             problemes.append("EFF_criteria=%r inconnu (attendu : %s)"
                              % (self.EFF_criteria, ", ".join(CRITERES_EFF)))
+        if self.solveur not in SOLVEURS:
+            problemes.append("solveur=%r inconnu (attendu : %s)"
+                             % (self.solveur, ", ".join(SOLVEURS)))
         if self.max_degree > self.max_of_maxdegree:
             problemes.append("max_degree=%d depasse max_of_maxdegree=%d"
                              % (self.max_degree, self.max_of_maxdegree))

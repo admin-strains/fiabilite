@@ -1,0 +1,45 @@
+# Flexion pure, etat limite ANALYTIQUE -- la meme chaine sans Digital Structure.
+#
+# Sert a exercer le plan d'experiences, le metamodele, l'enrichissement EFF,
+# FORM multimodal et le tirage d'importance en quelques secondes, sans
+# licence. La geometrie est lue dans le MEME `.ds` que l'etude reelle : seule
+# l'evaluation de l'etat limite change.
+#
+# A ne pas confondre avec `pure_flexion.toml` : les chiffres produits ici sont
+# ceux d'une formule de section, pas d'un calcul a la rupture. Au point
+# nominal (fc=48, fy=550) la forme fermee donne alpha = 1,3048 contre
+# 1,3321 mesure sur Digital Structure -- 2 % d'ecart, ce qui est l'ordre de
+# grandeur attendu entre une section et un calcul tridimensionnel.
+
+modelname = "test_pure_flexion"
+storage = 'C:\workspace\storage\admin\SF'
+solveur = "analytique"
+
+# --- metamodele
+modele = "PCK"
+max_degree = 0
+max_of_maxdegree = 2
+
+# --- enrichissement : budget serre, un appel ne coute rien
+EFF_criteria = "at_least_one"
+n_max_EFF_points = 15
+
+# --- FORM
+tol_FORM = 0.002
+do_FORM_filter = false
+
+# --- execution : sequentiel, aucun cache, aucun historique
+n_workers_DOE = 1
+config_is_identical = false
+restart_enrich_only = false
+save_history = false
+
+# --- graphiques : rien, on veut des chiffres
+n_grid_hf = 7
+print_HF = false
+print_fullHF = false
+print_DOE = false
+print_3D = false
+print_Pf = false
+do_custom_hf = false
+print_ana = false

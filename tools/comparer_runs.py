@@ -47,6 +47,24 @@ MOTIFS = [
     ("COV", re.compile(r"COV\s*=\s*([-\d.eE+]+)"), None),
 ]
 
+#: Le RESULTAT, par opposition au flux intermediaire ci-dessus.
+#:
+#: La distinction n'est pas cosmetique. Les 41 valeurs de `beta FORM` d'un run
+#: incluent toutes les iterations d'enrichissement, dont l'ORDRE change d'une
+#: execution a l'autre : le critere EFF y presente deux maxima quasi egaux et
+#: un ecart minuscule fait basculer lequel l'emporte. Comparees une a une, ces
+#: 41 valeurs signalent donc un ecart alors que rien n'a bouge.
+#:
+#: Les modes finaux, eux, se sont reveles identiques entre la revision
+#: d'origine et toutes les etapes de restructuration -- alors qu'une simple
+#: repetition du meme code les fait bouger. C'est la grandeur a regarder.
+MOTIFS_FINAUX = [
+    ("mode final", re.compile(
+        r"mode\s+(\d+)\s*:\s*beta=([-\d.eE+]+)\s+Pf=([-\d.eE+]+)\s+u\*=\[([^\]]+)\]")),
+    ("Pf_IS final", re.compile(r"^\s*Pf_IS\s+=\s+([-\d.eE+]+)")),
+    ("beta_IS final", re.compile(r"^\s*beta_IS\s+=\s+([-\d.eE+]+)")),
+]
+
 #: lignes du solveur, sans interet pour la comparaison
 BRUIT = re.compile(r"CTIMER|^\s*\d+\s*\|\s*(normal|corrector)|Liberation de memoire"
                    r"|Ecriture|Lecture|^\s*$|MeshGems|meshgems")
@@ -63,6 +81,68 @@ def extraire(chemin):
                 for m in motif.finditer(ligne):
                     out.setdefault(etiquette, []).append(m.group(m.lastindex))
     return out
+
+
+def extraire_finaux(chemin):
+    """Le resultat de l'etude : modes FORM et tirage d'importance final.
+
+    La ligne complete est conservee, pas seulement un groupe : c'est elle
+    qu'on veut voir cote a cote quand elle diverge.
+    """
+    out = {}
+    with io.open(chemin, encoding="utf-8", errors="replace") as fh:
+        for ligne in fh:
+            for etiquette, motif in MOTIFS_FINAUX:
+                if motif.search(ligne):
+                    out.setdefault(etiquette, []).append(ligne.strip())
+    # Un run reaffiche ses modes a chaque iteration d'enrichissement : seule
+    # la DERNIERE serie compte. On remonte jusqu'au « mode 1 » inclus.
+    if "mode final" in out:
+        garde = []
+        for ligne in reversed(out["mode final"]):
+            garde.insert(0, ligne)
+            if re.match(r"mode\s+1\s*:", ligne):
+                break
+        out["mode final"] = garde
+    for cle in ("Pf_IS final", "beta_IS final"):
+        if cle in out:
+            out[cle] = out[cle][-1:]
+    return out
+
+
+def comparer_finaux(a, b):
+    """Le resultat de l'etude, cote a cote. Renvoie la liste des ecarts REELS.
+
+    Seuls les modes FORM sont juges : ils se sont reveles identiques entre la
+    revision d'origine et toutes les etapes de restructuration. `Pf_IS` et
+    `beta_IS`, eux, portent la dispersion d'un run a l'autre -- 12,3 %
+    mesures -- et sont donc affiches pour information, jamais comme verdict.
+    """
+    fa, fb = extraire_finaux(a), extraire_finaux(b)
+    print("  RESULTAT FINAL")
+    if not fa and not fb:
+        print("    (aucun resultat final reconnu dans ces journaux)")
+        return []
+
+    ecarts = []
+    va, vb = fa.get("mode final", []), fb.get("mode final", [])
+    if va or vb:
+        if va == vb:
+            for ligne in va:
+                print("    modes FORM  identique   %s" % ligne)
+        else:
+            ecarts.append("mode final")
+            print("    modes FORM  DIFFERENTS")
+            for ligne in va:
+                print("      origine : %s" % ligne)
+            for ligne in vb:
+                print("      actuel  : %s" % ligne)
+
+    for cle in ("Pf_IS final", "beta_IS final"):
+        x, y = fa.get(cle, ["?"])[0], fb.get(cle, ["?"])[0]
+        etat = "identique" if x == y else "-- soumis au bruit de run, pas un verdict"
+        print("    %-13s %s  /  %s   %s" % (cle, x, y, etat))
+    return ecarts
 
 
 def _nombres(texte):
@@ -170,6 +250,16 @@ def comparer(a, b, rtol, repetition=None):
             premiere = premiere or etiquette
 
     print("-" * 76)
+    ecarts_finaux = comparer_finaux(a, b)
+    print("-" * 76)
+    if ecarts and not ecarts_finaux:
+        print("Le FLUX intermediaire s'ecarte (%s) mais le RESULTAT est identique."
+              % ", ".join(e.split(" (")[0] for e in ecarts))
+        print("C'est la signature du reordonnancement des points d'enrichissement :")
+        print("deux maxima quasi egaux du critere EFF, dont l'ordre bascule d'un run")
+        print("a l'autre. Le meme reordonnancement s'observe entre deux executions du")
+        print("MEME code -- il ne dit donc rien du code.")
+        return 0
     if not ecarts:
         if er is not None:
             print("Aucun ecart ne depasse le bruit d'une repetition du meme code.")

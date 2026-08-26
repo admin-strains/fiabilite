@@ -143,6 +143,44 @@ Deux enseignements pour l'outil, tous deux corriges :
    journal ecrit `0.310336` d'un cote, `0.310337` de l'autre. La repetition
    donnait par hasard un plancher nul sur cette grandeur.
 
+## Verification de la phase 5 (26/08/2026)
+
+Cinquieme run complet, apres l'isolement de Digital Structure derriere
+`solver/`. Le tableau des grandeurs intermediaires ne conclut rien — leur
+ordre change d'un run a l'autre. Ce qui conclut, ce sont les **modes FORM
+finaux** :
+
+| run | mode 1 | mode 2 |
+|---|---|---|
+| `origine` (`d0ef283`) | β = 5,1309  u* = [−2,363 ; −4,555] | β = 5,3599  u* = [−4,904 ; −2,162] |
+| `actuel` (phases 2 a 4a) | **idem** | **idem** |
+| `4b` | **idem** | **idem** |
+| `5` | **idem** | **idem** |
+| `actuel2` — *repetition du meme code* | β = 5,1385  u* = [−2,353 ; −4,568] | β = 5,3639  u* = [−4,932 ; −2,108] |
+
+Huit etapes de restructuration ne changent pas un chiffre ; **relancer le code
+inchange en change**. C'est l'enonce le plus fort que cette chaine permette.
+
+`tools/comparer_runs.py` distingue desormais ce RESULTAT du flux intermediaire,
+parce que les 41 valeurs de `beta FORM` d'un journal incluent toutes les
+iterations d'enrichissement, dont l'ordre bascule — les comparer une a une
+signale un ecart la ou rien n'a bouge.
+
+## La chaine analytique, elle, est reproductible
+
+La meme chaine sur `solver/analytique.py`, deux executions :
+
+```
+mode 1 : beta=4.7527  Pf=1.004e-06  u*=[-2.793, -3.846]
+Pf_IS = 1.5071e-06     beta_IS = 4.6698
+```
+
+Journaux **identiques hors chronometrage** (226 lignes). Et `beta_FORM =
+4,7527` contre `4,77257` calcule sans metamodele ni FORM : **0,42 %**.
+
+C'est la sortie utile de la phase 5. Un ecart observe sur cette chaine-la est
+imputable au code, ce qui n'a jamais ete vrai sur Digital Structure.
+
 ## Comment refaire la mesure
 
 ```bat

@@ -1,36 +1,20 @@
 """
 CODE FIABILITE - VERSION AVEC DEFINITION DE FONCTIONS
+
+Ce script N'IMPORTE PLUS Digital Structure (phase 5). L'evaluation de l'etat
+limite passe par `solver/fabrique.py`, qui ne charge que l'implementation
+demandee par le fichier d'etude.
 """
 import os
 import json
 import shutil
 import re
-
-from STRAINS.rupt.APIs.CetCAD_API import *
-from STRAINS.rupt.APIs import CetLOAD
-from STRAINS.rupt.APIs.CetLOAD_API import *
-import STRAINS.rupt.core.CetMESH as CetMESH
-from STRAINS.rupt.core import CetSOLV as CetSOLV
-from STRAINS.rupt.core import CetVISU as CetVISU, CetLIST as CetLIST
-from STRAINS.rupt.APIs.CetNOTE_API import *
-from STRAINS.rupt.APIs import CetNOTE
-
-
-def getFile(nameFile):
-    f = open(nameFile, 'r')
-    res = f.read()
-    f.close()
-    return res
-
+import sys                  # etait utilise SANS etre importe : il ne marchait
+                            # que parce que le `import *` de Digital Structure
+                            # le laissait fuiter dans les globales.
 
 #: racine du depot, deduite de ce fichier -- aucun chemin absolu.
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-import launcher as _launcher
-_CATALOG = os.path.join(_launcher.find_ds_root(), "STRAINS", "common", "Catalog")
-catalogTopo = getFile(os.path.join(_CATALOG, "CatalogTopo.json"))
-catalogDimensions = getFile(os.path.join(_CATALOG, "CatalogDimensions.json"))
-catalogBolt = getFile(os.path.join(_CATALOG, "CatalogBolts.json"))
-INITCATALOG(catalogTopo, catalogDimensions, catalogBolt)
 
 import openturns as ot
 import numpy as np
@@ -62,6 +46,7 @@ import eff_ot as _eff_ot
 import form as _form
 import graphiques as _graphiques
 import schema as _schema
+from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
 _IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
 _IS_K        = int(os.environ.get("_IS_K", "16"))
@@ -221,7 +206,7 @@ if __name__ == '__main__':
         #     'C': {'sp': (-0.843, -0.005), 'u*': (-5.341, -6.152)},
         #     'D': {'sp': (-0.694,  2.114), 'u*': (-6.504, -4.966)},
         # }
-        # Gradients HF aux sp (run 1305_0937, 4 appels STRAINS)
+        # Gradients HF aux sp (run 1305_0937, 4 appels solveur)
         grad_sp_fixed = None
         # guide pour hardcoder {
         #     'A': {'g': 0.550023, 'grad': [ 0.039500,  0.072312], 'neg_grad': [-0.039500, -0.072312]},
@@ -347,19 +332,8 @@ if __name__ == '__main__':
     # DEFINTION DE FONCTIONS                                                      #
     # --------------------------------------------------------------------------- #
     # --------------------------------------------------------------------------- #
-    # FONCTION D'APPEL STRAINS ET DOE                                             #
+    # APPEL AU SOLVEUR ET PLAN D'EXPERIENCES                                             #
 
-    # --- DSCAD ET DSLOAD ---
-    def patch_params(path, **params):
-        """Reecrit dsCad.txt et dsLoad.txt avec de nouvelles valeurs de parametres."""
-        for filename in ('dsCad.txt', 'dsLoad.txt'):
-            fpath = os.path.join(path, filename)
-            with open(fpath, 'r') as f:
-                content = f.read()
-            for name, value in params.items():
-                content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}', content, count=1, flags=re.MULTILINE)
-            with open(fpath, 'w') as f:
-                f.write(content)
 
     # --- DISTRIBUTIONS ---
     
@@ -423,160 +397,84 @@ if __name__ == '__main__':
         """
         return _lois.dist_jointe(PARAM_CONFIG, params_names)
 
-    # --- APPELS STRAINS ---
+    # --- APPELS AU SOLVEUR -----------------------------------------------
+    # Toute la mecanique Digital Structure -- reecriture du dsCad, maillage,
+    # SOCP, lecture du dsmetares, archivage des sorties -- vit maintenant dans
+    # `solver/digital_structure.py`. Elle tenait ici en QUATRE exemplaires
+    # (`run_one_SOL` et `run_HF`, dans les deux scripts AC) qui avaient
+    # diverge : `run_HF` codait en dur `global_physical_size = 0.05` et
+    # `geometric_approximation_min = "4"` la ou `run_one_SOL` lisait la
+    # configuration -- alors que les deux alimentent le meme metamodele.
+    # `tests/golden/options_ds.json` en garde la trace.
     _socp_call_counter = [0]
+    _solveurs = {}
 
-    def _save_socp_outputs(path, AnalysisName, prefix_tag, u1=None, u2=None, p_vals=None):
-        """Copie le dsmed cinematique dans SOCP_history/.
-        Un sous-dossier par appel SOCP, nomme prefix_tag + coords."""
-        files_to_save = [
-            f"{AnalysisName}_0_kine.dsmed",
-            "dsCad.txt",
-            "dsLoad.txt",
-        ]
-        import datetime as _dt_save
-        _ts = _dt_save.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        coords_str = ""
-        if p_vals is not None:
-            coords_str = "_" + "_".join(f"{params_names[i]}{p_vals[i]:.6f}" for i in range(len(p_vals)))
-        _socp_root = os.environ.get("_DOE_MAIN_DS") or path
-        sub_dir = os.path.join(_socp_root, "SOCP_history", f"{prefix_tag}_{_ts}{coords_str}")
-        os.makedirs(sub_dir, exist_ok=True)
-        n_saved = 0
-        total_size = 0
-        for f in files_to_save:
-            src = os.path.join(path, f)
-            if os.path.exists(src):
-                dst = os.path.join(sub_dir, f)
-                try:
-                    shutil.copy2(src, dst)
-                    n_saved += 1
-                    total_size += os.path.getsize(src)
-                except Exception as e:
-                    print(f"  [SOCP HISTORY] copy failed for {f} : {e}", flush=True)
-        print(f"  [SOCP HISTORY] {prefix_tag}{coords_str} : {n_saved} fichiers sauves "
-              f"({total_size/1024/1024:.1f} MB) dans {sub_dir}", flush=True)
+    def _solveur(nom=None):
+        """Le solveur de cette etude, un par modele.
 
-    def _sens_key_to_param(k):
-        """Mappe une cle de sensibilite STRAINS vers le nom de variable dans params_names.
-        Correspondance EXACTE 'param:region_key'. General (tous types), robuste."""
-        for p in params_names:
-            sens = PARAM_CONFIG[p]['sens']
-            if k == sens['param'] + ':' + sens['region_key']:
-                return p
-        return None
+        Un worker de DOE parallele travaille sur SA copie du `.ds` : le nom du
+        modele lui est impose par le processus pere. Le solveur est mis en
+        cache pour que son compteur d'appels reste continu.
+        """
+        nom = nom or modelname
+        if nom not in _solveurs:
+            _solveurs[nom] = _fabriquer_solveur(
+                CFG.solveur,
+                chemin_ds=os.path.join(storage, nom + ".ds"),
+                dossier_etude=path_dir,
+                params_names=params_names,
+                regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
+                global_size=global_size,
+                geo_min_approx=geo_min_approx,
+                archiver=save_history,
+            )
+        return _solveurs[nom]
+
+    def _etiquette_socp(prefixe, p_vals, u=None):
+        """Nom du sous-dossier de SOCP_history, dans la forme d'origine."""
+        _socp_call_counter[0] += 1
+        coords = ""
+        if u is not None:
+            coords = f"_u1{float(u[0]):+.3f}_u2{float(u[1]):+.3f}"
+        coords += "_" + "_".join(f"{params_names[i]}{p_vals[i]:.1f}"
+                                 for i in range(len(p_vals)))
+        return f"{prefixe}_{_socp_call_counter[0]:03d}{coords}"
+
+    def _grad_vers_U(grad_X, u_point, T_inv):
+        """Passage du gradient de l'espace physique X a l'espace standard U.
+
+        C'est ici, et pas dans le solveur : la transformation isoprobabiliste
+        appartient a la loi jointe, pas au maillage.
+        """
+        J_Tinv_T = T_inv.gradient(u_point).transpose()
+        return J_Tinv_T * ot.Point(list(grad_X))
 
     def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
         """Lance un calcul complet pour une valeur de FT donnee.
         Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
         Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
         SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
-        path = os.path.join(storage, modelname + ".ds")
-        AnalysisName = 'Yield_analysis0'
-        iteration = 0
+        solveur = _solveur(modelname)
         dist_X = dist_jointe()
         T = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        for i in range (len(SOL)):
-            patch_params(path, **{p: SOL[i][p] for p in params_names})
-            model = MODEL()
-            SET_CONTEXT(model, path)
-            fileName = os.path.join(path, AnalysisName + ".dscad")
+        for i in range(len(SOL)):
+            p_vals = [float(SOL[i][p]) for p in params_names]
+            etiquette = _etiquette_socp("SOL", p_vals) if save_history else None
+            ev = solveur.evaluer({p: SOL[i][p] for p in params_names},
+                                 sensibilite=sensitivity, etiquette=etiquette)
+            if not ev.sain:
+                print("  [SOLVEUR] point %s NON CONVERGE (%s), alpha=%.6f -- il entre "
+                      "quand meme au DOE, comme avant la phase 5"
+                      % (p_vals, ev.diagnostic.get("solver_status"), ev.alpha), flush=True)
+            SOL[i]['g'] = ev.g
 
-            cadfile = open(path + '\\dsCad.txt', 'r')
-            cadscript = cadfile.read()
-            exec(cadscript, globals())
-            model.Save(fileName)
-            print(model.GETERRORS())
-
-            loadfile = open(path + '\\dsLoad.txt', 'r')
-            loadscript = loadfile.read()
-            with CetLOAD.LOAD_MODEL(model, path):
-                exec(loadscript, globals())
-
-            Meshkwargs = {
-                "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
-                "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
-                "global_physical_size": global_size,
-                "max_size": 0.05,
-                "min_size": "-1",
-                "gradation": 1.5,
-                "volume_gradation": 1.5,
-                "optimisation_level": "standard",
-                "anisotropic_ratio": "10",
-                "geometric_approximation_min": str(geo_min_approx),
-                "geometric_approximation_max": "25",
-                "geometric_approximation_on_edge": "false",
-                "geometric_approximation_on_face": "true",
-                "use_surface_proximity": "false",
-                "surface_proximity_ratio": 0,
-                "approach": "kinematic",
-                "write_debug_files": "true",
-                "is_iso": "true",
-                "coeff_on_error": 0.01,
-                "remesh_type": 1,
-                "old_size_factor": 0.0,
-            }
-            Meshkwargs["model_handle"] = model.GETHANDLEPTR()
-            CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
-
-            kwargs = {"scaling": 1, "write_debug_files": "true"}
-            exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals())
-            kwargs["static_params"] = static_params
-            kwargs["cinematic_params"] = cinematic_params
-            kwargs["MKLPardiso_params"] = MKLPardiso_params
-            kwargs["MyPardiso_params"] = MyPardiso_params
-            kwargs["MUMPS_params"] = MUMPS_params
-            kwargs["FullLorentz"] = False
-            kwargs["LorentzToSdp"] = False
-            kwargs["SdpToLorentz"] = 0
-            kwargs["printIntPointSolutioEvolution"] = False
-            kwargs["trace_sur_point_integration"] = False
-            kwargs["calculate_error"] = "false"
-            kwargs["max_nbOfDiv"] = 0
-            kwargs["customized_inc"] = [1]
-            kwargs["tetra_discontinuities"] = False
-            kwargs["activated_plasticity"] = True
-            kwargs["welds_throat_limit"] = True
-            kwargs["approach"] = "kinematic"
-
-            if sensitivity:
-                kwargs["sensitivity_analysis"] = "true"
-                kwargs["sensitivity_regions"] = json.dumps(
-                    [PARAM_CONFIG[p]['sens'] for p in params_names]
-                )
-
-            kwargs["model_handle"] = model.GETHANDLEPTR()
-            CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs)
-
-            # Lire le resultat
-            metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares")
-            with open(metares_path, 'r') as f:
-                d = json.load(f)
-            SOL[i]['g']=d['info']['Primal_bound'][0] -1
-            if save_history:
-                _socp_call_counter[0] += 1
-                _save_socp_outputs(path, AnalysisName,
-                                   prefix_tag=f"SOL_{_socp_call_counter[0]:03d}",
-                                   p_vals=[float(SOL[i][p]) for p in params_names])
-            # --- Lecture sensibilites et conversion X -> U ---
-            grad_X = [None] * n_var
-            if sensitivity and 'Sensitivity' in d['info']:
-                print(f"les sensibilites sont calculees pour les elements : {d['info']['Sensitivity'].items()}")
-                for k, v in d['info']['Sensitivity'].items():
-                    p = _sens_key_to_param(k)
-                    if p is not None:
-                        grad_X[params_names.index(p)] = v
-                    if all(g is not None for g in grad_X):
-                        break
-            # Conversion en espace U
-            x_point = ot.Point([float(SOL[i][p]) for p in params_names])
+            # --- Conversion X -> U ---
+            x_point = ot.Point(p_vals)
             u_point = T(x_point)
             SOL[i]['_u'] = [float(u_point[j]) for j in range(n_var)]
-            if sensitivity and all(g is not None for g in grad_X):
-                J_Tinv = T_inv.gradient(u_point)
-                J_Tinv_T = J_Tinv.transpose()
-                grad_U = J_Tinv_T * ot.Point(grad_X)
+            if sensitivity and ev.gradient_complet:
+                grad_U = _grad_vers_U(ev.grad_x, u_point, T_inv)
                 for j, p in enumerate(params_names):
                     SOL[i][f'dg_{p}'] = float(grad_U[j])
             else:
@@ -587,123 +485,43 @@ if __name__ == '__main__':
             _save_doe_cache_incremental(SOL, _n_done)
         return SOL
 
-    _run_HF_count = [0]  # compteur pour le print memoire (temporaire)
     def run_HF(u):
-        import psutil as _psutil_hf
-        _mem_before = _psutil_hf.Process(os.getpid()).memory_info().rss / 1024 / 1024
-        sensitivity = True
-        n_var = len(u)
+        """Evalue l'etat limite en UN point de l'espace standard U.
+
+        Sert a l'enrichissement EFF, a la grille haute fidelite et au FOSM.
+        Les points qu'elle produit rejoignent le plan d'experiences : elle doit
+        donc mailler EXACTEMENT comme `run_one_SOL`, ce qui n'etait pas le cas
+        avant la phase 5.
+        """
+        solveur = _solveur()
+        n_var_local = len(u)
         dist_X = dist_jointe()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation() 
-        u_point = ot.Point(u)
+        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        u_point = ot.Point(list(u))
         x_point = T_inv(u_point)
-        path = os.path.join(storage, modelname + ".ds")
-        AnalysisName = 'Yield_analysis0'
-        iteration = 0
-        params={params_names[i]: x_point[i] for i in range(n_var)}
-        patch_params(path, **params) 
-        model = MODEL() 
-        SET_CONTEXT(model, path)
-        fileName = os.path.join(path, AnalysisName + ".dscad") 
+        p_vals = [float(x_point[j]) for j in range(n_var_local)]
 
-        cadfile = open(path + '\\dsCad.txt', 'r')
-        cadscript = cadfile.read() #on met dans cadscript les info de dsCad.txt
-        exec(cadscript, globals()) # ici on modifie le modèle (C, cython) et donc les variables (on exécute le script de dsCad.txt ce qui modifie les variables - rien dans .dscad, tout dans var. en mémoire)
-        model.Save(fileName) # ici on créé dscad et on enregistre les modifs des variables dans .dscad
-        print(model.GETERRORS()) # est vide si pas de message d'erreur sur le logiciel
+        etiquette = _etiquette_socp("HF", p_vals, u=u) if save_history else None
+        ev = solveur.evaluer({params_names[i]: x_point[i] for i in range(n_var_local)},
+                             sensibilite=True, etiquette=etiquette)
+        if not ev.sain:
+            print("  [SOLVEUR] run_HF %s NON CONVERGE (%s), alpha=%.6f"
+                  % (list(u), ev.diagnostic.get("solver_status"), ev.alpha), flush=True)
+        g_HF = ev.g
 
-        loadfile = open(path + '\\dsLoad.txt', 'r')
-        loadscript = loadfile.read()
-        with CetLOAD.LOAD_MODEL(model, path): #par with on appelle enter et exit et on force l'enregistrement par exit meme si erreur/ bug dans bloc.
-            exec(loadscript, globals()) # pareil, on execute dsLoad et on enregistre dans var. mémoire
-
-        Meshkwargs = { #définit la mesh - pas à comprendre ici car ne sera pas modifié. 
-            "cadSurfOptions": {"volume_gradation": 1.5, "gradation": 1.5, "anisotropic_ratio": 10},
-            "tetraOptions": {"optimisation_level": "standard", "verbose": "10"},
-            "global_physical_size": 0.05,  # mesh fin pour bonne convergence
-            "max_size": 0.05,
-            "min_size": "-1",
-            "gradation": 1.5,
-            "volume_gradation": 1.5,
-            "optimisation_level": "standard",
-            "anisotropic_ratio": "10",
-            "geometric_approximation_min": "4",
-            "geometric_approximation_max": "25",
-            "geometric_approximation_on_edge": "false",
-            "geometric_approximation_on_face": "true",
-            "use_surface_proximity": "false",
-            "surface_proximity_ratio": 0,
-            "approach": "kinematic",
-            "write_debug_files": "true",
-            "is_iso": "true",
-            "coeff_on_error": 0.01,
-            "remesh_type": 1,
-            "old_size_factor": 0.0,
-        }
-        Meshkwargs["model_handle"] = model.GETHANDLEPTR()
-        CetMESH.ANISO_MESH(AnalysisName, iteration, path, **Meshkwargs)
-
-        kwargs = {"scaling": 1, "write_debug_files": "true"} # ci-dessous on définit dict kwargs en entrée de SOLV.
-        exec(open(os.path.join(path_dir, "InitSolver.py")).read(), globals()) #question pour Agnes : je ne suis pas sure que ca marche comme ca.
-        kwargs["static_params"] = static_params
-        kwargs["cinematic_params"] = cinematic_params
-        kwargs["MKLPardiso_params"] = MKLPardiso_params
-        kwargs["MyPardiso_params"] = MyPardiso_params
-        kwargs["MUMPS_params"] = MUMPS_params
-        kwargs["FullLorentz"] = False
-        kwargs["LorentzToSdp"] = False
-        kwargs["SdpToLorentz"] = 0
-        kwargs["printIntPointSolutioEvolution"] = False
-        kwargs["trace_sur_point_integration"] = False
-        kwargs["calculate_error"] = "false"
-        kwargs["max_nbOfDiv"] = 0
-        kwargs["customized_inc"] = [1]
-        kwargs["tetra_discontinuities"] = False
-        kwargs["activated_plasticity"] = True
-        kwargs["welds_throat_limit"] = True
-        kwargs["approach"] = "kinematic"
-
-        if sensitivity:
-            kwargs["sensitivity_analysis"] = "true"
-            kwargs["sensitivity_regions"] = json.dumps(
-                [PARAM_CONFIG[p]['sens'] for p in params_names]
-            )
-
-        kwargs["model_handle"] = model.GETHANDLEPTR()
-        CetSOLV.SOLV(AnalysisName, iteration, path, **kwargs) #On relance le solveur avec le nouveau dsCad.
-
-        # Lire le resultat
-        metares_path = os.path.join(path, AnalysisName + "_0_kine.dsmetares") #on extrait l'addresse du fichier pour définir f
-        with open(metares_path, 'r') as f: #f est le fichier créé par open, et on a with donc enter de fichier = donne accès au fichier (accès via f, toujours mettre as f) puis exit : ferme le fichier (qui reste lié à f)
-            d = json.load(f) #chargement du fichier .dsmetares
-        g_HF=d['info']['Primal_bound'][0] -1
-        if save_history:
-            _socp_call_counter[0] += 1
-            _save_socp_outputs(path, AnalysisName,
-                               prefix_tag=f"HF_{_socp_call_counter[0]:03d}",
-                               u1=float(u[0]), u2=float(u[1]),
-                               p_vals=[float(x_point[j]) for j in range(n_var)])
-        grad_HF_X=[None]*n_var
-        grad_HF_U=[None]*n_var
-        if sensitivity and 'Sensitivity' in d['info']:
-            print(f"les sensibilités sont calculées pour les elements : {d['info']['Sensitivity'].items()}")
-            for k, v in d['info']['Sensitivity'].items():
-                p = _sens_key_to_param(k)
-                if p is not None:
-                    grad_HF_X[params_names.index(p)] = v
-                if all(grad_HF_X[i] is not None for i in range(n_var)):
-                    break
-            J_Tinv = T_inv.gradient(u)
-            J_Tinv_T = J_Tinv.transpose()
-            grad_HF_U = J_Tinv_T * ot.Point(grad_HF_X)
-        if sensitivity and any(v is None for v in grad_HF_U):
-            raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que STRAINS a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
+        grad_HF_X = list(ev.grad_x)
+        grad_HF_U = [None] * n_var_local
+        if ev.gradient_complet:
+            grad_HF_U = _grad_vers_U(grad_HF_X, u, T_inv)
+        if any(v is None for v in grad_HF_U):
+            raise ValueError(f"run_HF : sensibilité demandée mais grad_HF_U contient None — vérifier que le solveur a bien calculé les sensibilités. grad_HF_X={grad_HF_X}")
         _append_point_log(_point_log_phase[0], u, x_point, g_HF)
-        _mem_after = _psutil_hf.Process(os.getpid()).memory_info().rss / 1024 / 1024
-        _run_HF_count[0] += 1
-        if _run_HF_count[0] <= 2:  # print seulement les 2 premiers appels
-            print(f"[MEM run_HF #{_run_HF_count[0]}] avant={_mem_before:.0f} MB  apres={_mem_after:.0f} MB  delta={_mem_after-_mem_before:+.0f} MB", flush=True)
         return g_HF, grad_HF_U, grad_HF_X
+
+
+
+
+    _run_HF_count = [0]  # compteur pour le print memoire (temporaire)
 
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
@@ -2026,7 +1844,7 @@ if __name__ == '__main__':
         _n_skipped = sum(1 for v in Z_flat if v is not None)
         _n_to_compute = n_total - _n_skipped
         _t_start = _time_local.perf_counter()
-        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points STRAINS ({context})"
+        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points solveur ({context})"
               f" [skip {_n_skipped}, calcul {_n_to_compute}] #####", flush=True)
         _n_computed = 0
         for i, pt in enumerate(grid_hf):
@@ -2045,7 +1863,7 @@ if __name__ == '__main__':
             print(f"  [HF GRID {_n_skipped + _n_computed:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({_n_computed} appels STRAINS, {_n_skipped} skip) #####\n", flush=True)
+        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({_n_computed} appels solveur, {_n_skipped} skip) #####\n", flush=True)
         Z = np.array(Z_flat, dtype=float).reshape(n_grid_hf_local, n_grid_hf_local)
         _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
         if grid_var_name == 'hf_2d_grid_fixed_final':
@@ -2072,7 +1890,7 @@ if __name__ == '__main__':
         return _cache_hf.save_hf_grid_full(_HF_FULL_CACHE_FILE, Z_full, n_var, n_grid_hf)
 
     def _compute_hf_grid_full():
-        """Calcule la grille HF complete (n_grid_hf^n_var points STRAINS)."""
+        """Calcule la grille HF complete (n_grid_hf^n_var points solveur)."""
         cached = _load_hf_grid_full()
         if cached is not None:
             _hf_grid_full[0] = cached
@@ -2087,7 +1905,7 @@ if __name__ == '__main__':
         n_total = len(grid_flat)
         Z_flat = []
         _t_start = _time_local.perf_counter()
-        print(f"\n##### HF FULL GRID START: {n_grid_hf}^{n_var} = {n_total} points STRAINS #####", flush=True)
+        print(f"\n##### HF FULL GRID START: {n_grid_hf}^{n_var} = {n_total} points solveur #####", flush=True)
         for i, pt in enumerate(grid_flat):
             _t_pt0 = _time_local.perf_counter()
             g_val = run_HF(pt)[0]
@@ -2100,7 +1918,7 @@ if __name__ == '__main__':
             print(f"  [HF FULL {i+1:3d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
                   f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
         _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF FULL GRID DONE in {_t_total:.1f} min ({n_total} appels STRAINS) #####\n", flush=True)
+        print(f"\n##### HF FULL GRID DONE in {_t_total:.1f} min ({n_total} appels solveur) #####\n", flush=True)
         Z_full = np.array(Z_flat).reshape([n_grid_hf] * n_var)
         _hf_grid_full[0] = Z_full
         _hf_grid_full_axes[0] = axes
@@ -2763,7 +2581,7 @@ if __name__ == '__main__':
 
     def print_3D_HF():
         if hf_3d_grid_fixed is not None:
-            print("Cache hf_3d_grid_fixed disponible — pas d'appels STRAINS.", flush=True)
+            print("Cache hf_3d_grid_fixed disponible — pas d'appels solveur.", flush=True)
             u1_min_c, u1_max_c, u2_min_c, u2_max_c, n_c = hf_3d_grid_fixed['params']
             u1_hf = np.linspace(u1_min_c, u1_max_c, n_c)
             u2_hf = np.linspace(u2_min_c, u2_max_c, n_c)
@@ -2774,7 +2592,7 @@ if __name__ == '__main__':
             u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
             U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
             grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-            print(f"Evaluation HF grille {n_grid_hf}x{n_grid_hf} = {n_grid_hf**2} appels STRAINS...", flush=True)
+            print(f"Evaluation HF grille {n_grid_hf}x{n_grid_hf} = {n_grid_hf**2} appels solveur...", flush=True)
             Z_flat = [run_HF(pt)[0] for pt in grid_hf]
             Z = np.array(Z_flat).reshape(n_grid_hf, n_grid_hf)
 

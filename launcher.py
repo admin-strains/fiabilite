@@ -125,7 +125,8 @@ def setup(ds_root):
     for p in (ds_root, REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
               os.path.join(REPO, "_cache"),
               os.path.join(REPO, "_reliability"),
-              os.path.join(REPO, "_config")):
+              os.path.join(REPO, "_config"),
+              os.path.join(REPO, "solver")):
         if p not in sys.path:
             sys.path.insert(0, p)
 

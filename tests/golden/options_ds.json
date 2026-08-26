@@ -1,0 +1,313 @@
+{
+ "_revision": "1d40af6",
+ "copies": {
+  "moulin_blanc/run_HF": {
+   "maillage": {
+    "anisotropic_ratio": "10",
+    "approach": "kinematic",
+    "cadSurfOptions": {
+     "anisotropic_ratio": 10,
+     "gradation": 1.5,
+     "volume_gradation": 1.5
+    },
+    "coeff_on_error": 0.01,
+    "geometric_approximation_max": "25",
+    "geometric_approximation_min": "4",
+    "geometric_approximation_on_edge": "false",
+    "geometric_approximation_on_face": "true",
+    "global_physical_size": 0.05,
+    "gradation": 1.5,
+    "is_iso": "true",
+    "max_size": 0.05,
+    "min_size": "-1",
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "old_size_factor": 0.0,
+    "optimisation_level": "standard",
+    "remesh_type": 1,
+    "surface_proximity_ratio": 0,
+    "tetraOptions": {
+     "optimisation_level": "standard",
+     "verbose": "10"
+    },
+    "use_surface_proximity": "false",
+    "volume_gradation": 1.5,
+    "write_debug_files": "true"
+   },
+   "solveur": {
+    "FullLorentz": false,
+    "LorentzToSdp": false,
+    "MKLPardiso_params": {
+     "_expression": "MKLPardiso_params"
+    },
+    "MUMPS_params": {
+     "_expression": "MUMPS_params"
+    },
+    "MyPardiso_params": {
+     "_expression": "MyPardiso_params"
+    },
+    "SdpToLorentz": 0,
+    "activated_plasticity": true,
+    "approach": "kinematic",
+    "calculate_error": "false",
+    "cinematic_params": {
+     "_expression": "cinematic_params"
+    },
+    "customized_inc": [
+     1
+    ],
+    "max_nbOfDiv": 0,
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "printIntPointSolutioEvolution": false,
+    "scaling": 1,
+    "sensitivity_analysis": "true",
+    "sensitivity_regions": {
+     "_expression": "json.dumps([PARAM_CONFIG[p]['sens'] for p in params_names])"
+    },
+    "static_params": {
+     "_expression": "static_params"
+    },
+    "tetra_discontinuities": false,
+    "trace_sur_point_integration": false,
+    "welds_throat_limit": true,
+    "write_debug_files": "true"
+   }
+  },
+  "moulin_blanc/run_one_SOL": {
+   "maillage": {
+    "anisotropic_ratio": "10",
+    "approach": "kinematic",
+    "cadSurfOptions": {
+     "anisotropic_ratio": 10,
+     "gradation": 1.5,
+     "volume_gradation": 1.5
+    },
+    "coeff_on_error": 0.01,
+    "geometric_approximation_max": "25",
+    "geometric_approximation_min": {
+     "_expression": "str(geo_min_approx)"
+    },
+    "geometric_approximation_on_edge": "false",
+    "geometric_approximation_on_face": "true",
+    "global_physical_size": {
+     "_expression": "global_size"
+    },
+    "gradation": 1.5,
+    "is_iso": "true",
+    "max_size": 0.05,
+    "min_size": "-1",
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "old_size_factor": 0.0,
+    "optimisation_level": "standard",
+    "remesh_type": 1,
+    "surface_proximity_ratio": 0,
+    "tetraOptions": {
+     "optimisation_level": "standard",
+     "verbose": "10"
+    },
+    "use_surface_proximity": "false",
+    "volume_gradation": 1.5,
+    "write_debug_files": "true"
+   },
+   "solveur": {
+    "FullLorentz": false,
+    "LorentzToSdp": false,
+    "MKLPardiso_params": {
+     "_expression": "MKLPardiso_params"
+    },
+    "MUMPS_params": {
+     "_expression": "MUMPS_params"
+    },
+    "MyPardiso_params": {
+     "_expression": "MyPardiso_params"
+    },
+    "SdpToLorentz": 0,
+    "activated_plasticity": true,
+    "approach": "kinematic",
+    "calculate_error": "false",
+    "cinematic_params": {
+     "_expression": "cinematic_params"
+    },
+    "customized_inc": [
+     1
+    ],
+    "max_nbOfDiv": 0,
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "printIntPointSolutioEvolution": false,
+    "scaling": 1,
+    "sensitivity_analysis": "true",
+    "sensitivity_regions": {
+     "_expression": "json.dumps([PARAM_CONFIG[p]['sens'] for p in params_names])"
+    },
+    "static_params": {
+     "_expression": "static_params"
+    },
+    "tetra_discontinuities": false,
+    "trace_sur_point_integration": false,
+    "welds_throat_limit": true,
+    "write_debug_files": "true"
+   }
+  },
+  "pure_flexion/run_HF": {
+   "maillage": {
+    "anisotropic_ratio": "10",
+    "approach": "kinematic",
+    "cadSurfOptions": {
+     "anisotropic_ratio": 10,
+     "gradation": 1.5,
+     "volume_gradation": 1.5
+    },
+    "coeff_on_error": 0.01,
+    "geometric_approximation_max": "25",
+    "geometric_approximation_min": "4",
+    "geometric_approximation_on_edge": "false",
+    "geometric_approximation_on_face": "true",
+    "global_physical_size": 0.05,
+    "gradation": 1.5,
+    "is_iso": "true",
+    "max_size": 0.05,
+    "min_size": "-1",
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "old_size_factor": 0.0,
+    "optimisation_level": "standard",
+    "remesh_type": 1,
+    "surface_proximity_ratio": 0,
+    "tetraOptions": {
+     "optimisation_level": "standard",
+     "verbose": "10"
+    },
+    "use_surface_proximity": "false",
+    "volume_gradation": 1.5,
+    "write_debug_files": "true"
+   },
+   "solveur": {
+    "FullLorentz": false,
+    "LorentzToSdp": false,
+    "MKLPardiso_params": {
+     "_expression": "MKLPardiso_params"
+    },
+    "MUMPS_params": {
+     "_expression": "MUMPS_params"
+    },
+    "MyPardiso_params": {
+     "_expression": "MyPardiso_params"
+    },
+    "SdpToLorentz": 0,
+    "activated_plasticity": true,
+    "approach": "kinematic",
+    "calculate_error": "false",
+    "cinematic_params": {
+     "_expression": "cinematic_params"
+    },
+    "customized_inc": [
+     1
+    ],
+    "max_nbOfDiv": 0,
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "printIntPointSolutioEvolution": false,
+    "scaling": 1,
+    "sensitivity_analysis": "true",
+    "sensitivity_regions": {
+     "_expression": "json.dumps([PARAM_CONFIG[p]['sens'] for p in params_names])"
+    },
+    "static_params": {
+     "_expression": "static_params"
+    },
+    "tetra_discontinuities": false,
+    "trace_sur_point_integration": false,
+    "welds_throat_limit": true,
+    "write_debug_files": "true"
+   }
+  },
+  "pure_flexion/run_one_SOL": {
+   "maillage": {
+    "anisotropic_ratio": "10",
+    "approach": "kinematic",
+    "cadSurfOptions": {
+     "anisotropic_ratio": 10,
+     "gradation": 1.5,
+     "volume_gradation": 1.5
+    },
+    "coeff_on_error": 0.01,
+    "geometric_approximation_max": "25",
+    "geometric_approximation_min": {
+     "_expression": "str(geo_min_approx)"
+    },
+    "geometric_approximation_on_edge": "false",
+    "geometric_approximation_on_face": "true",
+    "global_physical_size": {
+     "_expression": "global_size"
+    },
+    "gradation": 1.5,
+    "is_iso": "true",
+    "max_size": 0.05,
+    "min_size": "-1",
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "old_size_factor": 0.0,
+    "optimisation_level": "standard",
+    "remesh_type": 1,
+    "surface_proximity_ratio": 0,
+    "tetraOptions": {
+     "optimisation_level": "standard",
+     "verbose": "10"
+    },
+    "use_surface_proximity": "false",
+    "volume_gradation": 1.5,
+    "write_debug_files": "true"
+   },
+   "solveur": {
+    "FullLorentz": false,
+    "LorentzToSdp": false,
+    "MKLPardiso_params": {
+     "_expression": "MKLPardiso_params"
+    },
+    "MUMPS_params": {
+     "_expression": "MUMPS_params"
+    },
+    "MyPardiso_params": {
+     "_expression": "MyPardiso_params"
+    },
+    "SdpToLorentz": 0,
+    "activated_plasticity": true,
+    "approach": "kinematic",
+    "calculate_error": "false",
+    "cinematic_params": {
+     "_expression": "cinematic_params"
+    },
+    "customized_inc": [
+     1
+    ],
+    "max_nbOfDiv": 0,
+    "model_handle": {
+     "_expression": "model.GETHANDLEPTR()"
+    },
+    "printIntPointSolutioEvolution": false,
+    "scaling": 1,
+    "sensitivity_analysis": "true",
+    "sensitivity_regions": {
+     "_expression": "json.dumps([PARAM_CONFIG[p]['sens'] for p in params_names])"
+    },
+    "static_params": {
+     "_expression": "static_params"
+    },
+    "tetra_discontinuities": false,
+    "trace_sur_point_integration": false,
+    "welds_throat_limit": true,
+    "write_debug_files": "true"
+   }
+  }
+ }
+}

@@ -197,15 +197,24 @@ def test_les_scripts_ac_ne_portent_plus_que_des_delegues(rel):
 
 
 def test_ce_qui_reste_dans_main_est_documente():
-    """Deux fonctions du bloc cache n'ont PAS ete extraites. Ce test empeche
-    de l'oublier -- et tombera le jour ou elles le seront."""
+    """Ce qui n'a PAS ete extrait du bloc cache. Ce test empeche de l'oublier
+    -- et tombe le jour ou c'est fait, pour qu'on mette a jour le plan.
+
+    `_save_socp_outputs` est parti en phase 5, comme annonce : il manipulait
+    les sorties du solveur, il vit maintenant dans
+    `solver/digital_structure.py:SolveurDS.archiver_sorties`.
+    """
     import re
     src = open(os.path.join(REPO, "pure_flexion", "AC3_pure_flexion.py"),
                encoding="utf-8", errors="replace").read()
     # _save_restart_state : 14 variables libres, c'est un instantane de main,
     #                       pas un cache -- il suivra la refonte de la config.
-    # _save_socp_outputs  : differe entre les deux AC, et manipule les sorties
-    #                       du solveur : il ira avec la couche solveur.
-    for nom in ("_save_restart_state", "_save_socp_outputs"):
+    for nom in ("_save_restart_state",):
         assert re.search(r"(?m)^\s+def %s\(" % nom, src), \
             f"{nom} a ete extrait : mettre a jour ce test et le plan"
+    # ... et celle qui est bien partie ne doit pas revenir.
+    assert not re.search(r"(?m)^\s+def _save_socp_outputs\(", src), \
+        "_save_socp_outputs est reapparu dans le script AC"
+    solveur = open(os.path.join(REPO, "solver", "digital_structure.py"),
+                   encoding="utf-8", errors="replace").read()
+    assert "def archiver_sorties" in solveur

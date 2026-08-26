@@ -268,6 +268,57 @@ Trois consequences qui depassent la configuration :
    `tools/golden_config.py`, et trois tests interdisent qu'il se vide en
    silence.
 
+**Phase 5 — isolement de Digital Structure, FAIT.** La surface de couplage
+etait minuscule et pourtant recopiee QUATRE fois : `run_one_SOL` et `run_HF`,
+dans les deux scripts AC, ~90 lignes chacune. Tout le reste — 2 700 lignes de
+plan d'experiences, metamodele, enrichissement, FORM et tirage d'importance —
+etait deja du Python pur.
+
+Le releve prealable par AST (`tools/golden_options_ds.py`) a montre que sur
+22 options de maillage et 22 options de solveur, **deux avaient diverge** :
+
+    global_physical_size          run_one_SOL : `global_size` (configuration)
+                                  run_HF      : 0.05 (en dur)
+    geometric_approximation_min   run_one_SOL : `str(geo_min_approx)`
+                                  run_HF      : "4" (en dur)
+
+Or `run_HF` sert aux points d'ENRICHISSEMENT EFF, qui rejoignent le plan
+d'experiences : regler `global_size = 0.007` — ce que le commentaire d'origine
+invitait a faire — aurait entraine le metamodele sur des points calcules avec
+DEUX MAILLAGES DIFFERENTS, sans un mot. Le defaut etait dormant, les deux
+etudes etant a 0.05. Une seule implementation ne peut plus diverger d'elle-meme.
+
+Ce que la phase a produit :
+
+- `solver/interface.py` — le contrat. Le solveur rend `g`, `alpha`, le gradient
+  DANS L'ESPACE PHYSIQUE et son ETAT DE SANTE. Le passage en espace standard
+  reste cote fiabilite : la transformation isoprobabiliste appartient a la loi
+  jointe, pas au maillage.
+- `solver/digital_structure.py` — la seule porte vers Digital Structure.
+  Options recopiees valeur par valeur, verifiees contre le golden.
+- `solver/analytique.py` — le meme contrat sur la forme fermee, geometrie lue
+  dans les MEMES fichiers texte du `.ds`.
+- `solver/fabrique.py` — ne charge que l'implementation demandee, ce qui est
+  toute la raison pour laquelle les scripts AC n'ont plus besoin d'une licence.
+
+**Les deux scripts AC n'importent plus Digital Structure du tout.** Une fois
+les appels delegues, les seuls noms qu'ils lui empruntaient encore etaient
+`INITCATALOG` — passe dans l'implementation — et `sys`, qui n'etait jamais
+importe et ne marchait que parce que le `import *` le laissait fuiter
+(defaut 7, corrige). L'espace de noms d'un script AC passe de **302 a 51
+symboles** avant `__main__`.
+
+Deux mesures pour finir :
+
+1. **La chaine complete tourne sur l'etat limite analytique** et retrouve
+   `beta_FORM = 4,7527` contre `4,77257` calcule sans metamodele et sans FORM
+   (minimisation scalaire a 1e-12) : **0,42 %**. Le journal fait 226 lignes au
+   lieu de 20 000.
+2. **Elle est bit-reproductible.** Deux executions donnent des journaux
+   identiques hors chronometrage — la ou la meme chaine sur Digital Structure
+   affiche 12,3 % d'etendue sur `Pf_IS`. C'est ce qui permet enfin d'attribuer
+   un ecart au code plutot qu'au solveur.
+
 **La mesure la plus importante du chantier** n'est pas une etape du plan mais
 son resultat : `docs/reproductibilite-chaine-complete.md`. Digital Structure
 n'est pas reproductible au bit pres — meme point, meme maillage, memes 23
@@ -396,13 +447,20 @@ configuration et un runner commun ». Le bloc de liaison
 variables globales — il tombe avec la phase 5, quand `CFG` sera passe en
 argument.
 
-### Phase 5 — Isoler Digital Structure · 3 j
+### Phase 5 — Isoler Digital Structure · FAIT
 
-Interface `solver/` a deux implementations (cf. §3.2). Permet enfin de tester
-la chaine **complete** — DOE, enrichissement EFF, FORM multimodal, IS — sur
-l'etat limite analytique, en secondes, sans licence ni GPU.
+Interface `solver/` a deux implementations. Voir §2 pour le detail de ce qui a
+ete mesure : la surface de couplage tenait en QUATRE copies du meme appel, qui
+avaient diverge sur la taille de maille.
 
-*Sortie : un test de bout en bout qui tourne dans la CI.*
+*Sortie obtenue : la chaine complete — plan d'experiences, metamodele,
+enrichissement EFF, FORM multimodal, tirage d'importance — tourne sur l'etat
+limite analytique, sans licence ni GPU, et retrouve `beta = 4,7527` contre
+`4,77257` exact (0,42 %).*
+
+Reste a faire pour boucler : porter ce run dans la CI, une fois la chaine
+assez rapide pour y tenir (elle prend quelques minutes, dominees par les
+iterations FORM+IS, pas par le solveur).
 
 ### Phase 6 — Corriger les quatre defauts · 3 a 5 j
 
