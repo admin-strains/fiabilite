@@ -1244,7 +1244,7 @@ if __name__ == '__main__':
 
         # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func = None, None, None
-        xt_eff = list(_restart_xt_eff)
+        xt_eff = list(_restart_xt_eff)   # survit sans enrichissement : test_111
     else:
         # --- Reset log incremental ---
         open(_POINT_LOG_FILE, "w").close()
