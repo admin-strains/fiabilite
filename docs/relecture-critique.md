@@ -103,6 +103,7 @@ _reliability/eff.py         (existe)    5 fonctions    401 l.
 _reliability/form.py        (existe)    7 fonctions     79 l.
 _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
+_etapes/figurer.py          (existe)    2 fonctions     74 l.
 _surrogate/                 A CREER     9 fonctions    279 l.
 _doe/                       A CREER     6 fonctions    332 l.
 ---------------------------------------------------------------
@@ -111,7 +112,9 @@ RESTE dans l'AC                         7 fonctions    108 l.
 
 Ce qui reste legitimement dans un AC : `dist_jointe`, `_solveur`,
 `_grad_vers_U`, `_etiquette_socp`, `_is_position_var`,
-`_find_position_var_index`, `_tracer_domaine_physique` -- plus `PARAM_CONFIG`.
+`_find_position_var_index` -- plus `PARAM_CONFIG`. (`_tracer_domaine_physique`
+est partie dans `_etapes/figurer.py` le 27/08 : elle etait identique au
+caractere pres dans les deux etudes.)
 Autrement dit **le probleme pose**, et rien d'autre.
 
 **Cible : un AC de 150 a 250 lignes**, contre 3 000.
@@ -126,6 +129,40 @@ d'oracle a sa propre refonte. Son docstring dit l'intention d'origine :
 > entierement vide de sa logique, il n'aura plus d'original a offrir. »
 
 Le travail s'est arrete a mi-chemin. La phase 0 le termine.
+
+### Avancement
+
+| mesure | 26/08 matin | 27/08 | cible |
+|---|---:|---:|---:|
+| `AC3_pure_flexion.py` | 2 976 l. | **2 974 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 880 l.** | <= 250 |
+| fonctions imbriquees | 58 / 60 | **55 / 55** | <= 8 |
+| fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
+| machinerie importee par l'AC | 9 | 4 | 0 |
+
+Le chiffre qui compte est le quatrieme, et il est desormais **nul et
+verrouille** (`test_93`, plafond 0, plus de `xfail`). Trois soudures ont ete
+defaites le 27/08 :
+
+* `init_g_ot` portait **sept fois** la meme ligne cachee
+  `if xt is None: xt, yt, all_grad = build_DOE()`, une par branche de
+  surrogate. Ajuster un metamodele pouvait donc lancer le plan d'experiences
+  entier -- c'est par la qu'une FIGURE (`print_globalplanche_EFF`) atteignait
+  `run_DOE_parallel`. La ligne est remontee chez l'appelant, en clair, a
+  l'endroit unique ou le plan doit reellement etre construit. Au passage, la
+  branche `do_HF` recevait un TRIPLET dans une variable unique (`xt =
+  build_DOE()`) : `xt` devenait un tuple, silencieusement.
+* `print_results` imprimait FORM (gratuit) **puis** evaluait l'etat limite
+  exact en deux points pour l'erreur FOSM. Scindee en `resume_FORM` (0 appel)
+  et `erreur_FOSM` (2 appels par mode, desormais sous `CFG.erreur_fosm`).
+* `print_3D_HF` calculait la grille haute fidelite -- `n_grid_hf^2` appels,
+  soit 29 h sur le Moulin Blanc pour une grille 15x15 -- avant de la dessiner.
+  Scindee en `grille_3D` (l'action) et `print_3D_HF(U1, U2, Z)` (le dessin).
+
+`_etapes/figurer.py` est ne de ce mouvement : il recoit ce qui a deja ete
+calcule et ne va jamais le chercher. `tests/test_93` construit son graphe
+d'appel et verifie la fermeture transitive -- une seule arete vers le solveur,
+meme a travers trois intermediaires, fait echouer la suite.
 
 ### Ordre d'extraction (du moins risque au plus risque)
 

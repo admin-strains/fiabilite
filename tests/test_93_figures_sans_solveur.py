@@ -130,8 +130,6 @@ def test_la_detection_ne_boucle_pas_sur_une_recursion(tmp_path):
 # --------------------------------------------------------------------- #
 # la mesure sur les scripts d'aujourd'hui
 # --------------------------------------------------------------------- #
-@pytest.mark.xfail(strict=False, reason="phase 0 en cours : le trace et le "
-                                        "calcul de grille sont encore melanges")
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_aucune_fonction_de_trace_n_appelle_le_solveur(script):
     """LE critere structurel. Tant qu'il est rouge, `n_grid_hf` est un budget
@@ -151,7 +149,10 @@ def test_aucune_fonction_de_trace_n_appelle_le_solveur(script):
 def test_le_nombre_de_coupables_ne_REMONTE_pas(script):
     """Cliquet : la separation ne peut que progresser. Relever ce plafond pour
     faire passer un test reviendrait a supprimer la mesure."""
-    PLAFOND = 3
+    #: 27/08/2026 : ZERO. `print_results` -> resume_FORM (0) + erreur_FOSM
+    #: (2 appels, explicite), `print_3D_HF` -> grille_3D (n^2 appels) +
+    #: la figure, et `init_g_ot` ne construit plus le plan.
+    PLAFOND = 0
     fns, appels = _graphe(os.path.join(_REPO, script))
     traces = [n for n in fns if n.startswith("print_")]
     coupables = [n for n in traces if _atteint_le_solveur(n, appels)]

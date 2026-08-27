@@ -51,6 +51,7 @@ TIERS_AUTORISES = {"os", "json", "sys", "openturns", "numpy"}
 PROJET = {
     "api", "lois", "doe", "hf", "eff", "eff_ot", "form", "graphiques",
     "schema", "fabrique", "interface", "params_ipm", "_parallel_is",
+    "figurer",
     "launcher", "surrogate", "plan",
 }
 
@@ -62,7 +63,11 @@ PROJET = {
 #: mesure -- il a fallu SORTIR du code. 126 lignes de code MORT en sont
 #: ressorties (`print_visu_EFF`, `print_visu_sigma`, `init_surrogate`),
 #: invisibles depuis le debut du chantier parce que rien ne les mesurait.
-PLAFOND_LIGNES = 2995
+#: 27/08 : le plan sort de `init_g_ot` (7 lignes cachees), `print_results`
+#: se scinde en resume + erreur FOSM, `print_3D_HF` en grille + figure, et
+#: `_etapes/figurer.py` recupere les deux restitutions communes.
+#: 2995 -> 2974.
+PLAFOND_LIGNES = 2974
 PLAFOND_FONCTIONS = 55
 
 

@@ -40,6 +40,7 @@ import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
 import graphiques as _graphiques
+import figurer as _figurer
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -378,58 +379,7 @@ if __name__ == '__main__':
     eff_bounds_min = [CFG.eff_bound_min] * n_var
     eff_bounds_max = [CFG.eff_bound_max] * n_var
 
-    def _tracer_domaine_physique():
-        """Ce que les bornes valent EN MPA, et non en ecarts-types.
 
-        Personne ne lit `[-7.5, +7.5]` comme « de 8,9 a 461 MPa ». C'est
-        pourtant ce que cela veut dire ici, et c'est ce qui a fait mourir un
-        run de deux heures. On l'ecrit donc noir sur blanc, au demarrage.
-        """
-        dist = dist_jointe()
-        # T_inv est EXACTEMENT la transformation que `run_one_SOL` et `run_HF`
-        # emploient pour passer de u a x. En utiliser une autre ici ferait
-        # afficher un domaine qui n'est pas celui qu'on evalue.
-        #
-        # La voie « naive » -- computeQuantile(Normal().computeCDF(u)) -- est
-        # de surcroit FAUSSE dans la queue haute : `1 - p` y perd toute
-        # precision. Mesure du 26/08/2026 sur Normal(235 ; 30,15) :
-        #
-        #     u = +6,0   ecart 2,7e-07
-        #     u = +7,5   ecart 5,6e-03
-        #     u = +8,5   ecart 11,3 MPa      (479,99 au lieu de 491,28)
-        #
-        # C'est le defaut corrige en phase 7 dans `_lib/transform.py`, et il
-        # etait sur le point d'etre reintroduit ici. T_inv : 5,7e-14 partout.
-        T_inv = dist.getInverseIsoProbabilisticTransformation()
-        bas_u = ot.Point([CFG.eff_bound_min] * n_var)
-        haut_u = ot.Point([CFG.eff_bound_max] * n_var)
-        bas_x, haut_x = T_inv(bas_u), T_inv(haut_u)
-        print("  DOMAINE DE RECHERCHE -- ce que les bornes valent physiquement")
-        extremes = []
-        for i, nom in enumerate(params_names):
-            marginale = dist.getMarginal(i)
-            lo, hi = sorted((float(bas_x[i]), float(haut_x[i])))
-            extremes.append((lo, hi))
-            alerte = ""
-            if lo <= 0:
-                alerte = "  <-- NEGATIF OU NUL"
-            elif lo < 0.1 * float(marginale.getMean()[0]):
-                alerte = "  <-- moins d'un dixieme de la moyenne"
-            print("    %-8s u in [%+.2f, %+.2f]  ->  [%.2f, %.2f]%s"
-                  % (nom, CFG.eff_bound_min, CFG.eff_bound_max, lo, hi, alerte))
-        # Rapport le plus defavorable atteignable a un COIN du domaine : la
-        # variable la plus haute contre la plus basse. C'est lui qui gouverne
-        # le conditionnement des cones, pas la valeur absolue des bornes.
-        if len(extremes) >= 2:
-            bas = min(l for l, _ in extremes)
-            haut = max(h for _, h in extremes)
-            pire = haut / bas if bas > 0 else float('inf')
-            print("    rapport le plus defavorable aux coins : %.1f" % pire)
-            if pire >= 5:
-                print("    ATTENTION : au-dela de ~5 les cones SOCP sont mal")
-                print("    conditionnes (docs/mesh/). A 52, le 26/08/2026,")
-                print("    Digital Structure a termine le processus.")
-        print(flush=True)
 
 
     def _is_position_var(sens):
@@ -454,7 +404,11 @@ if __name__ == '__main__':
 
     # Appele ICI, et pas au moment ou les bornes sont posees : la trace a
     # besoin de `dist_jointe`, qui n'est definie qu'au-dessus.
-    _tracer_domaine_physique()
+    # Ce que les bornes valent EN UNITES PHYSIQUES. Un run de deux heures est
+    # mort le 26/08/2026 parce que `[-7.5, +7.5]` ne se lit pas comme
+    # « rapport 52 entre les deux nappes ».
+    _figurer.tracer_domaine_physique(
+        dist_jointe(), params_names, CFG.eff_bound_min, CFG.eff_bound_max)
 
     # --- APPELS AU SOLVEUR -----------------------------------------------
     # Toute la mecanique Digital Structure -- reecriture du dsCad, maillage,
@@ -1356,21 +1310,24 @@ if __name__ == '__main__':
         Si fixed_fm est fourni (refit KB) : theta et polynomes fixes du fit precedent.
         """
         global _gepck_pce_label, _gepck_loo, _eff_history_theta
+        if xt is None:
+            raise ValueError(
+                "init_g_ot ajuste un surrogate ; elle ne CONSTRUIT plus le plan "
+                "d'experiences. Appeler build_DOE() chez l'appelant et passer "
+                "xt/yt/all_grad. (Sept branches portaient la meme ligne cachee, "
+                "ce qui rendait une figure capable de lancer n0 appels solveur.)")
         if do_KRG:
-            if xt is None: xt, yt, all_grad = build_DOE()
             g_ot, result = build_metamodel_KRG(xt, yt)
             sigma_func = lambda u: float(np.sqrt(result.getConditionalMarginalVariance(ot.Point(list(u)))))
 
         elif do_GEK:
-            if xt is None: xt, yt, all_grad = build_DOE()
             sm_GEK   = build_metamodel_GEK(xt, yt, all_grad)
             gek_impl = GEKPLSFunction(sm_GEK)          
             g_ot     = ot.Function(gek_impl)
             sigma_func = gek_impl._exec_sigma
 
         elif do_PCKRG:
-            if xt is None: xt, y_hf, all_grad_hf = build_DOE()                                            # on fait les calculs HF sur les points du DOE
-            else:          y_hf, all_grad_hf = yt, all_grad
+            y_hf, all_grad_hf = yt, all_grad
             g_ot_PCE = build_metamodel_PCE(xt, y_hf)                                                      # on déduit le métamodèle PCE
             y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE)                              # on calcule la composante PCE à partir des valeurs hf
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE                                         # on construit le residu
@@ -1380,8 +1337,7 @@ if __name__ == '__main__':
             yt, all_grad = y_hf, all_grad_hf                                                              # on stocke les valeurs hf pour si warmstart
 
         elif do_old_GEPCK:
-            if xt is None: xt, y_hf, all_grad_hf = build_DOE()
-            else:          y_hf, all_grad_hf = yt, all_grad
+            y_hf, all_grad_hf = yt, all_grad
             g_ot_PCE = build_metamodel_PCE(xt, y_hf)
             y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
@@ -1392,7 +1348,6 @@ if __name__ == '__main__':
             yt, all_grad = y_hf, all_grad_hf
 
         elif do_GEPCK:
-            if xt is None: xt, yt, all_grad = build_DOE()
             _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
             if fixed_fm is not None:
@@ -1431,7 +1386,6 @@ if __name__ == '__main__':
             sigma_func = gepck_impl._exec_sigma
 
         elif do_PCK:
-            if xt is None: xt, yt, all_grad = build_DOE()
             _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
             _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
             if fixed_fm is not None:
@@ -1469,7 +1423,6 @@ if __name__ == '__main__':
             sigma_func = pck_impl._exec_sigma
 
         elif do_HF:
-            if xt is None: xt = build_DOE()
             g_ot = ot.Function(HFFunction())
             yt, all_grad = None, None
         
@@ -2469,42 +2422,35 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
 
-    def print_results(best_result, g_ot):
+
+
+    def erreur_FOSM(best_result, g_ot):
+        """Ecart entre le u* du surrogate et celui d'un developpement du
+        PREMIER ORDRE de l'etat limite EXACT autour de l'origine.
+
+        COUT : 2 appels solveur -- un en u*, un en 0 (celui-ci mis en cache et
+        reutilise d'un mode a l'autre). C'est une MESURE, pas une figure ;
+        `CFG.erreur_fosm = false` la desactive.
+        """
+        if g_ot is None:
+            return None
         _point_log_phase[0] = "USTAR"
         u_star = best_result.getStandardSpaceDesignPoint()
-        n_iter = best_result.getOptimizationResult().getIterationNumber()
-        dist_X = dist_jointe()
-        T_inv  = dist_X.getInverseIsoProbabilisticTransformation()
-        x_star = T_inv(u_star)
-
-        # --- Résultats FORM ---
-        print(f"n_iter FORM  = {n_iter}", flush=True)
+        _, grad_HF_U_star, _ = run_HF(u_star)
         for i, p in enumerate(params_names):
-            print(f"{p}*          = {x_star[i]:.4f}", flush=True)
-        print(f"u*           = {[round(v, 4) for v in u_star]}", flush=True)
-        print(f"Imp.         = {[round(v, 4) for v in best_result.getImportanceFactors()]}", flush=True)
-        print(f"beta         = {best_result.getHasoferReliabilityIndex():.4f}", flush=True)
-        print(f"Pf           = {best_result.getEventProbability():.4e}", flush=True)
-        if g_ot is not None:
-            g_sur_ustar = g_ot(ot.Point(u_star))[0]
-            print(f"g_surrogate(u*) = {g_sur_ustar:.6f}", flush=True)
-
-        # --- Erreur FOSM ---
-        if g_ot is not None:
-            _, grad_HF_U_star, _ = run_HF(u_star)
-            for i, p in enumerate(params_names):
-                print(f"dg/du_{p} en u* (HF@u*GEK) = {grad_HF_U_star[i]:.6f}", flush=True)
-            u0             = ot.Point([0.0] * n_var)
-            if _fosm_u0_cache[0] is None:
-                g0_HF, grad_HF_U0, _ = run_HF(u0)
-                _fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
-            else:
-                g0_HF, grad_HF_U0 = _fosm_u0_cache[0]
-                print("  [FOSM] run_HF([0,0]) reutilise du cache (pas de SOCP redondant)", flush=True)
-            u_FOSM         = grad_HF_U0 * (-g0_HF / grad_HF_U0.normSquare())
-            print(f"u* FOSM (HF) = {[round(v, 4) for v in u_FOSM]}", flush=True)
-            print(f"Erreur FOSM  = {(u_FOSM - u_star).norm() / u_star.norm():.4f}", flush=True)
-
+            print(f"dg/du_{p} en u* (HF@u*GEK) = {grad_HF_U_star[i]:.6f}", flush=True)
+        u0 = ot.Point([0.0] * n_var)
+        if _fosm_u0_cache[0] is None:
+            g0_HF, grad_HF_U0, _ = run_HF(u0)
+            _fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
+        else:
+            g0_HF, grad_HF_U0 = _fosm_u0_cache[0]
+            print("  [FOSM] run_HF([0,0]) reutilise du cache (pas de SOCP redondant)", flush=True)
+        u_FOSM = grad_HF_U0 * (-g0_HF / grad_HF_U0.normSquare())
+        print(f"u* FOSM (HF) = {[round(v, 4) for v in u_FOSM]}", flush=True)
+        erreur = (u_FOSM - u_star).norm() / u_star.norm()
+        print(f"Erreur FOSM  = {erreur:.4f}", flush=True)
+        return erreur
 
     def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, fond_hf=None, fond_hf_final=None):
         global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
@@ -2654,9 +2600,17 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [visu] -> {fname}", flush=True)
 
-    def print_3D_HF():
+    def grille_3D():
+        """ACTION `grille` : la surface g_HF sur une grille n_grid_hf x n_grid_hf.
+
+        COUT : n_grid_hf^2 appels solveur si le cache est vide -- 15x15 = 225,
+        soit 29 h sur le Moulin Blanc. C'est le calcul le plus cher du
+        programme, et il etait declenche par une fonction nommee « print ».
+
+        Retourne (U1, U2, Z) : la figure ne fait que dessiner ce triplet.
+        """
         if hf_3d_grid_fixed is not None:
-            print("Cache hf_3d_grid_fixed disponible — pas d'appels solveur.", flush=True)
+            print("Cache hf_3d_grid_fixed disponible - pas d'appels solveur.", flush=True)
             u1_min_c, u1_max_c, u2_min_c, u2_max_c, n_c = hf_3d_grid_fixed['params']
             u1_hf = np.linspace(u1_min_c, u1_max_c, n_c)
             u2_hf = np.linspace(u2_min_c, u2_max_c, n_c)
@@ -2671,7 +2625,7 @@ if __name__ == '__main__':
             Z_flat = [run_HF(pt)[0] for pt in grid_hf]
             Z = np.array(Z_flat).reshape(n_grid_hf, n_grid_hf)
 
-        # --- Impression copy-pastable ---
+        # --- Impression copy-pastable : la seule trace de ces n^2 appels ---
         print(f"\nhf_3d_grid_fixed = {{", flush=True)
         print(f"    'params': ({u1_min}, {u1_max}, {u2_min}, {u2_max}, {n_grid_hf}),", flush=True)
         print(f"    'Z': [", flush=True)
@@ -2680,7 +2634,10 @@ if __name__ == '__main__':
             print(f"        [{vals}],", flush=True)
         print(f"    ]", flush=True)
         print(f"}}", flush=True)
+        return U1_hf, U2_hf, Z
 
+    def print_3D_HF(U1_hf, U2_hf, Z):
+        """FIGURE : dessine la surface deja calculee. ZERO appel solveur."""
         # --- Plot 3D ---
         fig = plt.figure(figsize=(10, 7))
         ax = fig.add_subplot(111, projection='3d')
@@ -2809,7 +2766,7 @@ if __name__ == '__main__':
         xt_eff = None
 
     if print_3D:
-        print_3D_HF()
+        print_3D_HF(*grille_3D())
         sys.exit(0)
 
     if print_grad_sp:
@@ -2824,6 +2781,19 @@ if __name__ == '__main__':
             print(f"  -grad(sp) = [{neg_grad[0]:.6f}, {neg_grad[1]:.6f}]", flush=True)
         sys.exit(0)
 
+    # --- Le PLAN, puis le SURROGATE : deux actions, deux lignes.
+    # Cette ligne etait cachee sept fois dans `init_g_ot`, une par branche de
+    # surrogate. C'est le seul endroit du programme ou le plan initial doit
+    # reellement etre construit.
+    if xt is None:
+        if do_HF:
+            # en HF pur, aucun surrogate a nourrir : on ne veut que les points.
+            # (l'ancienne branche faisait `xt = build_DOE()` et recevait un
+            #  TRIPLET -- xt devenait un tuple, silencieusement.)
+            xt, yt, all_grad = build_DOE(eval_hf=False), None, None
+        else:
+            xt, yt, all_grad = build_DOE()
+        print(f"[PLAN] plan initial construit : {len(xt)} points", flush=True)
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
     if print_HF and print_fullHF and n_var <= 3:
         _compute_hf_grid_full()
@@ -2871,9 +2841,15 @@ if __name__ == '__main__':
         sys.exit(1)
     if len(modes)>1:
         print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
-        print_results(modes[1], g_ot)
+        _point_log_phase[0] = "USTAR"
+        _figurer.resume_FORM(modes[1], dist_jointe(), params_names)
+        if CFG.erreur_fosm:
+            erreur_FOSM(modes[1], g_ot)
         print('Les résultats du mode 1 sont : ')
-    print_results(best_result, g_ot)
+    _point_log_phase[0] = "USTAR"
+    _figurer.resume_FORM(best_result, dist_jointe(), params_names)
+    if CFG.erreur_fosm:
+        erreur_FOSM(best_result, g_ot)
     result_IS = None
     if do_IS and modes:
         result_IS = run_IS(modes, event)

@@ -294,6 +294,11 @@ class Configuration:
     print_ana: bool = False
     print_Pf: bool = False
     print_grad_sp: bool = False
+    #: Erreur FOSM : ecart entre le u* du surrogate et le u* d'un
+    #: developpement au premier ordre de l'etat limite EXACT en 0.
+    #: Ce n'est PAS une figure -- elle coute 2 appels solveur par mode
+    #: (le second mis en cache). `false` pour ne pas les payer.
+    erreur_fosm: bool = True
     print_EFF_progres: bool = True
     print_gepck_calls: bool = False
     do_custom_hf: bool = False
@@ -564,6 +569,7 @@ CATEGORIES = {
     "print_HF": "sortie", "print_fullHF": "sortie", "print_DOE": "sortie",
     "print_3D": "sortie", "print_ana": "sortie", "print_Pf": "sortie",
     "print_grad_sp": "sortie", "print_EFF_progres": "sortie",
+    "erreur_fosm": "sortie",
     "print_gepck_calls": "sortie", "do_custom_hf": "sortie",
     "hf_2d_grid_fixed": "sortie", "hf_3d_grid_fixed": "sortie",
 
@@ -581,6 +587,7 @@ COUTE_DES_APPELS_SOLVEUR = {
     "n_grid_hf": "cote de la grille HF -- le cout est son carre",
     "do_custom_hf": "grille de points fournie par fichier",
     "print_Pf": "3 FORM+IS supplementaires a chaque iteration EFF",
+    "erreur_fosm": "2 appels par mode FORM (le second mis en cache)",
 }
 
 
