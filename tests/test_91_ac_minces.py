@@ -75,7 +75,10 @@ PROJET = {
 #: 27/08 (suite) : `init_g_ot` (125 l.) devient un appel a
 #: `_surrogate.construire_surrogate`, et le detecteur d'imports morts,
 #: corrige, en trouve six de plus. 2682 -> 2593.
-PLAFOND_LIGNES = 2593
+#: 27/08 (suite) : `projection_surrogate` part dans
+#: `_surrogate/projection.py`, et 80 lignes de bannieres annoncant des
+#: sections desormais VIDES disparaissent. 2593 -> 2530.
+PLAFOND_LIGNES = 2530
 PLAFOND_FONCTIONS = 50
 
 

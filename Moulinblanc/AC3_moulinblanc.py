@@ -43,6 +43,7 @@ import figurer as _figurer
 # NOM : `ajuster`, pas `fit` -- `_lib/fit.py` (le clone UQLab) porte
 # deja ce nom sur le chemin d'import, et l'aurait eclipse.
 import ajuster as _fit
+import projection as _projection
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -56,8 +57,6 @@ def _parse(text, name):
     return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
-    # ------------------------------------------------------------------------ #
-    # CONFIGURATION                                                             #
     # ------------------------------------------------------------------------ #
     # Voir `studies/moulin_blanc.toml` et `_config/schema.py`. Meme dispositif
     # que pour l'etude de flexion pure : les cinquante-quatre parametres de
@@ -331,20 +330,11 @@ if __name__ == '__main__':
     _schema.ecrire_trace(CFG, out_dir_eff)   # configuration effective, a cote des figures
 
     # --------------------------------------------------------------------------- #
-    # DEFINTION DE FONCTIONS                                                      #
-    # --------------------------------------------------------------------------- #
-    # --------------------------------------------------------------------------- #
     # APPEL AU SOLVEUR ET PLAN D'EXPERIENCES                                             #
 
 
     # --- DISTRIBUTIONS ---
     
-
-    
-
-
-
-
 
     # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
     FY_MEAN = 235.0
@@ -384,8 +374,6 @@ if __name__ == '__main__':
     # le solveur.
     eff_bounds_min = [CFG.eff_bound_min] * n_var
     eff_bounds_max = [CFG.eff_bound_max] * n_var
-
-
 
 
     def _is_position_var(sens):
@@ -570,8 +558,6 @@ if __name__ == '__main__':
                 % (list(u), grad_HF_X))
         _append_point_log(_point_log_phase[0], u, x_point, g_HF)
         return g_HF, grad_HF_U, grad_HF_X
-
-
 
 
     _run_HF_count = [0]  # compteur pour le print memoire (temporaire)
@@ -920,31 +906,6 @@ if __name__ == '__main__':
 
 
     # --------------------------------------------------------------------------- #
-    # FONCTION ANALYTIQUE DE REFERENCE                                            #
-    # --------------------------------------------------------------------------- #
-    # FONCTION ANALYTIQUE                                                         #
-    # --------------------------------------------------------------------------- #
-    # FONCTIONS LIEES AU MODELE HF                                                #
-
-    # --- Wrapper OpenTURNS avec gradients analytiques ---
-
-    # --------------------------------------------------------------------------- #
-    # FONCTIONS LIEES AU MODELE PCE                                               #
-    # n0_min et update_degree supprimes : LARS gere P > N, max_degree fixe des le depart
-
-
-
-
-
-    # --------------------------------------------------------------------------- #
-    # WRAPPER GEPCK 5 BRANCHES                                                   #
-
-    # --------------------------------------------------------------------------- #
-    # WRAPPER PCK (sans gradient analytique — FORM utilise differences finies)    #
-
-        # pas de _gradient : OT utilise differences finies pour FORM
-
-    # --------------------------------------------------------------------------- #
     # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
 
     # --- FORM multimodal et tirage d'importance : la logique est dans
@@ -962,54 +923,15 @@ if __name__ == '__main__':
     # PROJECTION DU SURROGATE SUR LES VARIABLES NON-POSITION                     #
 
     def projection_surrogate(g_ot):
-        """Si variable de position dans PARAM_CONFIG, retourne un g_ot projete
-        g_proj(u_other) = min_p g_ot(u_full) sur la variable de position.
-        Sinon retourne g_ot inchange."""
-        from scipy.optimize import minimize_scalar
+        """Enveloppe du surrogate sur la variable de position, s'il y en a une.
 
-        idx_pos = _find_position_var_index()
-
-        if idx_pos is None:
-            return g_ot
-
-        idx_other = [i for i in range(n_var) if i != idx_pos]
-        n_proj = len(idx_other)
-
-        class ProjectedSurrogateFunction(ot.OpenTURNSPythonFunction):
-            def __init__(self):
-                super().__init__(n_proj, 1)
-
-            def _exec(self, u_reduced):
-                def _obj(u_pos):
-                    u_full = [0.0] * n_var
-                    for k, idx in enumerate(idx_other):
-                        u_full[idx] = float(u_reduced[k])
-                    u_full[idx_pos] = u_pos
-                    return float(g_ot(ot.Point(u_full))[0])
-                # grille grossiere puis affinage (robuste pour W multi-creux)
-                u_grid = np.linspace(-5.0, 5.0, 30)
-                g_grid = [_obj(u) for u in u_grid]
-                u_best = u_grid[np.argmin(g_grid)]
-                res = minimize_scalar(_obj,
-                                      bounds=(max(-5.0, u_best - 0.5),
-                                              min(5.0, u_best + 0.5)),
-                                      method='bounded',
-                                      options={'xatol': 1e-4, 'maxiter': 200})
-                return [res.fun]
-
-        return ot.Function(ProjectedSurrogateFunction())
-
-    # --------------------------------------------------------------------------- #
-    # FONCTIONS LIEES AU KRG                                                      #
+        Les 35 lignes de minimisation sont dans `_surrogate/projection.py` :
+        elles ne dependent que de `n_var` et de l'indice de la variable.
+        """
+        return _projection.projeter_surrogate(
+            g_ot, n_var, _find_position_var_index())
 
 
-    # --------------------------------------------------------------------------- #
-    # FONCTIONS LIEES AU GEK                                                      #
-
-    # --- Modèle smt  ---
-
-    # --- Wrapper OpenTURNS avec gradients analytiques ---
-    
     # --------------------------------------------------------------------------- #
     # FONCTIONS POUR FORM                                                         #
     def init_g_ot(g_ot, sigma_func, xt, yt, all_grad, fixed_fm=None):
@@ -2041,7 +1963,6 @@ if __name__ == '__main__':
         fig.savefig(os.path.join(out_dir_eff, fname), dpi=100, bbox_inches='tight')
         plt.close(fig)
         print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
-
 
 
     def erreur_FOSM(best_result, g_ot):

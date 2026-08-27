@@ -106,8 +106,9 @@ _cache/                     (existe)   10 fonctions     96 l.
 _etapes/figurer.py          (existe)    2 fonctions     74 l.
 _surrogate/wrappers.py      (existe)    6 classes      193 l.
 _surrogate/ajuster.py       (existe)    9 fonctions    270 l.
-_surrogate/wrappers.py      (existe)    6 classes      193 l.
+_surrogate/projection.py    (existe)    1 fonction      37 l.
 _doe/                       A CREER     6 fonctions    332 l.
+_etapes/grille.py           A CREER     7 fonctions    317 l.
 ---------------------------------------------------------------
 RESTE dans l'AC                         7 fonctions    108 l.
 ```
@@ -136,8 +137,8 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 593 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 500 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 530 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 421 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **50 / 50** | <= 8 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
@@ -221,6 +222,34 @@ regardait que la PREMIERE ligne d'un import, si bien qu'un
 et il comptait une mention en commentaire comme un usage. Corrige, il a
 trouve **six imports morts de plus** -- dont trois lois qui ne survivaient
 que par des lignes de `PARAM_CONFIG` mises en commentaire.
+
+### L'instrument qui manquait : declarer les divergences
+
+Les six derives entre les deux copies ont toutes ete trouvees A LA MAIN, en
+lisant. Aucune n'aurait ete signalee par un test -- il n'y en avait pas.
+
+`tests/test_97_divergences_declarees.py` compare desormais la STRUCTURE des
+50 fonctions communes -- l'arbre syntaxique, donc sans commentaires, sans
+docstrings, sans mise en page -- et exige que toute difference figure dans un
+inventaire ecrit, avec sa raison. Deux gardes, pas un : une divergence non
+declaree fait echouer la suite, et une divergence declaree QUI A DISPARU la
+fait echouer aussi, pour que l'inventaire ne pourrisse pas en liste de
+vieilles excuses.
+
+Etat au 27/08/2026 : **six divergences declarees**, toutes de vraies
+differences d'etude (la flexion pure superpose sa solution analytique de
+reference, que le Moulin Blanc n'a pas ; `run_EFF` journalise davantage d'un
+cote ; le fond haute fidelite n'est pas cadre pareil). Les deux derives sur
+le DOMAINE DE TIRAGE ont ete corrigees au passage, gratuitement :
+`build_DOE` et `build_starting_points` tiraient sur `+/- 7,5` CODE EN DUR
+dans la flexion pure et sur `eff_bounds` dans le Moulin Blanc -- borner le
+domaine n'avait donc d'effet que d'un cote. Les deux bornes coincidaient
+encore, donc rien ne bouge numeriquement ; au prochain bornage, si.
+
+Quatre fonctions ne different plus que par un COMMENTAIRE :
+`_hf_from_custom_points` (102 l.), `_find_batch_EFF_points` (59 l.),
+`run_DOE_parallel` (58 l.), `run_HF_grid_parallel` (57 l.). 276 lignes de
+copie pure.
 
 ### Ordre d'extraction (du moins risque au plus risque)
 
