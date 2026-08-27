@@ -258,3 +258,82 @@ def test_figurer_n_importe_pas_de_solveur():
         assert interdit not in source, (
             "figurer.py importe %r : il doit rester chargeable sans licence "
             "et sans fichier d'etude." % interdit)
+
+
+# --------------------------------------------------------------------- #
+# LE CADRAGE DES FIGURES -- la cinquieme divergence
+# --------------------------------------------------------------------- #
+# Les deux etudes ne cadraient pas leurs figures pareil :
+#
+#     flexion pure : u1_min .. u1_max      (les bornes de la grille HF)
+#     Moulin Blanc : eff_bounds +/- 1      (les bornes de recherche, elargies)
+#
+# L'ecart etait recopie dans QUATRE fonctions de trace, dix-huit lignes par
+# fichier, sans qu'aucun commentaire ne le signale. C'est un REGLAGE : il vit
+# desormais dans le fichier d'etude.
+def test_le_cadrage_grille_reproduit_EXACTEMENT_l_ancien_code_flexion():
+    """Preuve d'equivalence : `"grille"` doit rendre les bornes de la grille
+    HF, telles quelles. C'est ce que `AC3_pure_flexion.py` ecrivait en dur."""
+    assert figurer.cadre_des_figures(
+        "grille", (-7.5, 7.5, -6.0, 6.0), [-7.5, -7.5], [7.5, 7.5], 1.0) \
+        == (-7.5, 7.5, -6.0, 6.0)
+
+
+def test_le_cadrage_elargi_reproduit_EXACTEMENT_l_ancien_code_moulin_blanc():
+    """Preuve d'equivalence : `"bornes_elargies"` doit rendre
+    `eff_bounds +/- marge`, ce que `AC3_moulinblanc.py` ecrivait en dur."""
+    assert figurer.cadre_des_figures(
+        "bornes_elargies", (-6.0, 6.0, -6.0, 6.0), [-6.0, -6.0], [6.0, 6.0], 1.0) \
+        == (-7.0, 7.0, -7.0, 7.0)
+
+
+def test_le_cadrage_elargi_suit_chaque_variable_separement():
+    """Les deux variables peuvent avoir des bornes differentes ; le cadre doit
+    suivre chacune, pas la premiere pour les deux."""
+    assert figurer.cadre_des_figures(
+        "bornes_elargies", (0, 0, 0, 0), [-2.0, -5.0], [3.0, 6.0], 0.5) \
+        == (-2.5, 3.5, -5.5, 6.5)
+
+
+def test_un_cadrage_inconnu_LEVE_au_lieu_de_choisir_pour_vous():
+    """Une faute de frappe dans le fichier d'etude ne doit pas retomber
+    silencieusement sur un cadrage par defaut : les figures seraient fausses
+    sans que rien ne le dise."""
+    with pytest.raises(ValueError) as err:
+        figurer.cadre_des_figures("grile", (0, 1, 0, 1), [0], [1])
+    assert "grille" in str(err.value) and "bornes_elargies" in str(err.value)
+
+
+def test_le_cadrage_elargi_refuse_une_seule_variable():
+    """Il lit `eff_min[1]` : avec une seule variable, l'original levait
+    `IndexError` au milieu du trace."""
+    with pytest.raises(ValueError) as err:
+        figurer.cadre_des_figures("bornes_elargies", (0, 1, 0, 1), [-2.0], [2.0])
+    assert "deux variables" in str(err.value)
+
+
+@pytest.mark.parametrize("etude,attendu", [
+    ("studies/pure_flexion.toml", "grille"),
+    ("studies/pure_flexion_analytique.toml", "grille"),
+    ("studies/moulin_blanc.toml", "bornes_elargies"),
+    ("studies/moulin_blanc_fumee.toml", "bornes_elargies"),
+])
+def test_chaque_etude_garde_son_cadrage_historique(etude, attendu):
+    """Changer le cadrage deplacerait toutes les figures publiees. Chaque
+    etude garde donc le sien -- mais il est lisible."""
+    cfg = schema.charger(os.path.join(_REPO, etude))
+    assert cfg.cadre_figures == attendu
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_le_cadrage_est_calcule_une_fois_et_une_seule(script):
+    """Il etait recopie dans quatre fonctions de trace. Une seule expression
+    doit subsister, et les traces doivent lire le resultat."""
+    with open(os.path.join(_REPO, script), encoding="utf-8",
+              errors="replace") as fh:
+        src = fh.read()
+    assert src.count("_figurer.cadre_des_figures(") == 1, (
+        "%s : le cadrage doit etre calcule en UN endroit" % script)
+    assert "eff_bounds_min[0] - 1" not in src, (
+        "%s porte encore un cadrage litteral" % script)
+    assert src.count("_CX0, _CX1, _CY0, _CY1 =") == 1

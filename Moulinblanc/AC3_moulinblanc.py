@@ -319,7 +319,7 @@ if __name__ == '__main__':
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
-    _fosm_u0_cache     = [None] # cache run_HF([0,0]) FOSM : calcule 1x, reutilise pour tous les modes
+    _fosm = [None]     # l'objet ErreurFOSM, construit au premier usage
     _point_log_phase   = ["?"]  # phase courante pour le log incremental (HF/EFF/USTAR ; DOE logue a part)
     _point_log_round   = [0]    # round de re-enrichissement (0 = run initial)
     _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
@@ -1112,6 +1112,15 @@ if __name__ == '__main__':
     # --- Graphiques de suivi : _reliability/graphiques.py. Les courbes Pf
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.
     # --- HF GRID CACHE ---
+    # Cadrage des figures. Il DIVERGEAIT entre les deux etudes -- la flexion
+    # pure cadrait sur les bornes de la grille HF, le Moulin Blanc sur les
+    # bornes de recherche elargies -- et l'ecart etait recopie dans quatre
+    # fonctions de trace, sans qu'un seul commentaire ne le dise. C'est
+    # maintenant un reglage du fichier d'etude, calcule ici, une fois.
+    _CX0, _CX1, _CY0, _CY1 = _figurer.cadre_des_figures(
+        CFG.cadre_figures, (u1_min, u1_max, u2_min, u2_max),
+        eff_bounds_min, eff_bounds_max, CFG.cadre_marge)
+
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
@@ -1234,8 +1243,8 @@ if __name__ == '__main__':
             return _hf_from_custom_points(_sd)
         if not print_HF:
             return None
-        ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-        uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
+        ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
+        uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
         return _get_hf_slice(_sd, _cache, var), UX_hf, UY_hf
 
@@ -1260,8 +1269,8 @@ if __name__ == '__main__':
         n_added = len(xt_eff)
 
         # --- Grille commune (coupe 2D dans l'espace n_var-D) ---
-        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
-        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
+        ux = np.linspace(_CX0, _CX1, n_grid)
+        uy = np.linspace(_CY0, _CY1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -1306,8 +1315,8 @@ if __name__ == '__main__':
                                 xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
             ax.set_xlabel(_xlabel)
             ax.set_ylabel(_ylabel)
-            ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
-            ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
+            ax.set_xlim(_CX0, _CX1)
+            ax.set_ylim(_CY0, _CY1)
             ax.legend(loc='best', fontsize=9)
 
         # --- Ax1 : EFF ---
@@ -1349,8 +1358,8 @@ if __name__ == '__main__':
         n_steps = n_eff + 1   # DOE initial + chaque point EFF
 
         # --- Grille commune ---
-        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
-        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
+        ux = np.linspace(_CX0, _CX1, n_grid)
+        uy = np.linspace(_CY0, _CY1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -1363,8 +1372,8 @@ if __name__ == '__main__':
         if hf_custom_points is not None:
             Z_true, UX_hf, UY_hf = fond_hf_final if fond_hf_final is not None else (None, None, None)
         elif print_HF:
-            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
+            ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
+            uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if slice_def_final == slice_def:
                 Z_true = fond_hf[0] if fond_hf is not None else None
@@ -1412,8 +1421,8 @@ if __name__ == '__main__':
                                     xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
                 ax.set_xlabel(_xlabel)
                 ax.set_ylabel(_ylabel)
-                ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
-                ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
+                ax.set_xlim(_CX0, _CX1)
+                ax.set_ylim(_CY0, _CY1)
 
             # --- EFF ---
             cf1 = ax1.contourf(UX, UY, Z_eff, levels=20, cmap='viridis', alpha=0.85)
@@ -1445,32 +1454,18 @@ if __name__ == '__main__':
 
 
     def erreur_FOSM(best_result, g_ot):
-        """Ecart entre le u* du surrogate et celui d'un developpement du
-        PREMIER ORDRE de l'etat limite EXACT autour de l'origine.
+        """L'ecart FOSM. 27 lignes sont dans `_reliability/controle.py`.
 
-        COUT : 2 appels solveur -- un en u*, un en 0 (celui-ci mis en cache et
-        reutilise d'un mode a l'autre). C'est une MESURE, pas une figure ;
-        `CFG.erreur_fosm = false` la desactive.
+        COUT : 2 appels solveur au premier mode, 1 aux suivants (le gradient
+        a l'origine est mis en cache). `CFG.erreur_fosm = false` la desactive.
         """
         if g_ot is None:
             return None
         _point_log_phase[0] = "USTAR"
-        u_star = best_result.getStandardSpaceDesignPoint()
-        _, grad_HF_U_star, _ = run_HF(u_star)
-        for i, p in enumerate(params_names):
-            print(f"dg/du_{p} en u* (HF@u*GEK) = {grad_HF_U_star[i]:.6f}", flush=True)
-        u0 = ot.Point([0.0] * n_var)
-        if _fosm_u0_cache[0] is None:
-            g0_HF, grad_HF_U0, _ = run_HF(u0)
-            _fosm_u0_cache[0] = (g0_HF, grad_HF_U0)
-        else:
-            g0_HF, grad_HF_U0 = _fosm_u0_cache[0]
-            print("  [FOSM] run_HF([0,0]) reutilise du cache (pas de SOCP redondant)", flush=True)
-        u_FOSM = grad_HF_U0 * (-g0_HF / grad_HF_U0.normSquare())
-        print(f"u* FOSM (HF) = {[round(v, 4) for v in u_FOSM]}", flush=True)
-        erreur = (u_FOSM - u_star).norm() / u_star.norm()
-        print(f"Erreur FOSM  = {erreur:.4f}", flush=True)
-        return erreur
+        if _fosm[0] is None:
+            _fosm[0] = _controle.ErreurFOSM(run_HF, params_names)
+        return _fosm[0].mesurer(best_result)
+
 
     def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, fond_hf=None, fond_hf_final=None):
         global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
@@ -1485,8 +1480,8 @@ if __name__ == '__main__':
                 slice_def_final = slice_def
         idx_x, idx_y, fixed = slice_def_final
 
-        ux = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
-        uy = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
+        ux = np.linspace(_CX0, _CX1, n_grid)
+        uy = np.linspace(_CY0, _CY1, n_grid)
         UX, UY = np.meshgrid(ux, uy)
         grid = np.zeros((n_grid * n_grid, n_var))
         grid[:, idx_x] = UX.ravel()
@@ -1512,8 +1507,8 @@ if __name__ == '__main__':
             if Z_true is not None:
                 ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
         elif print_HF:
-            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
+            ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
+            uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if slice_def_final == slice_def:
                 Z_true = fond_hf[0] if fond_hf is not None else None
@@ -1610,8 +1605,8 @@ if __name__ == '__main__':
 
         ax.set_xlabel(_xlabel)
         ax.set_ylabel(_ylabel)
-        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
-        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
+        ax.set_xlim(_CX0, _CX1)
+        ax.set_ylim(_CY0, _CY1)
         _fixed_str = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
         ax.set_title(f'FORM et etat limite g=0{_fixed_str}')
         plt.tight_layout()

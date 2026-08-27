@@ -69,17 +69,9 @@ DIVERGENCES_DECLAREES = {
     "print_globalplanche_EFF":
         "Meme raison que `print_visu` : la surface de reference analytique "
         "n'existe que pour la flexion pure.",
-    "print_planche_EFF":
-        "Meme raison que `print_visu` : la surface de reference analytique "
-        "n'existe que pour la flexion pure.",
     "print_3D_HF":
         "Meme raison que `print_visu` : la surface `flexion_claude` tracee en "
         "regard du calcul haute fidelite n'existe que pour la flexion pure.",
-    "fond_hf_pour_figures":
-        "Le fond haute fidelite des figures est cadre sur `u1_min..u2_max` "
-        "dans la flexion pure et sur `eff_bounds +/- 1` sur le Moulin Blanc. "
-        "Derive relevee le 26/08/2026 et CONSERVEE telle quelle : la changer "
-        "deplacerait toutes les figures publiees.",
 }
 
 
@@ -197,7 +189,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 26/08 : 1 975 lignes de fonctions communes.
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
     #: evaluation + plan : 1 451.
-    PLAFOND = 1177
+    PLAFOND = 1158
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

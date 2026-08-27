@@ -174,3 +174,67 @@ class ControleurFORM:
         self.tracer("  [%s] |beta_IS_sup - beta_IS_inf| / beta_IS = %.4f"
                     % (label, ratio))
         return ratio, pf_mid, pf_sup, pf_inf
+
+
+# --------------------------------------------------------------------------- #
+# L'ERREUR FOSM : ce que le metamodele coute en POSITION du point de conception
+# --------------------------------------------------------------------------- #
+class ErreurFOSM:
+    """Ecart entre le u* du metamodele et celui d'un developpement du PREMIER
+    ORDRE de l'etat limite EXACT autour de l'origine.
+
+    C'est une mesure de justesse independante de l'enrichissement : le
+    metamodele peut avoir convergé sur lui-meme et rester decale par rapport a
+    la surface reelle. Le developpement au premier ordre en 0 donne un point de
+    conception approche, mais calcule sur l'ETAT LIMITE EXACT.
+
+    COUT : deux appels solveur -- un en u*, un en 0. Le second est mis en cache
+    et reutilise d'un mode FORM a l'autre : sur une etude a quatre modes, cela
+    fait quatre appels au lieu de huit, soit une demi-heure economisee sur le
+    Moulin Blanc.
+
+    Ce n'est PAS une figure. Elle etait pourtant soudee a l'impression des
+    resultats FORM, sous un nom qui dit « print » -- d'ou deux SOCP declenches
+    par ce qui ressemblait a de l'affichage.
+    """
+
+    def __init__(self, evaluer_en_U, params_names, tracer=_ecrire):
+        self.evaluer = evaluer_en_U
+        self.params_names = params_names
+        self.n_var = len(params_names)
+        self.tracer = tracer
+        #: (g, gradient) a l'origine -- calcule une fois, relu ensuite.
+        self._origine = None
+
+    def gradient_a_l_origine(self):
+        """Le gradient en u = 0, calcule au plus une fois."""
+        if self._origine is None:
+            g0, grad0, _ = self.evaluer(ot.Point([0.0] * self.n_var))
+            self._origine = (g0, grad0)
+        else:
+            self.tracer("  [FOSM] run_HF([0,0]) reutilise du cache "
+                        "(pas de SOCP redondant)")
+        return self._origine
+
+    def mesurer(self, best_result):
+        """L'ecart relatif, ou None si le point de conception est en 0.
+
+        Deux appels solveur au premier mode, un seul aux suivants.
+        """
+        u_star = best_result.getStandardSpaceDesignPoint()
+        _, grad_u_star, _ = self.evaluer(u_star)
+        for i, p in enumerate(self.params_names):
+            self.tracer("dg/du_%s en u* (HF@u*GEK) = %.6f" % (p, grad_u_star[i]))
+
+        g0, grad0 = self.gradient_a_l_origine()
+        u_fosm = grad0 * (-g0 / grad0.normSquare())
+        self.tracer("u* FOSM (HF) = %s" % [round(v, 4) for v in u_fosm])
+        if u_star.norm() == 0:
+            # Un point de conception a l'origine voudrait dire que la
+            # defaillance est atteinte a la moyenne de toutes les variables :
+            # l'ecart relatif n'a alors aucun sens.
+            self.tracer("Erreur FOSM  = indefinie (u* est a l'origine)")
+            return None
+        erreur = (u_fosm - u_star).norm() / u_star.norm()
+        self.tracer("Erreur FOSM  = %.4f" % erreur)
+        return erreur

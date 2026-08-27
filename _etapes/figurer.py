@@ -121,3 +121,36 @@ def resume_FORM(best_result, dist, params_names, ecrire=_ecrire):
     ecrire("beta         = %.4f" % best_result.getHasoferReliabilityIndex())
     ecrire("Pf           = %.4e" % best_result.getEventProbability())
     return u_star
+
+
+#: Les deux facons de cadrer une figure, telles qu'elles existaient.
+CADRAGES = ("grille", "bornes_elargies")
+
+
+def cadre_des_figures(mode, bornes_grille, eff_min, eff_max, marge=1.0):
+    """Le rectangle dans lequel les figures sont tracees : (x0, x1, y0, y1).
+
+    Deux facons de faire, qui coexistaient sans que rien ne le dise :
+
+    * `"grille"` -- on cadre sur les bornes de la grille haute fidelite. La
+      figure montre alors EXACTEMENT le domaine ou l'etat limite a ete evalue,
+      ni plus ni moins.
+    * `"bornes_elargies"` -- on cadre sur les bornes de recherche, elargies de
+      `marge`. La figure deborde un peu du domaine enrichi, ce qui laisse voir
+      ou l'algorithme s'est arrete de chercher.
+
+    Aucune n'est meilleure ; ce sont deux lectures. Ce qui n'allait pas, c'est
+    que le choix soit recopie dans quatre fonctions de trace par etude, sous
+    forme d'expressions litterales.
+    """
+    if mode not in CADRAGES:
+        raise ValueError("cadre_figures=%r inconnu (attendu : %s)"
+                         % (mode, ", ".join(CADRAGES)))
+    if mode == "grille":
+        u1_min, u1_max, u2_min, u2_max = bornes_grille
+        return u1_min, u1_max, u2_min, u2_max
+    if len(eff_min) < 2:
+        raise ValueError("cadre_figures='bornes_elargies' suppose au moins "
+                         "deux variables ; l'etude en declare %d" % len(eff_min))
+    return (eff_min[0] - marge, eff_max[0] + marge,
+            eff_min[1] - marge, eff_max[1] + marge)

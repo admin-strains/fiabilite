@@ -51,6 +51,12 @@ max_degree = 2
 # fond de `build_metamodel_KRG`. Elle differait de la flexion pure
 # (1,0) sans que rien ne le signale. Conservee telle quelle.
 theta_min_krg = 0.0
+
+# Cadrage des figures : cette etude cadrait sur les bornes de recherche
+# elargies de 1, la flexion pure sur les bornes de la grille HF. L'ecart
+# etait recopie dans quatre fonctions de trace, sans commentaire.
+# Conserve tel quel : le changer deplacerait toutes les figures.
+cadre_figures = "bornes_elargies"
 max_of_maxdegree = 2
 seuil_pce = 0.90
 

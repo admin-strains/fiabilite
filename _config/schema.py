@@ -293,6 +293,13 @@ class Configuration:
     u2_min: float = -7.5
     u2_max: float = 7.5
     n_grid: int = 300
+    #: Comment cadrer les figures : "grille" (les bornes de la grille HF,
+    #: ce que faisait AC3_pure_flexion) ou "bornes_elargies" (les bornes
+    #: de recherche elargies de `cadre_marge`, ce que faisait
+    #: AC3_moulinblanc). Le choix etait recopie dans quatre fonctions de
+    #: trace par etude, sans commentaire.
+    cadre_figures: str = "grille"
+    cadre_marge: float = 1.0
     n_grid_hf: int = 15
     print_HF: bool = True
     print_fullHF: bool = False
@@ -576,6 +583,7 @@ CATEGORIES = {
     "u2_max": "sortie", "n_grid": "sortie", "n_grid_hf": "sortie",
     "print_HF": "sortie", "print_fullHF": "sortie", "print_DOE": "sortie",
     "print_3D": "sortie", "print_ana": "sortie", "print_Pf": "sortie",
+    "cadre_figures": "sortie", "cadre_marge": "sortie",
     "print_grad_sp": "sortie", "print_EFF_progres": "sortie",
     "erreur_fosm": "sortie",
     "print_gepck_calls": "sortie", "do_custom_hf": "sortie",

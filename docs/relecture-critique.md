@@ -141,11 +141,11 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 009 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **1 900 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 000 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **1 895 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **42 / 42** | <= 8 |
-| lignes de fonctions communes aux deux etudes | 1 975 | **1 177** | 0 |
-| divergences declarees | 6 (trouvees a la main) | **5** (verifiees) | 0 |
+| lignes de fonctions communes aux deux etudes | 1 975 | **1 158** | 0 |
+| divergences declarees | 6 (trouvees a la main) | **3** (verifiees) | 0 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
 

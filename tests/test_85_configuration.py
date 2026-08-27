@@ -211,7 +211,7 @@ def test_le_golden_vient_bien_des_scripts_ac(etude):
 ETAT_ATTENDU = {
     "_gepck_pce_label", "_gepck_loo", "_eff_history_EFF", "_eff_history_BB",
     "_eff_history_BS", "_eff_history_theta", "_eff_history_Pf",
-    "_eff_history_beta_IS", "_fosm_u0_cache", "_point_log_phase",
+    "_eff_history_beta_IS", "_fosm", "_point_log_phase",
     "_point_log_round", "_enrich_round", "_round_sizes_prev", "_restart_xt_eff",
     "_socp_call_counter", "_solveurs",     # phase 5 : compteur et cache de solveurs
     "slice_def_final",                     # valeur de depart, reecrite plus bas

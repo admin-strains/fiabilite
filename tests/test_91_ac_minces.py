@@ -94,7 +94,9 @@ PROJET = {
 #: 2194 -> 2103.
 #: 27/08 (suite) : le juge FORM+IS et les quatre criteres d'arret sortent
 #: de `run_EFF`, qui passe de 321 a 225 lignes. 2103 -> 2009.
-PLAFOND_LIGNES = 2009
+#: 27/08 (suite) : le cadrage des figures devient un reglage, et
+#: `erreur_FOSM` rejoint `_reliability/controle.py`. 2009 -> 2000.
+PLAFOND_LIGNES = 2000
 PLAFOND_FONCTIONS = 42
 
 
