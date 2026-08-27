@@ -226,9 +226,17 @@ def test_la_grille_3D_est_separee_de_son_dessin(script):
         "%s : `print_3D_HF` doit recevoir la surface deja calculee (%s)"
         % (script, args))
     assert not _appelle(fns["print_3D_HF"], "run_HF")
-    assert _appelle(fns["grille_3D"], "run_HF"), (
-        "%s : c'est `grille_3D` qui paie les appels -- si elle n'en fait plus, "
-        "verifier que le calcul n'est pas reparti ailleurs." % script)
+    # Depuis le 27/08/2026 le calcul est dans `_etapes/grille.py` : l'etude
+    # DELEGUE, elle ne paie plus elle-meme. Le cout doit donc etre la-bas.
+    with open(os.path.join(_REPO, script), encoding="utf-8",
+              errors="replace") as fh:
+        src = fh.read()
+    assert "_GRILLE.surface_3d(" in src, (
+        "%s : la grille 3D doit passer par le module" % script)
+    grille = open(os.path.join(_REPO, "_etapes", "grille.py"),
+                  encoding="utf-8").read()
+    assert "def surface_3d(" in grille and "self.evaluer(pt)" in grille, (
+        "le calcul de la grille 3D a disparu au lieu d'etre deplace")
 
 
 # --------------------------------------------------------------------- #
@@ -337,3 +345,45 @@ def test_le_cadrage_est_calcule_une_fois_et_une_seule(script):
     assert "eff_bounds_min[0] - 1" not in src, (
         "%s porte encore un cadrage litteral" % script)
     assert src.count("_CX0, _CX1, _CY0, _CY1 =") == 1
+
+
+# --------------------------------------------------------------------- #
+# LA GRILLE HAUTE FIDELITE ETAIT CALCULEE DEUX FOIS
+# --------------------------------------------------------------------- #
+# `slice_def` et `slice_def_final` valent TOUS DEUX (0, 1, {}) des qu'il y a
+# deux variables -- mais ils etaient servis par deux fichiers de cache
+# differents, `hf_grid_cache.json` et `hf_grid_cache_final.json`. La meme
+# grille etait donc calculee deux fois.
+#
+# MESURE du 27/08/2026, etude analytique a n_grid_hf = 7, cache vide :
+#     sans la garde : 2 grilles, 98 appels, deux fichiers de cache
+#     avec la garde : 1 grille,  49 appels, un fichier
+#
+# Sur le Moulin Blanc regle a 15, cela fait 225 appels evites -- 29,1 heures
+# a 466 s l'appel.
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_une_coupe_identique_a_la_courante_ne_paie_pas_un_second_cache(script):
+    """La garde qui evite le doublon. Sans elle, `n_grid_hf ** 2` appels
+    solveur sont payes deux fois pour la MEME grille."""
+    with open(os.path.join(_REPO, script), encoding="utf-8",
+              errors="replace") as fh:
+        src = fh.read()
+    assert "if _sd == slice_def:" in src, (
+        "%s : la garde a disparu -- la grille haute fidelite sera calculee "
+        "deux fois, une par fichier de cache." % script)
+    assert "cache, var = _HF_CACHE_FILE, 'hf_2d_grid_fixed'" in src, (
+        "%s : la garde doit rediriger vers le cache COURANT, sinon elle ne "
+        "sert a rien." % script)
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_le_contournement_partiel_a_disparu(script):
+    """Le Moulin Blanc portait un contournement qui evitait d'UTILISER la
+    seconde grille -- mais elle etait calculee quand meme. Traiter la cause
+    rend le contournement inutile ; le garder masquerait sa reapparition."""
+    with open(os.path.join(_REPO, script), encoding="utf-8",
+              errors="replace") as fh:
+        src = fh.read()
+    assert "if slice_def_final == slice_def:" not in src, (
+        "%s : contournement revenu. La cause se traite dans "
+        "`fond_hf_pour_figures`, pas dans les fonctions de trace." % script)

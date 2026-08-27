@@ -1238,6 +1238,15 @@ if __name__ == '__main__':
         meme, et sans un seul appel au solveur.
         """
         _sd = sd if sd is not None else (slice_def if slice_def is not None else (0, 1, {}))
+        # UNE COUPE IDENTIQUE A LA COUPE COURANTE N'A AUCUNE RAISON D'ETRE
+        # RECALCULEE dans un second cache : c'est la meme grille. Elle l'etait,
+        # parce que `slice_def_final` est servi par `hf_grid_cache_final.json`
+        # alors que `slice_def` l'est par `hf_grid_cache.json` -- et les deux
+        # coupes valent (0, 1, {}) des qu'il y a deux variables.
+        # Cout : n_grid_hf^2 appels solveur EN DOUBLE. Sur le Moulin Blanc
+        # regle a 15, cela fait 225 appels de plus, soit 29 heures.
+        if _sd == slice_def:
+            cache, var = _HF_CACHE_FILE, 'hf_2d_grid_fixed'
         _cache = cache if cache is not None else _HF_CACHE_FILE
         if hf_custom_points is not None:
             return _hf_from_custom_points(_sd)
@@ -1375,10 +1384,11 @@ if __name__ == '__main__':
             ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
             uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            if slice_def_final == slice_def:
-                Z_true = fond_hf[0] if fond_hf is not None else None
-            else:
-                Z_true = fond_hf_final[0] if fond_hf_final is not None else None
+            # Le contournement qui vivait ici -- reutiliser `fond_hf` quand
+            # les deux coupes coincident -- ne servait qu'a eviter d'UTILISER
+            # la seconde grille. Elle etait calculee quand meme. La cause est
+            # traitee dans `fond_hf_pour_figures`.
+            Z_true = fond_hf_final[0] if fond_hf_final is not None else None
 
         _xlabel = f'u_{params_names[idx_x]}'
         _ylabel = f'u_{params_names[idx_y]}'
@@ -1510,10 +1520,11 @@ if __name__ == '__main__':
             ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
             uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            if slice_def_final == slice_def:
-                Z_true = fond_hf[0] if fond_hf is not None else None
-            else:
-                Z_true = fond_hf_final[0] if fond_hf_final is not None else None
+            # Le contournement qui vivait ici -- reutiliser `fond_hf` quand
+            # les deux coupes coincident -- ne servait qu'a eviter d'UTILISER
+            # la seconde grille. Elle etait calculee quand meme. La cause est
+            # traitee dans `fond_hf_pour_figures`.
+            Z_true = fond_hf_final[0] if fond_hf_final is not None else None
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- Points ---
@@ -1616,40 +1627,13 @@ if __name__ == '__main__':
         print(f"  [visu] -> {fname}", flush=True)
 
     def grille_3D():
-        """ACTION `grille` : la surface g_HF sur une grille n_grid_hf x n_grid_hf.
+        """ACTION `grille` : la surface g_HF, pour un trace en relief.
 
-        COUT : n_grid_hf^2 appels solveur si le cache est vide -- 15x15 = 225,
-        soit 29 h sur le Moulin Blanc. C'est le calcul le plus cher du
-        programme, et il etait declenche par une fonction nommee « print ».
-
-        Retourne (U1, U2, Z) : la figure ne fait que dessiner ce triplet.
+        COUT : n_grid_hf^2 appels solveur si `hf_3d_grid_fixed` est vide.
+        Les 35 lignes sont dans `_etapes/grille.py`.
         """
-        if hf_3d_grid_fixed is not None:
-            print("Cache hf_3d_grid_fixed disponible - pas d'appels solveur.", flush=True)
-            u1_min_c, u1_max_c, u2_min_c, u2_max_c, n_c = hf_3d_grid_fixed['params']
-            u1_hf = np.linspace(u1_min_c, u1_max_c, n_c)
-            u2_hf = np.linspace(u2_min_c, u2_max_c, n_c)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            Z = np.array(hf_3d_grid_fixed['Z'])
-        else:
-            u1_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-            u2_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-            print(f"Evaluation HF grille {n_grid_hf}x{n_grid_hf} = {n_grid_hf**2} appels solveur...", flush=True)
-            Z_flat = [run_HF(pt)[0] for pt in grid_hf]
-            Z = np.array(Z_flat).reshape(n_grid_hf, n_grid_hf)
+        return _GRILLE.surface_3d(hf_3d_grid_fixed)
 
-        # --- Impression copy-pastable : la seule trace de ces n^2 appels ---
-        print(f"\nhf_3d_grid_fixed = {{", flush=True)
-        print(f"    'params': ({u1_min}, {u1_max}, {u2_min}, {u2_max}, {n_grid_hf}),", flush=True)
-        print(f"    'Z': [", flush=True)
-        for row in Z:
-            vals = ', '.join(f'{v:.6f}' for v in row)
-            print(f"        [{vals}],", flush=True)
-        print(f"    ]", flush=True)
-        print(f"}}", flush=True)
-        return U1_hf, U2_hf, Z
 
     def print_3D_HF(U1_hf, U2_hf, Z):
         """FIGURE : dessine la surface deja calculee. ZERO appel solveur."""

@@ -96,7 +96,10 @@ PROJET = {
 #: de `run_EFF`, qui passe de 321 a 225 lignes. 2103 -> 2009.
 #: 27/08 (suite) : le cadrage des figures devient un reglage, et
 #: `erreur_FOSM` rejoint `_reliability/controle.py`. 2009 -> 2000.
-PLAFOND_LIGNES = 2000
+#: 27/08 (suite) : la grille 3D rejoint `_etapes/grille.py`, et la garde
+#: qui evite de calculer la grille HF deux fois entre en service.
+#: 2000 -> 1982.
+PLAFOND_LIGNES = 1982
 PLAFOND_FONCTIONS = 42
 
 

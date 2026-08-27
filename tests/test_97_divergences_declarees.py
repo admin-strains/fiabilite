@@ -66,9 +66,6 @@ DIVERGENCES_DECLAREES = {
         "La flexion pure superpose sa solution ANALYTIQUE de reference "
         "(`flexion_claude`) aux planches ; le Moulin Blanc n'en a pas. C'est "
         "une vraie difference d'etude, pas une derive.",
-    "print_globalplanche_EFF":
-        "Meme raison que `print_visu` : la surface de reference analytique "
-        "n'existe que pour la flexion pure.",
     "print_3D_HF":
         "Meme raison que `print_visu` : la surface `flexion_claude` tracee en "
         "regard du calcul haute fidelite n'existe que pour la flexion pure.",
@@ -189,7 +186,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 26/08 : 1 975 lignes de fonctions communes.
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
     #: evaluation + plan : 1 451.
-    PLAFOND = 1158
+    PLAFOND = 1139
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

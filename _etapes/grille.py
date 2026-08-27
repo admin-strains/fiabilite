@@ -414,3 +414,54 @@ class Grille:
         uy = np.linspace(pts[:, 1].min() - marge, pts[:, 1].max() + marge, n_interp)
         UX, UY = np.meshgrid(ux, uy)
         return griddata(pts, g_arr, (UX, UY), method='linear'), UX, UY
+
+    # ------------------------------------------------------------------ #
+    # la surface en trois dimensions
+    # ------------------------------------------------------------------ #
+    def surface_3d(self, fige=None, ecrire_recopiable=True):
+        """La surface `g` sur un quadrillage, pour un trace en relief.
+
+        `fige` est une grille deja calculee, recopiee dans le fichier d'etude
+        sous la forme `{'params': (...), 'Z': [[...]]}` : elle evite de
+        repayer les appels. C'est le seul cache qui vit dans le fichier
+        d'etude plutot que sur le disque -- il sert a figer une figure pour
+        un rapport.
+
+        COUT : `cote^2` appels solveur si `fige` est None.
+
+        Retourne `(U1, U2, Z)`.
+        """
+        if fige is not None:
+            self.tracer("Cache hf_3d_grid_fixed disponible - pas d'appels solveur.")
+            u1_min, u1_max, u2_min, u2_max, cote = fige['params']
+            U1, U2 = np.meshgrid(np.linspace(u1_min, u1_max, cote),
+                                 np.linspace(u2_min, u2_max, cote))
+            return U1, U2, np.array(fige['Z'])
+
+        U1, U2 = np.meshgrid(np.linspace(self.u1_min, self.u1_max, self.cote),
+                             np.linspace(self.u2_min, self.u2_max, self.cote))
+        points = np.column_stack([U1.ravel(), U2.ravel()])
+        self.tracer("Evaluation HF grille %dx%d = %d appels solveur..."
+                    % (self.cote, self.cote, self.cote ** 2))
+        Z = np.array([self.evaluer(pt)[0] for pt in points]).reshape(self.cote,
+                                                                     self.cote)
+        if ecrire_recopiable:
+            self.ecrire_recopiable(Z)
+        return U1, U2, Z
+
+    def ecrire_recopiable(self, Z):
+        """La grille sous une forme a recopier dans un fichier d'etude.
+
+        C'est la seule trace de `cote^2` appels solveur : sans elle, une
+        grille calculee en 29 heures ne survit pas a la fermeture du terminal
+        si le cache disque est efface.
+        """
+        self.tracer("\nhf_3d_grid_fixed = {")
+        self.tracer("    'params': (%s, %s, %s, %s, %s),"
+                    % (self.u1_min, self.u1_max, self.u2_min, self.u2_max,
+                       self.cote))
+        self.tracer("    'Z': [")
+        for ligne in Z:
+            self.tracer("        [%s]," % ", ".join("%.6f" % v for v in ligne))
+        self.tracer("    ]")
+        self.tracer("}")
