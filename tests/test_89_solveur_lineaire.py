@@ -348,17 +348,20 @@ def test_le_plan_ecarte_au_lieu_de_fabriquer(script):
         "%s reconstruit all_grad avec le defaut 0.0 illusoire" % script)
 
 
-@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
-                                    "pure_flexion/AC3_pure_flexion.py"])
-def test_run_HF_leve_et_explique_l_asymetrie(script):
-    """`run_HF` LEVE la ou le plan ECARTE, et le message doit dire pourquoi :
-    un point d'enrichissement est demande PARCE QUE l'algorithme le veut la."""
-    chemin = os.path.join(_REPO, script)
+def test_run_HF_leve_et_explique_l_asymetrie():
+    """`evaluer_en_U` LEVE la ou `evaluer_plan` ECARTE, et le message doit dire
+    pourquoi : un point d'enrichissement est demande PARCE QUE l'algorithme le
+    veut la ; l'ecarter en silence le ferait reproposer indefiniment.
+
+    Depuis le 27/08/2026 les deux vivent dans `_doe/evaluation.py` -- une
+    implementation au lieu de quatre.
+    """
+    chemin = os.path.join(_REPO, "_doe", "evaluation.py")
     with open(chemin, "r", encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert "exclure_points_sans_gradient`." in src or \
-           "`exclure_points_sans_gradient`" in src, (
-        "%s : le message de run_HF ne renvoie pas au parametre" % script)
+    assert "`exclure_points_sans_gradient`" in src, (
+        "le message ne renvoie pas au parametre qui gouverne l'autre voie")
+    assert "raise ValueError(" in src, "l'enrichissement doit LEVER"
 
 
 # --------------------------------------------------------------------- #
@@ -453,9 +456,14 @@ def test_le_script_reprend_et_saute_les_points_connus(script):
     with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
         src = fh.read()
     assert "charger_doe_partiel" in src, "%s ne reprend pas un plan interrompu" % script
-    assert "if 'g' in SOL[i]:" in src, (
-        "%s : run_one_SOL doit SAUTER un point deja calcule, sinon la reprise "
-        "ne fait rien gagner" % script)
+    # Le saut d'un point deja calcule est dans `_doe/evaluation.py` depuis le
+    # 27/08/2026 : c'est LUI qui fait gagner les heures, et il n'existe plus
+    # qu'en un exemplaire.
+    evaluation = open(os.path.join(_REPO, "_doe", "evaluation.py"),
+                      encoding="utf-8").read()
+    assert "if 'g' in SOL[i]:" in evaluation, (
+        "`evaluer_plan` doit SAUTER un point deja calcule, sinon la reprise "
+        "ne fait rien gagner")
 
 
 # --------------------------------------------------------------------- #

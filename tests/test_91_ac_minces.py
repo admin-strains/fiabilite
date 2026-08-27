@@ -81,8 +81,11 @@ PROJET = {
 #: 27/08 (suite) : la grille haute fidelite -- cache signe, reprise
 #: apres interruption, coupes interpolees -- part dans
 #: `_etapes/grille.py`. 2530 -> 2421, 50 -> 43 fonctions.
-PLAFOND_LIGNES = 2421
-PLAFOND_FONCTIONS = 43
+#: 27/08 (suite) : l'appel au solveur -- quatre exemplaires, un par
+#: script x deux fonctions -- devient `_doe/evaluation.py`.
+#: 2421 -> 2334, 43 -> 42 fonctions.
+PLAFOND_LIGNES = 2334
+PLAFOND_FONCTIONS = 42
 
 
 def _imports_tiers(chemin):

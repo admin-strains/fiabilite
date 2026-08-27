@@ -104,35 +104,64 @@ def test_la_bascule_tient_dans_le_fichier_d_etude(tmp_path):
 # --------------------------------------------------------------------------- #
 # 3. Les scripts font-ils vraiment ce qui est annonce ?                       #
 # --------------------------------------------------------------------------- #
+#: Depuis le 27/08/2026 l'appel au solveur n'est plus recopie : il y en avait
+#: QUATRE exemplaires (`run_one_SOL` et `run_HF`, dans chacun des deux
+#: scripts), il y en a UN, dans `_doe/evaluation.py`. Les proprietes ci-dessous
+#: se verifient donc la, et non plus quatre fois.
+EVALUATION = os.path.join(REPO, "_doe", "evaluation.py")
+
+
+def test_l_etat_de_sante_est_consulte_au_seul_endroit_qui_appelle_le_solveur():
+    """Le plan d'experiences ET l'enrichissement passent par le meme verdict.
+
+    C'etait le fond du probleme : `run_HF` alimente le MEME metamodele que
+    `run_one_SOL`, et les traiter differemment reintroduirait la divergence
+    que la phase 5 a supprimee. Une seule implementation ne peut plus
+    diverger d'elle-meme.
+    """
+    src = io.open(EVALUATION, encoding="utf-8", errors="replace").read()
+    assert src.count("if ev.sain:") == 1, (
+        "%d verdict(s) dans evaluation.py, attendu 1" % src.count("if ev.sain:"))
+    assert src.count("_signaler_si_non_convergent(") == 3, (
+        "une definition et DEUX sites -- le plan et l'enrichissement")
+
+
 @pytest.mark.parametrize("nom", sorted(ETUDES))
-def test_les_deux_points_d_appel_consultent_l_etat_de_sante(nom):
-    """Le plan d'experiences ET l'enrichissement. `run_HF` alimente le meme
-    metamodele que `run_one_SOL` : les traiter differemment reintroduirait
-    exactement le genre de divergence que la phase 5 a supprime."""
+def test_aucun_script_ne_reimplemente_le_verdict(nom):
+    """Le pendant : la logique doit avoir quitte les scripts, pas y rester en
+    double."""
     src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert src.count("if not ev.sain:") == 2, \
-        "%s : %d point(s) d'appel consultent ev.sain, attendu 2" % (
-            nom, src.count("if not ev.sain:"))
+    assert "if not ev.sain:" not in src, (
+        "%s reimplemente le verdict de convergence : il appartient a "
+        "`_doe/evaluation.py`, en un seul exemplaire." % nom)
+    assert "solveur.evaluer(" not in src, (
+        "%s appelle le solveur en direct : tout doit passer par "
+        "`Evaluateur`." % nom)
 
 
-@pytest.mark.parametrize("nom", sorted(ETUDES))
-def test_un_point_suspect_est_signale_avec_son_statut_et_son_alpha(nom):
+def test_un_point_suspect_est_signale_avec_son_statut_et_son_alpha():
     """Un journal qui dit « non converge » sans dire lequel ni de combien
     n'aide personne a juger si le point etait recuperable."""
-    src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert src.count("NON CONVERGE") == 2
+    src = io.open(EVALUATION, encoding="utf-8", errors="replace").read()
+    assert "NON CONVERGE" in src
     for attendu in ('ev.diagnostic.get("solver_status")', "ev.alpha"):
-        assert src.count(attendu) >= 2, "%s : %s absent d'un des deux messages" % (nom, attendu)
+        assert attendu in src, "%s absent du message" % attendu
+
+
+def test_l_exclusion_passe_par_le_contrat_et_non_par_un_test_local():
+    """`exige_sain()` porte le message et la regle. Personne ne doit
+    reimplementer son propre verdict -- c'est ainsi que les quatre copies de
+    l'appel solveur avaient diverge."""
+    src = io.open(EVALUATION, encoding="utf-8", errors="replace").read()
+    assert src.count("ev.exige_sain(") == 1
+    assert "self.exclure_non_converges" in src
 
 
 @pytest.mark.parametrize("nom", sorted(ETUDES))
-def test_l_exclusion_passe_par_le_contrat_et_non_par_un_test_local(nom):
-    """`exige_sain()` porte le message et la regle. Les scripts ne doivent pas
-    reimplementer leur propre verdict -- c'est ainsi que les quatre copies de
-    l'appel solveur avaient diverge."""
+def test_le_script_transmet_bien_le_reglage_d_exclusion(nom):
     src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert src.count("CFG.exclure_points_non_converges") >= 2
-    assert src.count("ev.exige_sain(") == 2
+    assert "CFG.exclure_points_non_converges" in src, (
+        "%s ne transmet pas le reglage a l'evaluateur" % nom)
 
 
 @pytest.mark.parametrize("nom", sorted(ETUDES))
@@ -140,13 +169,13 @@ def test_le_script_compile_toujours(nom):
     ast.parse(io.open(ETUDES[nom], encoding="utf-8", errors="replace").read())
 
 
-@pytest.mark.parametrize("nom", sorted(ETUDES))
-def test_la_raison_de_l_attente_est_ecrite_dans_le_script(nom):
+def test_la_raison_de_l_attente_est_ecrite_la_ou_la_decision_se_prend():
     """Sans elle, le prochain lecteur corrigera « l'oubli » -- et jettera des
     evaluations valides a chaque run."""
-    src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert re.search(r"pas encore fiables", src), \
-        "%s : la raison de conserver les points suspects n'est pas ecrite" % nom
+    src = io.open(EVALUATION, encoding="utf-8", errors="replace").read()
+    assert re.search(r"pas encore fiables", src), (
+        "la raison de conserver les points suspects n'est pas ecrite dans "
+        "`_doe/evaluation.py`, la ou la decision se prend")
 
 
 # --------------------------------------------------------------------------- #

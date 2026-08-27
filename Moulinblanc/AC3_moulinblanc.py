@@ -44,6 +44,7 @@ import figurer as _figurer
 import ajuster as _fit
 import projection as _projection
 import grille as _grille
+import evaluation as _evaluation
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -413,7 +414,6 @@ if __name__ == '__main__':
     # `geometric_approximation_min = "4"` la ou `run_one_SOL` lisait la
     # configuration -- alors que les deux alimentent le meme metamodele.
     # `tests/golden/options_ds.json` en garde la trace.
-    _socp_call_counter = [0]
     _solveurs = {}
 
     def _solveur(nom=None):
@@ -439,125 +439,38 @@ if __name__ == '__main__':
             )
         return _solveurs[nom]
 
-    def _etiquette_socp(prefixe, p_vals, u=None):
-        """Nom du sous-dossier de SOCP_history, dans la forme d'origine."""
-        _socp_call_counter[0] += 1
-        coords = ""
-        if u is not None:
-            coords = f"_u1{float(u[0]):+.3f}_u2{float(u[1]):+.3f}"
-        coords += "_" + "_".join(f"{params_names[i]}{p_vals[i]:.1f}"
-                                 for i in range(len(p_vals)))
-        return f"{prefixe}_{_socp_call_counter[0]:03d}{coords}"
+    # L'unique passage vers le solveur est dans `_doe/evaluation.py`. Il est
+    # construit PARESSEUSEMENT : il a besoin du journal de points et du cache
+    # incremental, definis plus bas dans ce fichier.
+    _evaluateur = [None]
 
-    def _grad_vers_U(grad_X, u_point, T_inv):
-        """Passage du gradient de l'espace physique X a l'espace standard U.
+    def _obtenir_evaluateur():
+        if _evaluateur[0] is None:
+            _evaluateur[0] = _evaluation.Evaluateur(
+                solveur_pour=_solveur,
+                dist=dist_jointe(),
+                params_names=params_names,
+                exclure_non_converges=CFG.exclure_points_non_converges,
+                archiver=save_history,
+                journaliser=lambda u, x, g: _append_point_log(
+                    _point_log_phase[0], u, x, g),
+                sauver_partiel=_save_doe_cache_incremental)
+        return _evaluateur[0]
 
-        C'est ici, et pas dans le solveur : la transformation isoprobabiliste
-        appartient a la loi jointe, pas au maillage.
-        """
-        J_Tinv_T = T_inv.gradient(u_point).transpose()
-        return J_Tinv_T * ot.Point(list(grad_X))
-
-    def run_one_SOL(modelname, SOL, params_names, sensitivity=False, with_sens_dict=None):
-        """Lance un calcul complet pour une valeur de FT donnee.
-        Retourne la liste des solutions pour chaque jeu de variables dans SOL (liste de dictionnaire).
-        Les gradients sont convertis en espace U (standard normal) via T = isoprobabilistic transform.
-        SOL[i]['dg_<var>'] = gradient en U. SOL[i]['_u'] = coordonnees U du point."""
-        solveur = _solveur(modelname)
-        dist_X = dist_jointe()
-        T = dist_X.getIsoProbabilisticTransformation()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        _deja = sum(1 for s in SOL if 'g' in s)
-        if _deja:
-            print("  [SOLVEUR] %d/%d point(s) deja connus (cache partiel) : "
-                  "autant de SOCP evites" % (_deja, len(SOL)), flush=True)
-        for i in range(len(SOL)):
-            # Un point deja calcule -- repris d'un plan interrompu -- ne doit
-            # pas etre re-evalue : c'est TOUT l'interet de la reprise.
-            if 'g' in SOL[i]:
-                continue
-            p_vals = [float(SOL[i][p]) for p in params_names]
-            etiquette = _etiquette_socp("SOL", p_vals) if save_history else None
-            ev = solveur.evaluer({p: SOL[i][p] for p in params_names},
-                                 sensibilite=sensitivity, etiquette=etiquette)
-            if not ev.sain:
-                # Les criteres de convergence rendus par Digital Structure ne
-                # sont pas encore fiables (Agnes, 26/08/2026) : on SIGNALE,
-                # on ne jette pas. Basculer `exclure_points_non_converges` a
-                # true dans le fichier d'etude le jour ou ils le seront.
-                print("  [SOLVEUR] point %s NON CONVERGE (%s), alpha=%.6f -- %s"
-                      % (p_vals, ev.diagnostic.get("solver_status"), ev.alpha,
-                         "EXCLU du plan d'experiences" if CFG.exclure_points_non_converges
-                         else "conserve : critere DS juge non fiable"), flush=True)
-                if CFG.exclure_points_non_converges:
-                    ev.exige_sain("point %s du plan d'experiences" % (p_vals,))
-            SOL[i]['g'] = ev.g
-
-            # --- Conversion X -> U ---
-            x_point = ot.Point(p_vals)
-            u_point = T(x_point)
-            SOL[i]['_u'] = [float(u_point[j]) for j in range(n_var)]
-            if sensitivity and ev.gradient_complet:
-                grad_U = _grad_vers_U(ev.grad_x, u_point, T_inv)
-                for j, p in enumerate(params_names):
-                    SOL[i][f'dg_{p}'] = float(grad_U[j])
-            else:
-                for p in params_names:
-                    SOL[i][f'dg_{p}'] = None
-            # --- Sauvegarde incrementale du cache DOE ---
-            _n_done = sum(1 for s in SOL if 'g' in s)
-            _save_doe_cache_incremental(SOL, _n_done)
-        return SOL
+    def run_one_SOL(modelname, SOL, params_names, sensitivity=False,
+                    with_sens_dict=None):
+        # `with_sens_dict` n'a JAMAIS ete lu ; il reste dans la signature le
+        # temps que les deux sites d'appel soient repris.
+        return _obtenir_evaluateur().evaluer_plan(
+            SOL, modelname, sensibilite=sensitivity)
 
     def run_HF(u):
-        """Evalue l'etat limite en UN point de l'espace standard U.
+        """L'etat limite en un point de l'espace standard. UN appel solveur."""
+        return _obtenir_evaluateur().evaluer_en_U(u)
 
-        Sert a l'enrichissement EFF, a la grille haute fidelite et au FOSM.
-        Les points qu'elle produit rejoignent le plan d'experiences : elle doit
-        donc mailler EXACTEMENT comme `run_one_SOL`, ce qui n'etait pas le cas
-        avant la phase 5.
-        """
-        solveur = _solveur()
-        n_var_local = len(u)
-        dist_X = dist_jointe()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        u_point = ot.Point(list(u))
-        x_point = T_inv(u_point)
-        p_vals = [float(x_point[j]) for j in range(n_var_local)]
 
-        etiquette = _etiquette_socp("HF", p_vals, u=u) if save_history else None
-        ev = solveur.evaluer({params_names[i]: x_point[i] for i in range(n_var_local)},
-                             sensibilite=True, etiquette=etiquette)
-        if not ev.sain:
-            # Meme regle qu'au plan d'experiences : ce point rejoint le
-            # metamodele, il doit donc etre traite pareil.
-            print("  [SOLVEUR] run_HF %s NON CONVERGE (%s), alpha=%.6f -- %s"
-                  % (list(u), ev.diagnostic.get("solver_status"), ev.alpha,
-                     "EXCLU" if CFG.exclure_points_non_converges
-                     else "conserve : critere DS juge non fiable"), flush=True)
-            if CFG.exclure_points_non_converges:
-                ev.exige_sain("point d'enrichissement %s" % (list(u),))
-        g_HF = ev.g
 
-        grad_HF_X = list(ev.grad_x)
-        grad_HF_U = [None] * n_var_local
-        if ev.gradient_complet:
-            grad_HF_U = _grad_vers_U(grad_HF_X, u, T_inv)
-        if any(v is None for v in grad_HF_U):
-            # On LEVE ici, la ou le plan d'experiences ECARTE (cf.
-            # `exclure_points_sans_gradient`). La difference est voulue : un
-            # point d'enrichissement est demande PARCE QUE l'algorithme le
-            # veut la ; l'ecarter en silence lui ferait reproposer le meme
-            # point, indefiniment.
-            raise ValueError(
-                "run_HF en u=%s : le solveur n'a rendu aucun gradient "
-                "(grad_HF_X=%s). Un gradient fabrique a 0 affirmerait que "
-                "l'etat limite est plat ici, et le metamodele l'ajusterait. "
-                "Le plan d'experiences, lui, ecarte ces points -- voir "
-                "`exclure_points_sans_gradient`."
-                % (list(u), grad_HF_X))
-        _append_point_log(_point_log_phase[0], u, x_point, g_HF)
-        return g_HF, grad_HF_U, grad_HF_X
+
 
 
     _run_HF_count = [0]  # compteur pour le print memoire (temporaire)

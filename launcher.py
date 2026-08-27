@@ -128,6 +128,7 @@ def setup(ds_root):
               os.path.join(REPO, "_config"),
               os.path.join(REPO, "_etapes"),
               os.path.join(REPO, "_surrogate"),
+              os.path.join(REPO, "_doe"),
               os.path.join(REPO, "solver")):
         if p not in sys.path:
             sys.path.insert(0, p)

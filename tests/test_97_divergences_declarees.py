@@ -182,7 +182,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     extraction en retire ; ce plafond descend, il ne remonte jamais."""
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille :
     #: 601 -> 449 lignes.
-    PLAFOND = 449
+    PLAFOND = 354
     communes, differentes, A, B = comparaison
     identiques = sum(len(A[n]) for n in communes
                      if "".join(A[n]) == "".join(B[n]))
