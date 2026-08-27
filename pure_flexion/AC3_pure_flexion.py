@@ -22,7 +22,8 @@ import numpy as np
 import matplotlib
 _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_LOG_REDIRECTED"))
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
-import matplotlib.pyplot as plt
+# `pyplot` n'est plus importe ici : l'etude ne dessine plus rien.
+# Le choix du backend, lui, doit rester AVANT tout import de figure.
 import re
 import math
 from scipy.stats import norm
@@ -1235,13 +1236,6 @@ if __name__ == '__main__':
         config_identique=config_is_identical,
         marquer_phase=lambda p: _point_log_phase.__setitem__(0, p))
 
-    def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
-                                       cache_file=None, sd=None, finale=False):
-        Z, description = _GRILLE.calculer_2d(
-            grid_hf, cote=n_grid_hf_local, contexte=context,
-            fichier=cache_file, coupe=slice_def if sd is None else sd)
-        _GRILLE.coupes["finale" if finale else "courante"] = description
-        return Z
 
 
     # --- HF GRILLE FULL (n_var-D) ---
@@ -1452,47 +1446,29 @@ if __name__ == '__main__':
 
 
     def print_3D_HF(U1_hf, U2_hf, Z):
-        """FIGURE : dessine la surface deja calculee. ZERO appel solveur."""
-        # --- Plot 3D ---
-        fig = plt.figure(figsize=(10, 7))
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot_surface(U1_hf, U2_hf, Z, color='red', alpha=0.3, label='g_HF')
-        ax.contour(U1_hf, U2_hf, Z, levels=[0], colors='red', linewidths=2,
-                   zdir='z', offset=float(Z.min()))
-        ax.contour(U1_hf, U2_hf, Z, levels=[0], colors='darkred', linewidths=2)
+        """FIGURE : la surface deja calculee, en relief. ZERO appel solveur."""
+        return _figurer.relief(_DECOR, U1_hf, U2_hf, Z, n_grid_hf,
+                               modes_figes=best_sol_modes_fixed,
+                               gradients_figes=grad_sp_fixed,
+                               surcouche=_relief_analytique if print_ana else None)
 
-        # --- Surface analytique g_ana (flexion_claude) ---
-        if print_ana:
-            calc = flexion_claude()
-            u1_a = np.linspace(u1_min, u1_max, n_grid)
-            u2_a = np.linspace(u2_min, u2_max, n_grid)
-            U1_a, U2_a = np.meshgrid(u1_a, u2_a)
-            Z_ana = np.array([calc.g(u1, u2)
-                              for u1, u2 in zip(U1_a.ravel(), U2_a.ravel())]
-                             ).reshape(n_grid, n_grid)
-            ax.plot_surface(U1_a, U2_a, Z_ana, color='blue', alpha=0.3, label='g_ana')
-            ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2,
-                       zdir='z', offset=float(Z.min()))
-            ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2)
+    def _relief_analytique(ax, plancher):
+        """La surface analytique de reference, superposee en relief.
 
-        if best_sol_modes_fixed is not None:
-            for col, (lbl, data) in zip(['blue', 'red', 'green', 'gold'],
-                                         best_sol_modes_fixed.items()):
-                u1_f, u2_f = data['u*']
-                u1_s, u2_s = data['sp']
-                ax.scatter(u1_f, u2_f, 0.0, c=col, s=200, marker='*', label=f'u* {lbl}')
-                ax.scatter(u1_s, u2_s, 0.0, c=col, s=100, marker='x', linewidths=2, label=f'sp {lbl}')
-                if grad_sp_fixed is not None:
-                    ng = grad_sp_fixed[lbl]['neg_grad']
-                    ax.quiver(u1_s, u2_s, 0.0, ng[0], ng[1], 0.0,
-                              color=col, length=3.0, normalize=True, arrow_length_ratio=0.3)
-        ax.set_xlabel(f'u1 ({params_names[0]})')
-        ax.set_ylabel(f'u2 ({params_names[1]})')
-        ax.set_zlabel('g_HF')
-        ax.set_title(f'Surface g_HF - {n_grid_hf}x{n_grid_hf} pts HF')
-        ax.legend()
-        plt.tight_layout()
-        plt.show()
+        L'ecart entre les deux surfaces se lit alors en volume : la ou elles
+        se separent, la formule de section cesse de representer le calcul
+        tridimensionnel. N'existe que pour la flexion pure.
+        """
+        calc = flexion_claude()
+        U1_a, U2_a = np.meshgrid(np.linspace(u1_min, u1_max, n_grid),
+                                 np.linspace(u2_min, u2_max, n_grid))
+        Z_ana = np.array([calc.g(a, b) for a, b in zip(U1_a.ravel(), U2_a.ravel())]
+                         ).reshape(n_grid, n_grid)
+        ax.plot_surface(U1_a, U2_a, Z_ana, color='blue', alpha=0.3, label='g_ana')
+        ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2,
+                   zdir='z', offset=plancher)
+        ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2)
+
 
     # --------------------------------------------------------------------------- #
     # FONCTION IS POST-FORM                                                       #

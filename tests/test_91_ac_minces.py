@@ -109,7 +109,10 @@ PROJET = {
 #: la surcouche analytique devient un ARGUMENT, et les deux coupes
 #: passent de variables globales a l'etat de `Grille`.
 #: 1849 -> 1710, 42 -> 42 fonctions (deux nommees, deux retirees).
-PLAFOND_LIGNES = 1710
+#: 27/08 (suite) : `print_3D_HF` rejoint `_etapes/figurer.py`, et les
+#: etudes cessent d'importer `pyplot` -- elles ne dessinent plus rien.
+#: 1710 -> 1686.
+PLAFOND_LIGNES = 1686
 PLAFOND_FONCTIONS = 42
 
 

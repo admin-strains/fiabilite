@@ -567,3 +567,60 @@ def _tracer_trajectoires(ax, trajectoires, idx_x, idx_y, marge):
             float(ensemble[:, idx_x].max()) + marge,
             float(ensemble[:, idx_y].min()) - marge,
             float(ensemble[:, idx_y].max()) + marge)
+
+
+# --------------------------------------------------------------------------- #
+# LE RELIEF : la surface de l'etat limite, en trois dimensions                 #
+# --------------------------------------------------------------------------- #
+def relief(decor, U1, U2, Z, cote, modes_figes=None, gradients_figes=None,
+           surcouche=None, afficher=True):
+    """La surface `g` en relief, et son intersection avec le plan zero.
+
+    Le contour `g = 0` est trace DEUX FOIS : sur la surface elle-meme, et
+    projete au plancher de la boite. Le second est ce qu'on lit reellement --
+    la frontiere de defaillance vue de dessus -- le premier montre comment la
+    surface la traverse, et donc si elle la traverse franchement ou en
+    rasant.
+
+    `surcouche(ax, Z)` permet a une etude d'ajouter une seconde surface :
+    la flexion pure y superpose sa solution analytique, ce qui donne l'ecart
+    entre la formule de section et le calcul tridimensionnel, en volume.
+
+    ZERO appel solveur : `Z` est deja calculee (voir `_etapes.grille`).
+    """
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(U1, U2, Z, color="red", alpha=0.3, label="g_HF")
+    plancher = float(Z.min())
+    ax.contour(U1, U2, Z, levels=[0], colors="red", linewidths=2,
+               zdir="z", offset=plancher)
+    ax.contour(U1, U2, Z, levels=[0], colors="darkred", linewidths=2)
+
+    if surcouche is not None:
+        surcouche(ax, plancher)
+
+    if modes_figes is not None:
+        for col, (etiquette, data) in zip(("blue", "red", "green", "gold"),
+                                          modes_figes.items()):
+            u1_f, u2_f = data["u*"]
+            u1_s, u2_s = data["sp"]
+            ax.scatter(u1_f, u2_f, 0.0, c=col, s=200, marker="*",
+                       label="u* %s" % etiquette)
+            ax.scatter(u1_s, u2_s, 0.0, c=col, s=100, marker="x", linewidths=2,
+                       label="sp %s" % etiquette)
+            if gradients_figes is not None:
+                ng = gradients_figes[etiquette]["neg_grad"]
+                ax.quiver(u1_s, u2_s, 0.0, ng[0], ng[1], 0.0, color=col,
+                          length=3.0, normalize=True, arrow_length_ratio=0.3)
+
+    ax.set_xlabel("u1 (%s)" % decor.params_names[0])
+    ax.set_ylabel("u2 (%s)" % decor.params_names[1])
+    ax.set_zlabel("g_HF")
+    ax.set_title("Surface g_HF - %dx%d pts HF" % (cote, cote))
+    ax.legend()
+    plt.tight_layout()
+    if afficher:
+        plt.show()
+    return fig

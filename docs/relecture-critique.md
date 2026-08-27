@@ -105,7 +105,7 @@ _reliability/arret.py       (existe)    1 classe       155 l.
 _reliability/form.py        (existe)    7 fonctions     79 l.
 _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
-_etapes/figurer.py          (existe)  1 classe + 7 fn  569 l.
+_etapes/figurer.py          (existe)  1 classe + 8 fn  626 l.
 _surrogate/wrappers.py      (existe)    6 classes      193 l.
 _surrogate/ajuster.py       (existe)    9 fonctions    270 l.
 _surrogate/projection.py    (existe)    1 fonction      37 l.
@@ -141,10 +141,10 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **1 710 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **1 593 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **1 686 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **1 566 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **42 / 42** | <= 8 |
-| lignes de fonctions communes aux deux etudes | 1 975 | **839** | 0 |
+| lignes de fonctions communes aux deux etudes | 1 975 | **803** | 0 |
 | divergences declarees | 6 (trouvees a la main) | **2** (verifiees) | 0 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
