@@ -20,19 +20,15 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 import openturns as ot
 import numpy as np
-import autograd.numpy as anp
 import matplotlib
 _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_LOG_REDIRECTED"))
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from smt.surrogate_models import GEKPLS
-from scipy.optimize import brentq
 import re
 import math
-from sklearn.cluster import DBSCAN
 from scipy.stats import norm
-from math import comb
 import warnings
 from datetime import datetime
 from api import fit_gepck, predict_gepck, predict_gradient_gepck, fit_pck, predict_pck
