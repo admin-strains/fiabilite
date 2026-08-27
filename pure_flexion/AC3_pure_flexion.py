@@ -857,7 +857,9 @@ if __name__ == '__main__':
         Cette fonction reçoit le métamodele et ses paramètres, et l'améliore jusqu'à vérifier le critère EFF puis
         renvoie métamodèle+ paramètres mis à jour.
         """
-        global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
+        # Seul `_eff_history_beta_IS` est REBINDE (c'est un instantane) ; les
+        # autres ne sont que lus et modifies en place.
+        global _eff_history_beta_IS
         # --- Si aucune branche ne tourne, on ne fait rien ---
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
@@ -907,19 +909,16 @@ if __name__ == '__main__':
         else:
             list_beta_IS = [_b_mid] if _b_mid is not None else []
         if not restart_enrich_only:
-            _eff_history_BB = []
-            _eff_history_BS = []
-            _eff_history_Pf = []
-        list_ratio_BB = _eff_history_BB   # alias — même objet
-        list_ratio_BS = _eff_history_BS
+            # VIDES EN PLACE, jamais rebindes -- voir `ArretEFF` : un
+            # rebinding abandonnerait les listes que d'autres detiennent.
+            del _eff_history_BB[:]
+            del _eff_history_BS[:]
+            del _eff_history_Pf[:]
+        list_ratio_BB, list_ratio_BS = _eff_history_BB, _eff_history_BS
         list_Pf = _eff_history_Pf
         # --- Les criteres d'arret : quatre branches de 68 lignes sont dans
         # --- `_reliability/arret.py`, avec les deux asymetries qu'elles
         # --- portaient et que personne n'avait ecrites.
-        # Construit APRES la remise a zero des historiques : `_eff_history_BB
-        # = []` rebinde la globale, et un objet capture avant cette ligne
-        # serait abandonne -- les ratios finiraient dans une liste que plus
-        # personne ne lit.
         _arret = _arret_eff.ArretEFF(
             EFF_criteria, tol_BB, tol_BS, n_max_EFF_points, tol_EFF,
             hist_BB=list_ratio_BB, hist_BS=list_ratio_BS)

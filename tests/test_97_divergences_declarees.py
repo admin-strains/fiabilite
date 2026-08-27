@@ -206,7 +206,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 27/08 (suite) : l'evenement `g < 0`, les points de depart, le warm
     #: start et le choix de coupe partent dans `_reliability/form.py`.
     #: 643 -> 631.
-    PLAFOND = 631
+    #: 27/08 (suite) : les historiques sont vides en place, plus rebindes.
+    #: 631 -> 630.
+    PLAFOND = 630
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

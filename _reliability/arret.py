@@ -66,6 +66,14 @@ class ArretEFF:
         self.tol_BS = tol_BS
         self.n_max_points = n_max_points
         self.tol_EFF = tol_EFF
+        # CONTRAT : ces deux listes sont PARTAGEES avec l'appelant, qui les
+        # relit pour le dump de reprise et pour la courbe de convergence.
+        # L'appelant doit donc les vider EN PLACE (`del l[:]`), jamais les
+        # rebinder : `hist = []` creerait une nouvelle liste et laisserait
+        # cet objet ecrire dans celle que plus personne ne lit. C'est arrive
+        # le 27/08/2026 -- les ratios BB et BS ont disparu du bilan de fin de
+        # run, et 623 tests verts ne l'ont pas vu. Seule la chaine analytique,
+        # journal compare LIGNE A LIGNE, l'a attrape.
         self.hist_BB = hist_BB if hist_BB is not None else []
         self.hist_BS = hist_BS if hist_BS is not None else []
         self.tracer = tracer

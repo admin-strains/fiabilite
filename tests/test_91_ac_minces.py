@@ -135,7 +135,10 @@ PROJET = {
 #: warm start, choix de coupe -- part dans `_reliability/form.py`. L'evenement
 #: etait construit a DEUX endroits du meme fichier ; il ne l'est plus nulle
 #: part dans les etudes. 1502 -> 1489.
-PLAFOND_LIGNES = 1489
+#: 27/08 (suite) : les historiques d'enrichissement sont vides EN PLACE au
+#: lieu d'etre rebindes -- le contrat de partage part dans `ArretEFF`, et
+#: l'etude n'en garde que deux lignes. 1489 -> 1488.
+PLAFOND_LIGNES = 1488
 PLAFOND_FONCTIONS = 42
 
 

@@ -377,3 +377,65 @@ def test_les_trous_de_l_historique_s_impriment_comme_trous():
     assert "[None, 0.1235]" in ligne
     assert "tol=0.05" in ligne
     assert any("[historique ratio BS]" in m for m in j)
+
+
+# --------------------------------------------------------------------------- #
+# LE CONTRAT DE PARTAGE DES HISTORIQUES (27/08/2026)                           #
+# --------------------------------------------------------------------------- #
+def test_les_ratios_atterrissent_dans_la_liste_de_l_appelant():
+    """`ArretEFF` n'a pas d'historique a lui : il ECRIT dans celui qu'on lui
+    passe. C'est ce qui permet au dump de reprise et au bilan de fin de run
+    de lire les memes ratios."""
+    hist = []
+    a = _arret.ArretEFF("BB", 0.05, 0.05, 10, 0.001, hist_BB=hist,
+                        tracer=lambda m: None)
+    a.enregistrer(0.02, 4.7, 4.6, prefixe="N=10")
+    assert hist == [0.02], "les ratios ne sont pas arrives chez l'appelant"
+
+
+def test_vider_en_place_preserve_le_partage():
+    """La bonne facon de repartir de zero."""
+    hist = [0.9, 0.8]
+    a = _arret.ArretEFF("BB", 0.05, 0.05, 10, 0.001, hist_BB=hist,
+                        tracer=lambda m: None)
+    del hist[:]
+    a.enregistrer(0.02, 4.7, 4.6, prefixe="N=10")
+    assert hist == [0.02]
+    assert a.hist_BB is hist
+
+
+def test_rebinder_casse_le_partage_EN_SILENCE():
+    """LE DEFAUT DU 27/08/2026, reproduit.
+
+    `hist = []` cree une NOUVELLE liste. L'objet garde l'ancienne, y ecrit
+    fidelement, et personne ne la relit : les ratios disparaissent du bilan
+    et du dump sans la moindre erreur. 623 tests verts ne l'ont pas vu --
+    seule la comparaison ligne a ligne du journal analytique l'a attrape.
+
+    Ce test n'exige rien du code de production : il FIGE le mecanisme, pour
+    que la raison du `del l[:]` reste lisible.
+    """
+    hist = [0.9]
+    a = _arret.ArretEFF("BB", 0.05, 0.05, 10, 0.001, hist_BB=hist,
+                        tracer=lambda m: None)
+    hist = []                       # <- le rebinding fautif
+    a.enregistrer(0.02, 4.7, 4.6, prefixe="N=10")
+    assert hist == [], "la liste que l'appelant relit est restee vide"
+    assert a.hist_BB == [0.9, 0.02], "l'objet a ecrit dans la liste abandonnee"
+
+
+@pytest.mark.parametrize("script", ["pure_flexion/AC3_pure_flexion.py",
+                                    "Moulinblanc/AC3_moulinblanc.py"])
+def test_aucune_etude_ne_rebinde_ses_historiques(script):
+    """Le garde-fou. Un `_eff_history_XX = []` reintroduirait exactement le
+    defaut ci-dessus -- sans erreur, sans test rouge."""
+    import os
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(repo, script), encoding="utf-8") as fh:
+        lignes = [l.strip() for l in fh]
+    fautifs = [l for l in lignes
+               if l.startswith("_eff_history_") and l.endswith("= []")]
+    assert not fautifs, (
+        "%s : historique remis a zero par rebinding (%s). Vider en place "
+        "avec `del l[:]` -- voir le contrat dans `ArretEFF`."
+        % (script, fautifs))
