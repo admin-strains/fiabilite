@@ -21,7 +21,6 @@ import matplotlib
 _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_LOG_REDIRECTED"))
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import re
 from scipy.stats import norm
 from datetime import datetime
@@ -582,7 +581,7 @@ if __name__ == '__main__':
             st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
             st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
             st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
-            try:    st["hf_2d_grid"] = hf_2d_grid_fixed
+            try:    st["hf_2d_grid"] = _GRILLE.coupes["courante"]
             except Exception: st["hf_2d_grid"] = None
             st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
             st["best_result"] = _u_beta(best_result) if best_result is not None else None
@@ -1131,7 +1130,6 @@ if __name__ == '__main__':
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
-    hf_2d_grid_fixed_final = None
 
 
 
@@ -1148,28 +1146,19 @@ if __name__ == '__main__':
         fichier_cache=_HF_CACHE_FILE,
         fichier_cache_complet=_HF_FULL_CACHE_FILE,
         fichier_cache_points=_HF_CUSTOM_CACHE_FILE,
+        coupe_initiale=hf_2d_grid_fixed,
         evaluer_lot=(lambda pts: run_HF_grid_parallel(pts, n_workers=n_workers_DOE))
                     if n_workers_DOE and n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
         config_identique=config_is_identical,
         marquer_phase=lambda p: _point_log_phase.__setitem__(0, p))
 
-    def _ranger_grille(dico, grid_var_name):
-        """Range une grille calculee la ou l'etat de reprise ira la chercher."""
-        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
-        if grid_var_name == 'hf_2d_grid_fixed_final':
-            hf_2d_grid_fixed_final = dico
-        else:
-            hf_2d_grid_fixed = dico
-
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
-                                       cache_file=None, sd=None,
-                                       grid_var_name='hf_2d_grid_fixed'):
-        Z, dico = _GRILLE.calculer_2d(
+                                       cache_file=None, sd=None, finale=False):
+        Z, description = _GRILLE.calculer_2d(
             grid_hf, cote=n_grid_hf_local, contexte=context,
-            fichier=cache_file,
-            coupe=slice_def if sd is None else sd)
-        _ranger_grille(dico, grid_var_name)
+            fichier=cache_file, coupe=slice_def if sd is None else sd)
+        _GRILLE.coupes["finale" if finale else "courante"] = description
         return Z
 
 
@@ -1190,49 +1179,9 @@ if __name__ == '__main__':
         return _GRILLE.depuis_points_libres(hf_custom_points)
 
 
-    def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
-        """Z sur une coupe, par la voie la MOINS CHERE disponible.
-
-        Cascade, du gratuit au couteux :
-          1. cache memoire        -- 0 appel
-          2. cache disque signe   -- 0 appel
-          3. grille complete      -- 0 appel (interpolation)
-          4. calcul               -- n_grid_hf^2 appels solveur
-        """
-        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
-        _final = grid_var_name == 'hf_2d_grid_fixed_final'
-
-        _mem = hf_2d_grid_fixed_final if _final else hf_2d_grid_fixed
-        if _mem is not None:
-            return np.array(_mem['Z'])
-
-        Z_cached = _GRILLE.lire_cache_2d(sd, fichier=cache_file)
-        if Z_cached is not None:
-            _ranger_grille(_GRILLE._description(sd, n_grid_hf, Z_cached),
-                           grid_var_name)
-            return Z_cached
-
-        if _GRILLE.complete is not None:
-            print(f"[HF SLICE] extraction depuis grille full pour coupe ({sd[0]},{sd[1]})", flush=True)
-            Z = _GRILLE.coupe_depuis_complete(sd)
-            _GRILLE.ecrire_cache_2d(Z, sd, fichier=cache_file)
-            _ranger_grille(_GRILLE._description(sd, n_grid_hf, Z), grid_var_name)
-            return Z
-
-        idx_x, idx_y, fixed = sd
-        UX_hf, UY_hf = _GRILLE.maillage_2d()
-        grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
-        grid_hf[:, idx_x] = UX_hf.ravel()
-        grid_hf[:, idx_y] = UY_hf.ravel()
-        for idx, val in fixed.items():
-            grid_hf[:, idx] = val
-        return _compute_hf_grid_with_progress(grid_hf, n_grid_hf,
-                                              context="get_hf_slice",
-                                              cache_file=cache_file, sd=sd,
-                                              grid_var_name=grid_var_name)
 
 
-    def fond_hf_pour_figures(sd=None, cache=None, var='hf_2d_grid_fixed'):
+    def fond_hf_pour_figures(sd=None, cache=None, finale=False):
         """Le fond de contour haute fidelite, et CE QU'IL COUTE.
 
         Fonction separee et nommee parce que c'est une ACTION, pas un detail
@@ -1253,7 +1202,7 @@ if __name__ == '__main__':
         # Cout : n_grid_hf^2 appels solveur EN DOUBLE. Sur le Moulin Blanc
         # regle a 15, cela fait 225 appels de plus, soit 29 heures.
         if _sd == slice_def:
-            cache, var = _HF_CACHE_FILE, 'hf_2d_grid_fixed'
+            cache, finale = _HF_CACHE_FILE, False
         _cache = cache if cache is not None else _HF_CACHE_FILE
         if hf_custom_points is not None:
             return _hf_from_custom_points(_sd)
@@ -1262,7 +1211,7 @@ if __name__ == '__main__':
         ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
         uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
         UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-        return _get_hf_slice(_sd, _cache, var), UX_hf, UY_hf
+        return _GRILLE.coupe(_sd, fichier=_cache, finale=finale), UX_hf, UY_hf
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff, fond_hf=None):
         """Planche 3 vues : critere EFF, ecart-type, etat limite du surrogate.
@@ -1341,153 +1290,55 @@ if __name__ == '__main__':
 
 
     def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, fond_hf=None, fond_hf_final=None):
-        global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
+        """La figure de synthese : ou passe l'etat limite, ou FORM a cherche.
+
+        Le DESSIN est dans `_etapes/figurer.py`. Restent ici deux choses qui
+        appartiennent a l'etude : le choix de la coupe finale -- une decision,
+        prise sur les facteurs d'importance -- et l'evaluation du metamodele
+        sur cette coupe.
+        """
+        global slice_def_final
         if slice_def_final is None:
-            if best_result is not None:
-                _imp = np.array(best_result.getImportanceFactors())
-                _top2 = list(np.argsort(_imp)[::-1][:2])
-                _u_star = np.array(best_result.getStandardSpaceDesignPoint())
-                slice_def_final = (min(_top2), max(_top2),
-                                   {i: float(_u_star[i]) for i in range(n_var) if i not in _top2})
-            else:
-                slice_def_final = slice_def
-        idx_x, idx_y, fixed = slice_def_final
+            slice_def_final = _coupe_la_plus_parlante(best_result)
+        grille = _DECOR.grille_de_coupe(slice_def_final)
 
-        ux = np.linspace(_CX0, _CX1, n_grid)
-        uy = np.linspace(_CY0, _CY1, n_grid)
-        UX, UY = np.meshgrid(ux, uy)
-        grid = np.zeros((n_grid * n_grid, n_var))
-        grid[:, idx_x] = UX.ravel()
-        grid[:, idx_y] = UY.ravel()
-        for idx, val in fixed.items():
-            grid[:, idx] = val
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        _xlabel = f'u_{params_names[idx_x]}'
-        _ylabel = f'u_{params_names[idx_y]}'
-
-        # --- Fond coloré : surrogate actif (pas en mode HF) ---
+        Z_sur = None
         if g_ot is not None and not do_HF:
-            grid_ot = ot.Sample(grid.tolist())
-            Z_sur = np.array(g_ot(grid_ot))[:, 0].reshape(n_grid, n_grid)
-            cf = ax.contourf(UX, UY, Z_sur, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf, ax=ax, label=f'g ({modele})')
-            ax.contour(UX, UY, Z_sur, levels=[0], colors='blue', linewidths=2)
+            Z_sur = np.array(g_ot(ot.Sample(grille.tolist())))[:, 0].reshape(n_grid, n_grid)
 
-        # --- Contour HF grossier ---
-        if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = fond_hf_final if fond_hf_final is not None else (None, None, None)
-            if Z_true is not None:
-                ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
-        elif print_HF:
-            ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
-            uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
-            UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            # Le contournement qui vivait ici -- reutiliser `fond_hf` quand
-            # les deux coupes coincident -- ne servait qu'a eviter d'UTILISER
-            # la seconde grille. Elle etait calculee quand meme. La cause est
-            # traitee dans `fond_hf_pour_figures`.
-            Z_true = fond_hf_final[0] if fond_hf_final is not None else None
-            ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
-
-        # --- Points ---
-        if xt is not None:
-            ax.scatter(xt[:, idx_x], xt[:, idx_y], c='black', s=30, zorder=5, label='DOE')
-
-        if xt_eff is not None and len(xt_eff) > 0:
-            xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=60, zorder=6,
-                       marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-
-        ax.scatter(0, 0, c='orange', s=100, zorder=6, marker='P', label='[0, 0]')
-
-        _fixed_mode_colors = ['gold', 'magenta', 'green', 'blue', 'purple']
-        n_modes = max(len(modes), 1)
-        mode_colors = [_fixed_mode_colors[i] if i < len(_fixed_mode_colors)
-                       else plt.cm.tab10((i % 10) / 10.0) for i in range(n_modes)]
-
-        if best_sps:
-            for i, sp in enumerate(best_sps):
-                ax.scatter(sp[idx_x], sp[idx_y], color=mode_colors[i], s=100, zorder=7, marker='D',
-                        label=f'sp mode {i+1}')
-
-        if best_result is not None:
-            u_star = np.array(best_result.getStandardSpaceDesignPoint())
-            ax.scatter(u_star[idx_x], u_star[idx_y], color=mode_colors[0], s=200, zorder=8, marker='*',
-                    label=f'u*1 [{u_star[idx_x]:.2f},{u_star[idx_y]:.2f}] beta={best_result.getHasoferReliabilityIndex():.3f}')
-
-        if len(modes) > 0:
-            for k, mode in enumerate(modes[1:], start=2):
-                u_m = np.array(mode.getStandardSpaceDesignPoint())
-                ax.scatter(u_m[idx_x], u_m[idx_y], color=mode_colors[k-1], s=200, zorder=8, marker='*',
-                        label=f'u*{k} [{u_m[idx_x]:.2f},{u_m[idx_y]:.2f}] beta={mode.getHasoferReliabilityIndex():.3f}')
-
-        # --- Points fixes (run HF précédent) ---
-        if best_sol_modes_fixed is not None:
-            colors_fixed = ['blue', 'red', 'green', 'gold']
-            for col, (lbl, data) in zip(colors_fixed, best_sol_modes_fixed.items()):
-                ustar_f = data['u*']
-                sp_f    = data['sp']
-                ax.scatter(ustar_f[idx_x], ustar_f[idx_y], c=col, s=200, zorder=9, marker='*',
-                           label=f'u* {lbl}')
-                ax.scatter(sp_f[idx_x], sp_f[idx_y], c=col, s=100, zorder=9, marker='x',
-                           linewidths=2, label=f'sp {lbl}')
-                if grad_sp_fixed is not None and lbl in grad_sp_fixed:
-                    ng = np.array(grad_sp_fixed[lbl]['neg_grad'])
-                    ng = ng / np.linalg.norm(ng) * 1.5
-                    ax.quiver(sp_f[idx_x], sp_f[idx_y], ng[0], ng[1], color=col,
-                              angles='xy', scale_units='xy', scale=1.0, width=0.005)
-
-        # --- Trajectoires FORM hardcodees ---
-        if traj_runs_fixed is not None:
-            colors_traj = {'A': 'blue', 'B': 'red', 'C': 'green', 'D': 'gold'}
-            all_pts = []
-            for lbl, traj in traj_runs_fixed.items():
-                col = colors_traj.get(lbl, 'gray')
-                pts  = np.array(traj['points'])
-                grds = np.array(traj['grads'])
-                all_pts.append(pts)
-                ax.plot(pts[:, idx_x], pts[:, idx_y], '-', color=col, alpha=0.5, linewidth=1.2)
-                ax.scatter(pts[1:-1, idx_x], pts[1:-1, idx_y], c=col, s=12, zorder=7, alpha=0.5)
-                ax.scatter(pts[0, idx_x],  pts[0, idx_y],  c=col, s=60,  zorder=8, marker='o')
-                ax.scatter(pts[-1, idx_x], pts[-1, idx_y], c=col, s=150, zorder=8, marker='*')
-                for pt, g in zip(pts, grds):
-                    ng = np.array(g)
-                    nrm = np.linalg.norm(ng)
-                    if nrm > 0:
-                        ng = -ng / nrm * 0.3
-                        ax.annotate('', xy=(pt[idx_x]+ng[0], pt[idx_y]+ng[1]), xytext=(pt[idx_x], pt[idx_y]),
-                                    arrowprops=dict(arrowstyle='->', color=col, lw=0.7))
-            all_pts_arr = np.vstack(all_pts)
-            margin = 1.0
-            u1_min = float(all_pts_arr[:, idx_x].min()) - margin
-            u1_max = float(all_pts_arr[:, idx_x].max()) + margin
-            u2_min = float(all_pts_arr[:, idx_y].min()) - margin
-            u2_max = float(all_pts_arr[:, idx_y].max()) + margin
-
-        # --- Légende contours ---
-        legend_lines = []
+        legende = []
         if g_ot is not None:
-            legend_lines.append(Line2D([0], [0], color='blue',   linestyle='-',  linewidth=2, label=f'g=0 {modele}'))
+            legende.append(dict(color='blue', linestyle='-', linewidth=2,
+                                label=f'g=0 {modele}'))
         if print_HF:
-            legend_lines.append(Line2D([0], [0], color='red',    linestyle='--', linewidth=2, label='g=0 HF'))
+            legende.append(dict(color='red', linestyle='--', linewidth=2,
+                                label='g=0 HF'))
+        # pas de solution analytique de reference pour cette etude
 
-        ax.legend(handles=ax.legend().legend_handles + legend_lines)
+        return _figurer.visu_FORM(
+            _DECOR, slice_def_final, Z_surrogate=Z_sur, fond_hf=fond_hf_final,
+            xt=xt, xt_eff=xt_eff, points_de_depart=best_sps,
+            modes=modes if modes else ([best_result] if best_result is not None else []),
+            modes_figes=best_sol_modes_fixed, gradients_figes=grad_sp_fixed,
+            trajectoires=traj_runs_fixed, surcouche=None,
+            legende=legende)
 
-        ax.set_xlabel(_xlabel)
-        ax.set_ylabel(_ylabel)
-        ax.set_xlim(_CX0, _CX1)
-        ax.set_ylim(_CY0, _CY1)
-        _fixed_str = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
-        ax.set_title(f'FORM et etat limite g=0{_fixed_str}')
-        plt.tight_layout()
-        fname = f'visu{modele}_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"  [visu] -> {fname}", flush=True)
+    def _coupe_la_plus_parlante(best_result):
+        """Les deux variables qui pesent le plus, les autres figees a u*.
+
+        A plus de deux variables, une figure doit choisir son plan. Le prendre
+        au hasard montrerait une coupe ou il ne se passe rien ; les facteurs
+        d'importance de FORM designent celui ou tout se joue.
+        """
+        if best_result is None:
+            return slice_def
+        importance = np.array(best_result.getImportanceFactors())
+        deux = list(np.argsort(importance)[::-1][:2])
+        u_star = np.array(best_result.getStandardSpaceDesignPoint())
+        return (min(deux), max(deux),
+                {i: float(u_star[i]) for i in range(n_var) if i not in deux})
+
+
 
     def grille_3D():
         """ACTION `grille` : la surface g_HF, pour un trace en relief.
@@ -1600,7 +1451,7 @@ if __name__ == '__main__':
         _restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
         if _rs.get('max_degree') is not None:
             max_degree = int(_rs['max_degree'])
-        hf_2d_grid_fixed = _rs.get('hf_2d_grid')
+        _GRILLE.coupes['courante'] = _rs.get('hf_2d_grid')
         _eff_history_EFF   = list(_rs.get('hist_EFF', []))
         _eff_history_BB    = list(_rs.get('hist_BB', []))
         _eff_history_BS    = list(_rs.get('hist_BS', []))
@@ -1732,11 +1583,11 @@ if __name__ == '__main__':
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff,
                fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
                fond_hf_final=fond_hf_pour_figures(
-                   slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final'))
+                   slice_def_final, _HF_CACHE_FILE_FINAL, finale=True))
     if do_EFF and xt_eff:
         print_globalplanche_EFF(
             xt, yt, all_grad, xt_eff,
             fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
             fond_hf_final=fond_hf_pour_figures(
-                slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final'))
+                slice_def_final, _HF_CACHE_FILE_FINAL, finale=True))
     _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sps[0] if best_sps else None, modes, result_IS)

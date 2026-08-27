@@ -396,3 +396,174 @@ def planche_globale(decor, coupe, etapes, fond_hf=None, sous_titre=""):
     plt.close(fig)
     decor.tracer("  [GLOBAL PLANCHE] -> %s" % nom)
     return nom
+
+
+# --------------------------------------------------------------------------- #
+# LA FIGURE DE SYNTHESE : FORM sur l'etat limite                               #
+# --------------------------------------------------------------------------- #
+#: Couleurs des modes, dans l'ordre. Au-dela de cinq, on passe a `tab10` --
+#: un mode sans couleur distincte serait indistinguable de son voisin, et
+#: c'est precisement ce que cette figure sert a montrer.
+COULEURS_MODES = ("gold", "magenta", "green", "blue", "purple")
+
+
+def visu_FORM(decor, coupe, Z_surrogate=None, fond_hf=None, xt=None,
+              xt_eff=None, points_de_depart=None, modes=None,
+              modes_figes=None, gradients_figes=None, trajectoires=None,
+              surcouche=None, legende=(), marge_trajectoires=1.0):
+    """Ou passe l'etat limite, ou FORM a cherche, et ou il a conclu.
+
+    C'est la figure qu'on regarde en premier quand un resultat surprend :
+    elle superpose la frontiere du metamodele (bleu), celle du calcul exact
+    (rouge), les points du plan, ceux de l'enrichissement, les points de
+    depart et les points de conception de chaque mode.
+
+    `surcouche(ax)` permet a une etude d'ajouter ce qu'elle seule possede --
+    la flexion pure y trace sa solution analytique de reference. C'est la
+    DERNIERE difference entre les deux etudes : elle est desormais un
+    argument, plus une divergence de code.
+
+    ZERO appel solveur.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    idx_x, idx_y, _fixes = coupe
+    modes = modes or []
+    UX, UY = decor.maillage()
+    xlabel, ylabel, figees = decor.etiquettes(coupe)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+
+    if Z_surrogate is not None:
+        cf = ax.contourf(UX, UY, Z_surrogate, levels=20, cmap="RdYlGn", alpha=0.6)
+        plt.colorbar(cf, ax=ax, label="g (%s)" % decor.modele)
+        ax.contour(UX, UY, Z_surrogate, levels=[0], colors="blue", linewidths=2)
+
+    if fond_hf is not None:
+        Z_vrai, UX_hf, UY_hf = fond_hf
+        if Z_vrai is not None:
+            ax.contour(UX_hf, UY_hf, Z_vrai, levels=[0], colors="red",
+                       linewidths=2, linestyles="--")
+
+    if surcouche is not None:
+        surcouche(ax)
+
+    if xt is not None:
+        ax.scatter(xt[:, idx_x], xt[:, idx_y], c="black", s=30, zorder=5,
+                   label="DOE")
+
+    if xt_eff is not None and len(xt_eff) > 0:
+        ajoutes = np.array(xt_eff)
+        ax.scatter(ajoutes[:, idx_x], ajoutes[:, idx_y], c="red", s=60,
+                   zorder=6, marker="^", label="EFF (%d pts)" % len(xt_eff))
+        for i, pt in enumerate(ajoutes):
+            ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]),
+                        textcoords="offset points", xytext=(0, 8),
+                        ha="center", fontsize=8, color="red", zorder=7)
+
+    # L'origine : c'est de la que FORM part, et c'est le point le plus
+    # probable de l'espace normé. Sa position relative a la frontiere se lit
+    # directement comme une marge.
+    ax.scatter(0, 0, c="orange", s=100, zorder=6, marker="P", label="[0, 0]")
+
+    n_modes = max(len(modes), 1)
+    couleurs = [COULEURS_MODES[i] if i < len(COULEURS_MODES)
+                else plt.cm.tab10((i % 10) / 10.0) for i in range(n_modes)]
+
+    if points_de_depart:
+        for i, sp in enumerate(points_de_depart):
+            ax.scatter(sp[idx_x], sp[idx_y], color=couleurs[i], s=100, zorder=7,
+                       marker="D", label="sp mode %d" % (i + 1))
+
+    for k, mode in enumerate(modes, start=1):
+        u = np.array(mode.getStandardSpaceDesignPoint())
+        ax.scatter(u[idx_x], u[idx_y], color=couleurs[k - 1], s=200, zorder=8,
+                   marker="*",
+                   label="u*%d [%.2f,%.2f] beta=%.3f"
+                         % (k, u[idx_x], u[idx_y],
+                            mode.getHasoferReliabilityIndex()))
+
+    if modes_figes:
+        for col, (etiquette, data) in zip(("blue", "red", "green", "gold"),
+                                          modes_figes.items()):
+            u_f, sp_f = data["u*"], data["sp"]
+            ax.scatter(u_f[idx_x], u_f[idx_y], c=col, s=200, zorder=9,
+                       marker="*", label="u* %s" % etiquette)
+            ax.scatter(sp_f[idx_x], sp_f[idx_y], c=col, s=100, zorder=9,
+                       marker="x", linewidths=2, label="sp %s" % etiquette)
+            if gradients_figes and etiquette in gradients_figes:
+                ng = np.array(gradients_figes[etiquette]["neg_grad"])
+                ng = ng / np.linalg.norm(ng) * 1.5
+                ax.quiver(sp_f[idx_x], sp_f[idx_y], ng[0], ng[1], color=col,
+                          angles="xy", scale_units="xy", scale=1.0, width=0.005)
+
+    cadre_trajectoires = None
+    if trajectoires:
+        cadre_trajectoires = _tracer_trajectoires(
+            ax, trajectoires, idx_x, idx_y, marge_trajectoires)
+
+    poignees = [Line2D([0], [0], **kw) for kw in legende]
+    ax.legend(handles=ax.legend().legend_handles + poignees)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    if cadre_trajectoires is None:
+        decor.cadrer(ax)
+    else:
+        # Recadrer SUR LES TRAJECTOIRES : elles sortent souvent du domaine
+        # d'etude, et une figure cadree sur le domaine les couperait.
+        # L'original le faisait en reassignant les bornes GLOBALES de la
+        # grille haute fidelite -- un effet de bord sur un tout autre objet,
+        # devenu inoperant le jour ou le cadrage est passe par un reglage.
+        x0, x1, y0, y1 = cadre_trajectoires
+        ax.set_xlim(x0, x1)
+        ax.set_ylim(y0, y1)
+
+    ax.set_title("FORM et etat limite g=0%s" % figees)
+    plt.tight_layout()
+    nom = "visu%s_%s.png" % (decor.modele, decor.horodatage)
+    decor.enregistrer(fig, nom)
+    plt.close(fig)
+    decor.tracer("  [visu] -> %s" % nom)
+    return nom
+
+
+def _tracer_trajectoires(ax, trajectoires, idx_x, idx_y, marge):
+    """Le chemin suivi par FORM, mode par mode, avec ses gradients.
+
+    Sert a comprendre POURQUOI un mode a converge la : une trajectoire qui
+    fait un detour dit que le metamodele est trouble sur son passage, meme
+    si son point d'arrivee est juste.
+
+    Retourne le cadre qui contient toutes les trajectoires.
+    """
+    couleurs = {"A": "blue", "B": "red", "C": "green", "D": "gold"}
+    tous = []
+    for etiquette, traj in trajectoires.items():
+        col = couleurs.get(etiquette, "gray")
+        pts = np.array(traj["points"])
+        tous.append(pts)
+        ax.plot(pts[:, idx_x], pts[:, idx_y], "-", color=col, alpha=0.5,
+                linewidth=1.2)
+        ax.scatter(pts[1:-1, idx_x], pts[1:-1, idx_y], c=col, s=12, zorder=7,
+                   alpha=0.5)
+        ax.scatter(pts[0, idx_x], pts[0, idx_y], c=col, s=60, zorder=8,
+                   marker="o")
+        ax.scatter(pts[-1, idx_x], pts[-1, idx_y], c=col, s=150, zorder=8,
+                   marker="*")
+        for pt, g in zip(pts, np.array(traj["grads"])):
+            ng = np.array(g)
+            norme = np.linalg.norm(ng)
+            if norme > 0:
+                ng = -ng / norme * 0.3
+                ax.annotate("", xy=(pt[idx_x] + ng[0], pt[idx_y] + ng[1]),
+                            xytext=(pt[idx_x], pt[idx_y]),
+                            arrowprops=dict(arrowstyle="->", color=col, lw=0.7))
+    if not tous:
+        return None
+    ensemble = np.vstack(tous)
+    return (float(ensemble[:, idx_x].min()) - marge,
+            float(ensemble[:, idx_x].max()) + marge,
+            float(ensemble[:, idx_y].min()) - marge,
+            float(ensemble[:, idx_y].max()) + marge)

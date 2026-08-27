@@ -63,12 +63,16 @@ MOULIN = "Moulinblanc/AC3_moulinblanc.py"
 #: conclu que l'ecart est voulu. Tout ce qui n'y figure pas est une derive.
 DIVERGENCES_DECLAREES = {
     "print_visu":
-        "La flexion pure superpose sa solution ANALYTIQUE de reference "
-        "(`flexion_claude`) aux planches ; le Moulin Blanc n'en a pas. C'est "
-        "une vraie difference d'etude, pas une derive.",
+        "DIFFERENCE D'ETUDE, reduite a sa plus simple expression : la flexion "
+        "pure passe une SURCOUCHE (`_surcouche_analytique`) et une entree de "
+        "legende, le Moulin Blanc passe None. Cinq lignes d'ecart sur 70, la "
+        "ou il y en avait 31 sur 158. La surcouche est un ARGUMENT : le "
+        "dessin, lui, est le meme des deux cotes, dans `_etapes/figurer.py`.",
     "print_3D_HF":
         "Meme raison que `print_visu` : la surface `flexion_claude` tracee en "
-        "regard du calcul haute fidelite n'existe que pour la flexion pure.",
+        "relief en regard du calcul haute fidelite n'existe que pour la "
+        "flexion pure. Reste a traiter comme `print_visu` -- par une "
+        "surcouche -- quand cette figure rejoindra le module.",
 }
 
 
@@ -186,7 +190,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 26/08 : 1 975 lignes de fonctions communes.
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
     #: evaluation + plan : 1 451.
-    PLAFOND = 997
+    PLAFOND = 839
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

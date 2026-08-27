@@ -57,6 +57,7 @@ class Grille:
     def __init__(self, evaluer, n_var, cote, bornes,
                  fichier_cache, fichier_cache_complet,
                  fichier_cache_points=None, evaluer_lot=None,
+                 coupe_initiale=None,
                  signature=None, config_identique=None,
                  marquer_phase=None, tracer=_ecrire):
         self.evaluer = evaluer
@@ -80,6 +81,11 @@ class Grille:
         #: memo de `depuis_points_libres` : eviter de relire le JSON a chaque
         #: figure qui redemande le meme fond.
         self._resultat_points = None
+        #: Les deux coupes du run : la COURANTE et la FINALE (celle choisie
+        #: sur les facteurs d'importance). Elles etaient deux variables
+        #: globales du script, rangees par une fonction dont le seul role
+        #: etait de choisir laquelle des deux ecrire.
+        self.coupes = {"courante": coupe_initiale, "finale": None}
 
     # ------------------------------------------------------------------ #
     # geometrie
@@ -414,6 +420,64 @@ class Grille:
         uy = np.linspace(pts[:, 1].min() - marge, pts[:, 1].max() + marge, n_interp)
         UX, UY = np.meshgrid(ux, uy)
         return griddata(pts, g_arr, (UX, UY), method='linear'), UX, UY
+
+
+    # ------------------------------------------------------------------ #
+    # une coupe, par la voie la MOINS chere
+    # ------------------------------------------------------------------ #
+    def coupe(self, sd, fichier=None, finale=False):
+        """Z sur une coupe. Cascade, du gratuit au couteux :
+
+          1. la memoire      -- 0 appel
+          2. le cache disque -- 0 appel (sous signature)
+          3. la grille complete, si elle existe -- 0 appel (interpolation)
+          4. le calcul       -- cote^2 appels solveur
+
+        `finale=True` designe la seconde coupe -- celle choisie sur les
+        facteurs d'importance a la fin du run. Elle a sa propre memoire et
+        son propre fichier : deux coupes differentes ne doivent pas se
+        recouvrir. Quand elles coincident, l'appelant passe `finale=False`
+        et paie une seule fois -- c'est la garde qui a economise 29 heures
+        sur le Moulin Blanc.
+        """
+        cle = "finale" if finale else "courante"
+        memo = self.coupes[cle]
+        if memo is not None:
+            return np.array(memo["Z"])
+
+        Z = self.lire_cache_2d(sd, fichier=fichier)
+        if Z is not None:
+            self.coupes[cle] = self._description(sd, self.cote, Z)
+            return Z
+
+        if self.complete is not None:
+            self.tracer("[HF SLICE] extraction depuis grille full pour coupe "
+                        "(%s,%s)" % (sd[0], sd[1]))
+            Z = self.coupe_depuis_complete(sd)
+            self.ecrire_cache_2d(Z, sd, fichier=fichier)
+            self.coupes[cle] = self._description(sd, self.cote, Z)
+            return Z
+
+        Z, description = self.calculer_2d(self.points_de_coupe(sd),
+                                          contexte="get_hf_slice",
+                                          fichier=fichier, coupe=sd)
+        self.coupes[cle] = description
+        return Z
+
+    def points_de_coupe(self, sd):
+        """Les points du quadrillage 2D, en coordonnees COMPLETES.
+
+        Une coupe fixe toutes les variables sauf deux ; le solveur, lui,
+        attend un point entier.
+        """
+        idx_x, idx_y, fixes = sd
+        UX, UY = self.maillage_2d()
+        points = np.zeros((self.cote * self.cote, self.n_var))
+        points[:, idx_x] = UX.ravel()
+        points[:, idx_y] = UY.ravel()
+        for idx, valeur in fixes.items():
+            points[:, idx] = valeur
+        return points
 
     # ------------------------------------------------------------------ #
     # la surface en trois dimensions

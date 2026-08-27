@@ -371,7 +371,7 @@ def test_une_coupe_identique_a_la_courante_ne_paie_pas_un_second_cache(script):
     assert "if _sd == slice_def:" in src, (
         "%s : la garde a disparu -- la grille haute fidelite sera calculee "
         "deux fois, une par fichier de cache." % script)
-    assert "cache, var = _HF_CACHE_FILE, 'hf_2d_grid_fixed'" in src, (
+    assert "cache, finale = _HF_CACHE_FILE, False" in src, (
         "%s : la garde doit rediriger vers le cache COURANT, sinon elle ne "
         "sert a rien." % script)
 

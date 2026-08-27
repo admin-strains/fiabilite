@@ -105,7 +105,11 @@ PROJET = {
 #: 27/08 (suite) : `print_globalplanche_EFF` (103 l.) se scinde en un
 #: reajustement du metamodele (33 l., du calcul, il reste) et un dessin
 #: (parti dans `_etapes/figurer.py`). 1919 -> 1849.
-PLAFOND_LIGNES = 1849
+#: 27/08 (suite) : `print_visu` (158 l.) part dans `_etapes/figurer.py`,
+#: la surcouche analytique devient un ARGUMENT, et les deux coupes
+#: passent de variables globales a l'etat de `Grille`.
+#: 1849 -> 1710, 42 -> 42 fonctions (deux nommees, deux retirees).
+PLAFOND_LIGNES = 1710
 PLAFOND_FONCTIONS = 42
 
 
