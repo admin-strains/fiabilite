@@ -104,7 +104,8 @@ _reliability/form.py        (existe)    7 fonctions     79 l.
 _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
 _etapes/figurer.py          (existe)    2 fonctions     74 l.
-_surrogate/                 A CREER     9 fonctions    279 l.
+_surrogate/wrappers.py      (existe)    6 classes      193 l.
+_surrogate/ (le reste)      A CREER     9 fonctions    270 l.
 _doe/                       A CREER     6 fonctions    332 l.
 ---------------------------------------------------------------
 RESTE dans l'AC                         7 fonctions    108 l.
@@ -134,8 +135,8 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 974 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 880 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 783 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 689 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **55 / 55** | <= 8 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
@@ -163,6 +164,24 @@ defaites le 27/08 :
 calcule et ne va jamais le chercher. `tests/test_93` construit son graphe
 d'appel et verifie la fermeture transitive -- une seule arete vers le solveur,
 meme a travers trois intermediaires, fait echouer la suite.
+
+`_surrogate/wrappers.py` a suivi : les six enveloppes OpenTURNS des
+metamodeles -- `HFFunction`, `PCKRGFunction`, `oldGEPCKFunction`,
+`GEPCKFunction`, `PCKFunction`, `GEKPLSFunction` -- etaient definies dans le
+`__main__` des DEUX scripts, 193 lignes chacune, **identiques au caractere
+pres**, et n'avaient jamais ete couvertes par un test. Elles ne dependaient
+pourtant pas de l'etude : leurs seules variables libres etaient `n_var`,
+l'evaluateur haute fidelite et un interrupteur de trace. L'extraction a
+revele deux defauts :
+
+* `_exec_sigma` -- 25 lignes de variance posterieure a noyau augmente --
+  etait recopiee dans `oldGEPCKFunction` **et** dans `GEKPLSFunction`, dans le
+  meme fichier : quatre exemplaires au total. Une correction sur l'une
+  n'aurait pas touche les trois autres. Elle est desormais `sigma_gek`, une
+  fonction libre, ecrite une fois.
+* quatre lignes de trace codaient `n_var == 2` en dur (`u[0]`, `u[1]`) : avec
+  trois variables le journal tronquait, avec une seule il levait `IndexError`
+  au milieu d'un run.
 
 ### Ordre d'extraction (du moins risque au plus risque)
 

@@ -67,7 +67,10 @@ PROJET = {
 #: se scinde en resume + erreur FOSM, `print_3D_HF` en grille + figure, et
 #: `_etapes/figurer.py` recupere les deux restitutions communes.
 #: 2995 -> 2974.
-PLAFOND_LIGNES = 2974
+#: 27/08 (suite) : les six enveloppes OpenTURNS des metamodeles (193 l.
+#: par fichier, identiques au caractere pres) partent dans
+#: `_surrogate/wrappers.py`. 2974 -> 2783.
+PLAFOND_LIGNES = 2783
 PLAFOND_FONCTIONS = 55
 
 

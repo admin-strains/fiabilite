@@ -31,7 +31,7 @@ import math
 from scipy.stats import norm
 import warnings
 from datetime import datetime
-from api import fit_gepck, predict_gepck, predict_gradient_gepck, fit_pck, predict_pck
+from api import fit_gepck, predict_gepck, fit_pck, predict_pck
 from lois import (
     loi_fc, loi_fy, loi_F_permanente, loi_F_exploitation,
     loi_F_intermittente, loi_uni_approx,
@@ -44,6 +44,8 @@ import eff_ot as _eff_ot
 import form as _form
 import graphiques as _graphiques
 import figurer as _figurer
+from wrappers import (HFFunction, PCKRGFunction, oldGEPCKFunction,
+                      GEPCKFunction, PCKFunction, GEKPLSFunction)
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -1011,32 +1013,6 @@ if __name__ == '__main__':
     # FONCTIONS LIEES AU MODELE HF                                                #
 
     # --- Wrapper OpenTURNS avec gradients analytiques ---
-    class HFFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self):
-            super().__init__(n_var, 1)
-            self._cache_u    = None
-            self._cache_g    = None
-            self._cache_grad = None
-            self.n_hf_calls  = 0  # compteur pour vérification
-
-        def _run_if_needed(self, u):
-            u_arr = np.array(u)
-            if self._cache_u is None or not np.allclose(u_arr, self._cache_u, atol=1e-12):
-                g, grad_U, _ = run_HF(u)
-                self._cache_u    = u_arr.copy()
-                self._cache_g    = float(g)
-                self._cache_grad = [float(grad_U[i]) for i in range(n_var)]
-                self.n_hf_calls += 1
-                print(f"[HF #{self.n_hf_calls:3d}] u=[{u_arr[0]:+.4f}, {u_arr[1]:+.4f}]  g={g:+.6f}  grad=[{float(grad_U[0]):+.6f}, {float(grad_U[1]):+.6f}]", flush=True)
-
-        def _exec(self, u):
-            self._run_if_needed(u)
-            return [self._cache_g]
-
-        def _gradient(self, u):
-            self._run_if_needed(u)
-            # Format OpenTURNS : (n_var, 1)
-            return [[g] for g in self._cache_grad]
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU MODELE PCE                                               #
@@ -1098,139 +1074,13 @@ if __name__ == '__main__':
                 all_grad_PCE[i, j] = grad_pce_u[j, 0]
         return y_PCE, all_grad_PCE
 
-    class PCKRGFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, g_pce, g_krg):
-            super().__init__(n_var, 1)
-            self.g_pce = g_pce
-            self.g_krg = g_krg
-        
-        def _exec(self, u):
-            return [self.g_pce(u)[0] + self.g_krg(u)[0]]
 
-        def _exec_sample(self, U):
-            U_ot = ot.Sample(U)
-            Z_pce = np.array(self.g_pce(U_ot))[:, 0]
-            Z_krg = np.array(self.g_krg(U_ot))[:, 0]
-            return (Z_pce + Z_krg).reshape(-1, 1).tolist()
-
-        def _gradient(self, u):
-            u_ot     = ot.Point(list(u))
-            grad_pce = self.g_pce.gradient(u_ot)   
-            grad_krg = self.g_krg.gradient(u_ot)   
-            return [[grad_pce[i, 0] + grad_krg[i, 0]] for i in range(n_var)]
-
-    class oldGEPCKFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, g_pce, sm_gepck):
-            super().__init__(n_var, 1)
-            self.g_pce  = g_pce
-            self.sm     = sm_gepck
-
-        def _exec(self, u):
-            y_pce = self.g_pce(ot.Point(list(u)))[0]
-            y_gek = self.sm.predict_values(np.array(u).reshape(1, -1)).item()
-            return [y_pce + y_gek]
-
-        def _exec_sample(self, U):
-            U_ot = ot.Sample(U)
-            Z_pce = np.array(self.g_pce(U_ot))[:, 0]
-            Z_gek = self.sm.predict_values(np.array(U))[:, 0]
-            return (Z_pce + Z_gek).reshape(-1, 1).tolist()
-
-        def _exec_sigma(self, u):
-            sm = self.sm
-            n  = sm.nt; d = sm.X_norma.shape[1]
-            W  = sm.coeff_pls; th = sm.optimal_theta
-            s2 = float(sm.optimal_par['sigma2'])
-            th_eff = (W**2) @ th
-            x_n = (np.array(u).reshape(-1) - sm.X_offset) / sm.X_scale
-            Xn  = sm.X_norma
-            df  = x_n[None, :] - Xn
-            kf  = np.exp(-np.dot(df**2, th_eff))
-            kd  = (2.0 * kf[:, None] * df * th_eff[None, :]).reshape(-1)
-            dff = Xn[:, None, :] - Xn[None, :, :]
-            K_ff = np.exp(-np.einsum('ijk,k->ij', dff**2, th_eff))
-            K_fd = (2.0 * K_ff[:, :, None] * dff * th_eff[None, None, :]).reshape(n, n*d)
-            B_mat = dff * th_eff[None, None, :]
-            term1 = 2.0 * np.diag(th_eff)
-            term2 = 4.0 * np.einsum('ija,ijb->ijab', B_mat, B_mat)
-            K_dd  = (K_ff[:, :, None, None] * (term1 - term2)).transpose(0,2,1,3).reshape(n*d, n*d)
-            K_tot = np.block([[K_ff, K_fd], [K_fd.T, K_dd]])
-            K_tot += 1e-10 * np.eye(K_tot.shape[0])
-            k = np.concatenate([kf, kd])
-            try:
-                B = max(0.0, 1.0 - k @ np.linalg.solve(K_tot, k))
-                return float(np.sqrt(s2 * B))
-            except np.linalg.LinAlgError:
-                return float(np.sqrt(sm.predict_variances(np.array(u).reshape(1, -1)).item()))
-
-        def _gradient(self, u):
-            u_np     = np.array(u).reshape(1, -1)
-            grad_pce = self.g_pce.gradient(ot.Point(list(u)))   # OT Matrix (n_var, 1)
-            return [[grad_pce[i, 0] + self.sm.predict_derivatives(u_np, i).item()]
-                    for i in range(n_var)]
 
     # --------------------------------------------------------------------------- #
     # WRAPPER GEPCK 5 BRANCHES                                                   #
-    class GEPCKFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, fm):
-            super().__init__(n_var, 1)
-            self.fm = fm
-            self.n_eval_calls = 0
-            self.n_grad_calls = 0
-
-        def _exec(self, u):
-            u_np  = np.array(u).reshape(1, -1)
-            g_val = float(predict_gepck(self.fm, u_np)[0, 0])
-            self.n_eval_calls += 1
-            if print_gepck_calls:
-                print(f"[GEPCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
-                      f"  g={g_val:+.6f}", flush=True)
-            return [g_val]
-
-        def _exec_sample(self, U):
-            U_np = np.array(U)
-            return predict_gepck(self.fm, U_np)[:, 0:1].tolist()
-
-        def _exec_sigma(self, u):
-            u_np = np.array(u).reshape(1, -1)
-            _, YSig2 = predict_gepck(self.fm, u_np, return_var=True)
-            return float(np.sqrt(max(0.0, float(YSig2[0, 0]))))
-
-        def _gradient(self, u):
-            u_np  = np.array(u).reshape(1, -1)
-            G     = predict_gradient_gepck(self.fm, u_np)   # (1, Mred)
-            grad  = [float(G[0, i]) for i in range(self.fm['Mred'])]
-            g_val = float(predict_gepck(self.fm, u_np)[0, 0])
-            self.n_grad_calls += 1
-            print(f"[GEPCK grad #{self.n_grad_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
-                  f"  g={g_val:+.6f}  grad=[{grad[0]:+.6f}, {grad[1]:+.6f}]", flush=True)
-            return [[v] for v in grad]
 
     # --------------------------------------------------------------------------- #
     # WRAPPER PCK (sans gradient analytique — FORM utilise differences finies)    #
-    class PCKFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, fm):
-            super().__init__(n_var, 1)
-            self.fm = fm
-            self.n_eval_calls = 0
-
-        def _exec(self, u):
-            u_np  = np.array(u).reshape(1, -1)
-            g_val = float(predict_pck(self.fm, u_np)[0, 0])
-            self.n_eval_calls += 1
-            if print_gepck_calls:
-                print(f"[PCK eval #{self.n_eval_calls:3d}] u=[{float(u[0]):+.4f}, {float(u[1]):+.4f}]"
-                      f"  g={g_val:+.6f}", flush=True)
-            return [g_val]
-
-        def _exec_sample(self, U):
-            U_np = np.array(U)
-            return predict_pck(self.fm, U_np)[:, 0:1].tolist()
-
-        def _exec_sigma(self, u):
-            u_np = np.array(u).reshape(1, -1)
-            _, YSig2 = predict_pck(self.fm, u_np, return_var=True)
-            return float(np.sqrt(max(0.0, float(YSig2[0, 0]))))
 
         # pas de _gradient : OT utilise differences finies pour FORM
 
@@ -1340,47 +1190,6 @@ if __name__ == '__main__':
         return sm
 
     # --- Wrapper OpenTURNS avec gradients analytiques ---
-    class GEKPLSFunction(ot.OpenTURNSPythonFunction):
-        def __init__(self, surrogate):
-            super().__init__(n_var, 1)
-            self.sm = surrogate
-
-        def _exec(self, u):
-            return [self.sm.predict_values(np.array(u).reshape(1, -1)).item()]
-
-        def _exec_sample(self, U):
-            return self.sm.predict_values(np.array(U)).tolist()
-        
-        def _exec_sigma(self, u):
-            sm = self.sm
-            n  = sm.nt; d = sm.X_norma.shape[1]
-            W  = sm.coeff_pls; th = sm.optimal_theta
-            s2 = float(sm.optimal_par['sigma2'])
-            th_eff = (W**2) @ th
-            x_n = (np.array(u).reshape(-1) - sm.X_offset) / sm.X_scale
-            Xn  = sm.X_norma
-            df  = x_n[None, :] - Xn
-            kf  = np.exp(-np.dot(df**2, th_eff))
-            kd  = (2.0 * kf[:, None] * df * th_eff[None, :]).reshape(-1)
-            dff = Xn[:, None, :] - Xn[None, :, :]
-            K_ff = np.exp(-np.einsum('ijk,k->ij', dff**2, th_eff))
-            K_fd = (2.0 * K_ff[:, :, None] * dff * th_eff[None, None, :]).reshape(n, n*d)
-            B_mat = dff * th_eff[None, None, :]
-            term1 = 2.0 * np.diag(th_eff)
-            term2 = 4.0 * np.einsum('ija,ijb->ijab', B_mat, B_mat)
-            K_dd  = (K_ff[:, :, None, None] * (term1 - term2)).transpose(0,2,1,3).reshape(n*d, n*d)
-            K_tot = np.block([[K_ff, K_fd], [K_fd.T, K_dd]])
-            K_tot += 1e-10 * np.eye(K_tot.shape[0])
-            k = np.concatenate([kf, kd])
-            try:
-                B = max(0.0, 1.0 - k @ np.linalg.solve(K_tot, k))
-                return float(np.sqrt(s2 * B))
-            except np.linalg.LinAlgError:
-                return float(np.sqrt(sm.predict_variances(np.array(u).reshape(1, -1)).item()))
-
-        def _gradient(self, u):
-            u_np = np.array(u).reshape(1, -1)
-            return [[self.sm.predict_derivatives(u_np, kx).item()] for kx in range(n_var)]
     
     # --------------------------------------------------------------------------- #
     # FONCTIONS POUR FORM                                                         #
@@ -1404,7 +1213,7 @@ if __name__ == '__main__':
 
         elif do_GEK:
             sm_GEK   = build_metamodel_GEK(xt, yt, all_grad)
-            gek_impl = GEKPLSFunction(sm_GEK)          
+            gek_impl = GEKPLSFunction(n_var, sm_GEK)          
             g_ot     = ot.Function(gek_impl)
             sigma_func = gek_impl._exec_sigma
 
@@ -1415,7 +1224,7 @@ if __name__ == '__main__':
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE                                         # on construit le residu
             gr_ot, result_r = build_metamodel_KRG(xt, yr)                                                 # on construit le surrogate sur le residu
             sigma_func = lambda u: float(np.sqrt(result_r.getConditionalMarginalVariance(ot.Point(list(u)))))  # on calcule sigma_func (locale donc sur surrogate)
-            g_ot = ot.Function(PCKRGFunction(g_ot_PCE, gr_ot))                                            # on wrappe la somme du surrogate et du PCE
+            g_ot = ot.Function(PCKRGFunction(n_var, g_ot_PCE, gr_ot))
             yt, all_grad = y_hf, all_grad_hf                                                              # on stocke les valeurs hf pour si warmstart
 
         elif do_old_GEPCK:
@@ -1424,7 +1233,7 @@ if __name__ == '__main__':
             y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
             smr_GEK = build_metamodel_GEK(xt, yr, all_grad_r)
-            gepck_impl = oldGEPCKFunction(g_ot_PCE, smr_GEK)
+            gepck_impl = oldGEPCKFunction(n_var, g_ot_PCE, smr_GEK)
             g_ot  = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
             yt, all_grad = y_hf, all_grad_hf
@@ -1463,7 +1272,7 @@ if __name__ == '__main__':
             _gepck_pce_label = ' '.join(_terms)
             _gepck_loo       = _fm['Error'][0]['LOO']
             _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
-            gepck_impl = GEPCKFunction(_fm)
+            gepck_impl = GEPCKFunction(n_var, _fm, print_gepck_calls)
             g_ot       = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
 
@@ -1500,12 +1309,12 @@ if __name__ == '__main__':
             _gepck_pce_label = ' '.join(_terms)
             _gepck_loo       = _fm['Error'][0]['LOO']
             _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
-            pck_impl = PCKFunction(_fm)
+            pck_impl = PCKFunction(n_var, _fm, print_gepck_calls)
             g_ot       = ot.Function(pck_impl)
             sigma_func = pck_impl._exec_sigma
 
         elif do_HF:
-            g_ot = ot.Function(HFFunction())
+            g_ot = ot.Function(HFFunction(n_var, run_HF))
             yt, all_grad = None, None
         
         return g_ot, sigma_func, xt, yt, all_grad
