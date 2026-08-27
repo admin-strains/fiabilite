@@ -711,17 +711,15 @@ if __name__ == '__main__':
 
 
     def init_FORM(g_ot, sigma_func, xt, yt, all_grad):
+        """Le metamodele, puis l'evenement `g < 0` qu'il definit.
+
+        L'evenement est dans `_reliability/form.py` : sa loi normale centree
+        reduite est la definition de l'espace standard, pas un choix
+        d'etude.
         """
-        Cette fonction créé un metamodele si aucun existant et calcule l'event FORM.
-        Elle retourne metamodele et xt,yt,all_grad et l'event.
-        """
-        # --- Événement de défaillance ---
-        distribution = ot.JointDistribution([ot.Normal(0, 1)] * n_var)
-        X = ot.RandomVector(distribution)
         g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-        Y = ot.CompositeRandomVector(g_ot, X) if g_ot is not None else None
-        event = ot.ThresholdEvent(Y, ot.Less(), 0.0) if Y is not None else None
-        return event, g_ot, sigma_func, xt, yt, all_grad
+        return (_form.evenement_de_defaillance(g_ot, n_var),
+                g_ot, sigma_func, xt, yt, all_grad)
 
     # --- Multi-start FORM depuis les points du DOE ---
     def FORM_all_modes(starting_points, tol_all_modes, event):
@@ -731,26 +729,24 @@ if __name__ == '__main__':
     
     # --- Warm-start FORM depuis les points du DOE ---
     def FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad):
-        """
-        Cette fonction reçoit des résultats FORM et le DOE utilisé, et déclenche warm_start si besoin 
-        - elle renvoie la liste de modes/ best_sps mise à jour mais ne renvoie pas le nouveau DOE pour 
-        l'instant (choix facilement modifiable).
-        """
-        if len(modes)>0:
-            u_star = modes[0].getStandardSpaceDesignPoint()
-            g_val = g_ot(ot.Point(u_star))[0] if g_ot is not None else None
+        """Relance FORM si le mode dominant ne tombe pas sur `g = 0`.
 
-            if g_val is not None and abs(g_val) > tol_warmstart:
-                # -- on fait warm start uniquement si on est au dessus de 0.2, sinon, on accepte le résultat. --
-                xt = np.vstack([xt, [np.array(u_star)]])
-                yt = np.vstack([yt, [[g_val]]])
-                grad_ot  = g_ot.gradient(ot.Point(u_star))
-                grad_val = np.array([[grad_ot[i, 0] for i in range(n_var)]])
-                all_grad = np.vstack([all_grad, grad_val])
-                event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
-                starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
-                modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
-        return modes, best_sps
+        Le mecanisme est dans `_reliability/form.py`, avec ce qu'il coute et
+        ce qu'il n'apporte pas. Ne restent ici que les deux rappels qui
+        appartiennent a l'etude : ajuster le metamodele, et chercher les
+        modes.
+        """
+        def _reajuster_et_evenement(xt_k, yt_k, ag_k):
+            evenement, _, _, xt_k, _, _ = init_FORM(g_ot, sigma_func,
+                                                    xt_k, yt_k, ag_k)
+            return evenement, xt_k
+
+        return _form.warm_start(
+            modes, best_sps, g_ot, xt, yt, all_grad, n_var=n_var,
+            tolerance=tol_warmstart, multistart=do_multistart,
+            tol_all_modes=tol_all_modes,
+            reajuster_et_evenement=_reajuster_et_evenement,
+            rechercher_modes=FORM_all_modes)
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS D'ENRICHISSEMENT DU PLAN D'EXPERIENCE (EFF)                       #
@@ -1165,19 +1161,11 @@ if __name__ == '__main__':
             legende=legende)
 
     def _coupe_la_plus_parlante(best_result):
-        """Les deux variables qui pesent le plus, les autres figees a u*.
+        """La coupe que les facteurs d'importance designent.
 
-        A plus de deux variables, une figure doit choisir son plan. Le prendre
-        au hasard montrerait une coupe ou il ne se passe rien ; les facteurs
-        d'importance de FORM designent celui ou tout se joue.
+        Dans `_reliability/form.py`.
         """
-        if best_result is None:
-            return slice_def
-        importance = np.array(best_result.getImportanceFactors())
-        deux = list(np.argsort(importance)[::-1][:2])
-        u_star = np.array(best_result.getStandardSpaceDesignPoint())
-        return (min(deux), max(deux),
-                {i: float(u_star[i]) for i in range(n_var) if i not in deux})
+        return _form.coupe_la_plus_parlante(best_result, n_var, slice_def)
 
 
 
@@ -1334,7 +1322,7 @@ if __name__ == '__main__':
         if start_from_LHS:
             starting_points = build_starting_points()
         else:
-            starting_points = np.vstack([xt, [[0.0] * n_var]]) if do_multistart else np.array([[0.0] * n_var])
+            starting_points = _form.points_de_depart(xt, n_var, do_multistart)
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
 
     best_result = modes[0] if modes else None
@@ -1361,11 +1349,10 @@ if __name__ == '__main__':
     if g_proj is not g_ot and do_IS and modes:
         idx_pos = _find_position_var_index()
         _idx_other = [_i for _i in range(n_var) if _i != idx_pos]
-        n_proj = len(_idx_other)
-        dist_proj = ot.JointDistribution([ot.Normal(0, 1)] * n_proj)
-        X_proj = ot.RandomVector(dist_proj)
-        Y_proj = ot.CompositeRandomVector(g_proj, X_proj)
-        event_proj = ot.ThresholdEvent(Y_proj, ot.Less(), 0.0)
+        # Le MEME evenement `g < 0`, en dimension reduite : il etait
+        # reconstruit a la main ici, alors que `init_FORM` le construisait
+        # deja quatre lignes plus haut dans le fichier.
+        event_proj = _form.evenement_de_defaillance(g_proj, len(_idx_other))
         print("=== IS sur surrogate projete (enveloppe position) ===", flush=True)
         result_IS_proj = run_IS_proj(modes, event_proj)
         print_results_IS(result_IS_proj)

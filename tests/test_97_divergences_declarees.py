@@ -203,7 +203,10 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 27/08 (suite) : le montage du plan -- greffe d'une reprise, assemblage
     #: des trois tableaux, plan recopiable -- part dans `_cache/doe.py` et
     #: `_doe/plan.py`. 664 -> 643.
-    PLAFOND = 643
+    #: 27/08 (suite) : l'evenement `g < 0`, les points de depart, le warm
+    #: start et le choix de coupe partent dans `_reliability/form.py`.
+    #: 643 -> 631.
+    PLAFOND = 631
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

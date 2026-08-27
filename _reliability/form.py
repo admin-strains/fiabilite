@@ -243,3 +243,92 @@ def print_results_IS(result_IS):
     print(f"  COV     = {cov:.4f}", flush=True)
     print(f"  IC 95%  = [{pf - ci/2:.4e}, {pf + ci/2:.4e}]", flush=True)
     print(f"  N_IS    = {result_IS.getOuterSampling()}", flush=True)
+
+
+def _ecrire(message):
+    print(message, flush=True)
+
+
+def evenement_de_defaillance(g_ot, n_var):
+    """`g < 0` dans l'espace standard, ou None si aucun metamodele.
+
+    La loi est normale centree reduite en toutes dimensions : c'est la
+    definition meme de l'espace standard, pas un choix d'etude. Les lois
+    physiques sont deja passees dans la transformation isoprobabiliste.
+
+    Rendre `None` plutot que lever : en HF pur il n'y a pas de metamodele, et
+    l'etude continue sans evenement.
+    """
+    X = ot.RandomVector(ot.JointDistribution([ot.Normal(0, 1)] * n_var))
+    if g_ot is None:
+        return None
+    return ot.ThresholdEvent(ot.CompositeRandomVector(g_ot, X), ot.Less(), 0.0)
+
+
+def points_de_depart(xt, n_var, multistart):
+    """Les points d'ou partent les recherches FORM.
+
+    En multistart, tout le plan d'experiences PLUS l'origine ; sinon
+    l'origine seule. L'origine est le point le plus probable de l'espace
+    standard : elle appartient a toute recherche.
+    """
+    origine = [[0.0] * n_var]
+    return np.vstack([xt, origine]) if multistart else np.array(origine)
+
+
+def warm_start(modes, best_sps, g_ot, xt, yt, all_grad, *, n_var, tolerance,
+               multistart, tol_all_modes, reajuster_et_evenement,
+               rechercher_modes, tracer=_ecrire):
+    """Relance FORM quand le mode dominant ne tombe pas sur `g = 0`.
+
+    FORM cherche le point de l'etat limite le plus proche de l'origine. Si
+    le metamodele evalue a `u*` rend une valeur loin de zero, c'est que la
+    recherche s'est arretee ailleurs que sur la frontiere : le resultat ne
+    veut rien dire. On verse alors `u*` au plan, on reajuste, et on relance
+    la recherche complete.
+
+    CE QUI EST VERSE AU PLAN EST LA PREDICTION DU METAMODELE, PAS UN APPEL
+    SOLVEUR. Zero appel haute fidelite, donc -- mais aussi zero information
+    nouvelle sur le vrai etat limite : le couple ajoute est `(u*, ce que le
+    modele predit deja en u*)`. Ce que cela change reellement depend du
+    metamodele (un krigeage interpolant y annule sa variance sans bouger sa
+    moyenne) ; `test_109_form` le mesure au lieu de l'affirmer.
+
+    Ne rend PAS le plan modifie -- seulement `(modes, best_sps)`. C'est le
+    choix d'origine, conserve : les points fictifs ne survivent donc pas a
+    l'appel, et le plan reel n'est pas contamine.
+    """
+    if not modes:
+        return modes, best_sps
+    u_star = modes[0].getStandardSpaceDesignPoint()
+    g_val = g_ot(ot.Point(u_star))[0] if g_ot is not None else None
+    if g_val is None or abs(g_val) <= tolerance:
+        return modes, best_sps
+
+    tracer("  [FORM WARM START] g(u*)=%.6f au-dela de %s : le mode dominant "
+           "n'est pas sur l'etat limite, on reajuste et on recommence"
+           % (g_val, tolerance))
+    xt = np.vstack([xt, [np.array(u_star)]])
+    yt = np.vstack([yt, [[g_val]]])
+    grad_ot = g_ot.gradient(ot.Point(u_star))
+    all_grad = np.vstack([all_grad,
+                          np.array([[grad_ot[i, 0] for i in range(n_var)]])])
+    evenement, xt = reajuster_et_evenement(xt, yt, all_grad)
+    return rechercher_modes(points_de_depart(xt, n_var, multistart),
+                            tol_all_modes, evenement)
+
+
+def coupe_la_plus_parlante(best_result, n_var, coupe_par_defaut):
+    """Les deux variables qui pesent le plus, les autres figees a `u*`.
+
+    A plus de deux variables, une figure doit choisir son plan. Le prendre
+    au hasard montrerait une coupe ou il ne se passe rien ; les facteurs
+    d'importance de FORM designent celui ou tout se joue.
+    """
+    if best_result is None:
+        return coupe_par_defaut
+    importance = np.array(best_result.getImportanceFactors())
+    deux = list(np.argsort(importance)[::-1][:2])
+    u_star = np.array(best_result.getStandardSpaceDesignPoint())
+    return (min(deux), max(deux),
+            {i: float(u_star[i]) for i in range(n_var) if i not in deux})

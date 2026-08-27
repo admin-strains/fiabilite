@@ -131,7 +131,11 @@ PROJET = {
 #: Ni la greffe d'une reprise ni le plan recopiable ne sont traverses par
 #: la chaine analytique (`config_is_identical` et `print_DOE` y sont faux) :
 #: exerces a part, sur un cache tronque a la main. 1523 -> 1502.
-PLAFOND_LIGNES = 1502
+#: 27/08 (suite) : le groupe FORM -- evenement `g < 0`, points de depart,
+#: warm start, choix de coupe -- part dans `_reliability/form.py`. L'evenement
+#: etait construit a DEUX endroits du meme fichier ; il ne l'est plus nulle
+#: part dans les etudes. 1502 -> 1489.
+PLAFOND_LIGNES = 1489
 PLAFOND_FONCTIONS = 42
 
 
