@@ -1,0 +1,285 @@
+r"""L'evaluation en parallele : un code qui n'avait jamais tourne.
+
+CE QU'IL ETAIT
+---------------
+`run_DOE_parallel` et `run_HF_grid_parallel`, dans chacun des deux scripts :
+QUATRE copies de 115 lignes qui ne differaient que par le nom des
+sous-dossiers et la facon de ranger le resultat.
+
+Et surtout : **ce chemin de code ne pouvait pas s'executer**. Les workers
+passaient par `launcher3.py`, une copie du lanceur portant en dur les chemins
+du poste de l'auteur (`C:\_workingDir\_SF\test flexion\_lib`). Ce chemin
+n'existant nulle part ailleurs, la branche parallele echouait partout sauf
+la -- ce qui explique qu'elle n'ait jamais ete couverte, ni sans doute
+executee depuis.
+
+POURQUOI ELLE EST TESTABLE MAINTENANT
+--------------------------------------
+Le lanceur de processus est un ARGUMENT. Ces tests verifient tout ce qui se
+passe autour du solveur -- repartition, copies isolees, fichiers de tache,
+variables d'environnement, collecte, detection d'un worker mort -- sans en
+lancer un seul.
+
+DEUX GARDES QUI N'EXISTAIENT PAS
+---------------------------------
+* un worker qui ne rend AUCUNE sortie leve, en nommant son journal ;
+* un plan TROUE -- des points sans resultat alors que tous les workers ont
+  rendu quelque chose -- leve aussi. L'original remplissait `SOL` avec ce
+  qu'il avait recu et laissait le trou se manifester plus loin, sous forme
+  de `KeyError`.
+"""
+
+import json
+import os
+import sys
+
+import pytest
+
+_ICI = os.path.dirname(os.path.abspath(__file__))
+_REPO = os.path.dirname(_ICI)
+if os.path.join(_REPO, "_doe") not in sys.path:
+    sys.path.insert(0, os.path.join(_REPO, "_doe"))
+
+import parallele as _parallele                        # noqa: E402
+
+PARAMS = ["fc", "fy"]
+
+
+class _FauxProcessus:
+    """Un worker qui ecrit sa sortie sans rien calculer."""
+
+    def __init__(self, argv, env, cwd, journal, resultats=None, rc=0):
+        self.argv, self.env, self.cwd, self.journal = argv, env, cwd, journal
+        self.rc = rc
+        self._resultats = resultats
+
+    def wait(self, *a, **kw):
+        if self._resultats is not None:
+            with open(self.env["_DOE_OUT"], "w") as fh:
+                json.dump(self._resultats, fh)
+        return self.rc
+
+
+def _lanceur(calcul=None, rc=0, muet=False):
+    """Fabrique un `lancer(...)` qui note ce qu'on lui demande."""
+    trace = []
+
+    def lancer(argv, env, cwd, journal):
+        tache = json.load(open(env["_DOE_WORKER"]))
+        trace.append({"argv": argv, "env": env, "cwd": cwd,
+                      "journal": journal, "points": tache["points"]})
+        if muet:
+            return _FauxProcessus(argv, env, cwd, journal, None, rc)
+        res = {str(p["idx"]): (calcul(p) if calcul
+                               else {"g": float(p["idx"]), "dg_fc": 0.5,
+                                     "dg_fy": 0.25})
+               for p in tache["points"]}
+        return _FauxProcessus(argv, env, cwd, journal, res, rc)
+
+    lancer.trace = trace
+    return lancer
+
+
+def _modele(tmp_path, nom="essai"):
+    """Un `.ds` minimal : les deux fichiers que le solveur reecrit."""
+    base = tmp_path / (nom + ".ds")
+    base.mkdir()
+    (base / "dsCad.txt").write_text("b = 1.0\n", encoding="utf-8")
+    (base / "dsLoad.txt").write_text("Z='-1.0'\n", encoding="utf-8")
+    return str(tmp_path), nom
+
+
+def _points(n):
+    return [{"fc": 40.0 + i, "fy": 500.0 + i} for i in range(n)]
+
+
+# --------------------------------------------------------------------- #
+# la repartition
+# --------------------------------------------------------------------- #
+def test_les_points_sont_repartis_en_tourniquet():
+    """Et non par tranches contigues : le cout d'un point varie fortement
+    avec sa position dans le domaine, et des tranches donneraient un worker
+    charge et trois oisifs."""
+    assert _parallele.repartir(7, 3) == [[0, 3, 6], [1, 4], [2, 5]]
+
+
+def test_on_ne_lance_pas_plus_de_workers_que_de_points():
+    lots = _parallele.repartir(2, 8)
+    assert len(lots) == 2 and sum(len(l) for l in lots) == 2
+
+
+def test_un_seul_worker_prend_tout():
+    assert _parallele.repartir(4, 1) == [[0, 1, 2, 3]]
+
+
+def test_un_plan_vide_ne_fait_pas_diviser_par_zero():
+    assert _parallele.repartir(0, 4) == [[]]
+
+
+# --------------------------------------------------------------------- #
+# la copie isolee du modele
+# --------------------------------------------------------------------- #
+def test_chaque_worker_recoit_SA_copie_du_modele(tmp_path):
+    """Digital Structure REECRIT `dsCad.txt` a chaque evaluation : deux
+    workers dans le meme dossier se detruiraient l'un l'autre."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(_points(4), PARAMS, storage, nom, 2,
+                                    script_etude="etude.py", repo=_REPO,
+                                    lancer=lancer, tracer=lambda _m: None)
+    dossiers = {t["cwd"] for t in lancer.trace}
+    assert len(dossiers) == 2, "les workers partagent un dossier"
+    for d in dossiers:
+        assert os.path.exists(os.path.join(d, "dsCad.txt"))
+        assert os.path.exists(os.path.join(d, "dsLoad.txt"))
+        assert os.path.abspath(d) != os.path.abspath(
+            os.path.join(storage, nom + ".ds")), (
+            "un worker travaille dans le modele PRINCIPAL")
+
+
+def test_une_sortie_d_un_run_precedent_est_effacee(tmp_path):
+    """Sinon elle serait relue comme celle de ce run-ci -- des valeurs d'un
+    autre domaine, servies comme etant celles-ci."""
+    storage, nom = _modele(tmp_path)
+    wds, _tache, sortie = _parallele.preparer_worker(
+        storage, os.path.join(storage, nom + ".ds"), "w0",
+        {0: {"fc": 40.0, "fy": 500.0}}, PARAMS)
+    with open(sortie, "w") as fh:
+        json.dump({"0": {"g": -999.0}}, fh)
+    _parallele.preparer_worker(storage, os.path.join(storage, nom + ".ds"),
+                               "w0", {0: {"fc": 40.0, "fy": 500.0}}, PARAMS)
+    assert not os.path.exists(sortie)
+
+
+def test_la_tache_porte_l_indice_et_les_variables(tmp_path):
+    """Sans l'indice, les resultats ne se recollent pas dans le bon ordre."""
+    storage, nom = _modele(tmp_path)
+    _wds, tache, _sortie = _parallele.preparer_worker(
+        storage, os.path.join(storage, nom + ".ds"), "w0",
+        {3: {"fc": 41.0, "fy": 501.0}, 7: {"fc": 42.0, "fy": 502.0}}, PARAMS)
+    points = json.load(open(tache))["points"]
+    assert [p["idx"] for p in points] == [3, 7]
+    assert points[0]["fc"] == 41.0 and points[1]["fy"] == 502.0
+
+
+# --------------------------------------------------------------------- #
+# l'environnement du worker
+# --------------------------------------------------------------------- #
+def test_la_charge_MKL_est_repartie_entre_les_workers(tmp_path):
+    """Sans cela chaque worker croit disposer de toute la machine, et quatre
+    solveurs se disputent les memes coeurs."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(_points(8), PARAMS, storage, nom, 4,
+                                    script_etude="etude.py", repo=_REPO,
+                                    lancer=lancer, tracer=lambda _m: None)
+    attendu = str(_parallele.FILS_MKL_DISPONIBLES // 4)
+    for t in lancer.trace:
+        assert t["env"]["MKL_NUM_THREADS"] == attendu
+        assert t["env"]["OMP_NUM_THREADS"] == attendu
+
+
+def test_le_worker_sait_ou_est_le_modele_principal(tmp_path):
+    """Seuls `dsCad` et `dsLoad` sont copies ; le STEP et le reste sont relus
+    depuis le modele principal."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(_points(2), PARAMS, storage, nom, 2,
+                                    script_etude="etude.py", repo=_REPO,
+                                    lancer=lancer, tracer=lambda _m: None)
+    for t in lancer.trace:
+        assert t["env"]["_DOE_MAIN_DS"] == os.path.join(storage, nom + ".ds")
+        assert t["env"]["_FIAB_LOG_REDIRECTED"] == "1", (
+            "sans ce drapeau le worker ouvre une fenetre matplotlib")
+
+
+def test_le_worker_est_lance_par_le_lanceur_du_depot(tmp_path):
+    """C'est LE defaut historique : les workers passaient par `launcher3.py`,
+    qui portait en dur les chemins du poste de l'auteur."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(_points(2), PARAMS, storage, nom, 1,
+                                    script_etude="mon_etude.py", repo=_REPO,
+                                    lancer=lancer, tracer=lambda _m: None)
+    argv = lancer.trace[0]["argv"]
+    assert argv[1] == os.path.join(_REPO, "launcher.py"), (
+        "le worker doit passer par le lanceur du DEPOT, jamais par une copie")
+    assert "--garder-cwd" in argv, (
+        "le worker travaille dans SA copie : le lanceur ne doit pas revenir "
+        "au dossier de l'etude")
+    assert argv[-1] == "mon_etude.py"
+
+
+# --------------------------------------------------------------------- #
+# la collecte
+# --------------------------------------------------------------------- #
+def test_les_resultats_reviennent_dans_le_bon_ordre(tmp_path):
+    """Le tourniquet melange les indices : c'est la collecte par indice qui
+    les remet en place."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur(calcul=lambda p: {"g": p["fc"], "dg_fc": 1.0, "dg_fy": 2.0})
+    res = _parallele.evaluer_en_parallele(_points(5), PARAMS, storage, nom, 3,
+                                          script_etude="e.py", repo=_REPO,
+                                          lancer=lancer, tracer=lambda _m: None)
+    assert sorted(res) == [0, 1, 2, 3, 4]
+    for i in range(5):
+        assert res[i]["g"] == pytest.approx(40.0 + i)
+
+
+def test_un_worker_sans_sortie_LEVE_et_nomme_son_journal(tmp_path):
+    """Un worker qui meurt en silence rendrait un plan incomplet sans le
+    dire."""
+    storage, nom = _modele(tmp_path)
+    with pytest.raises(RuntimeError) as err:
+        _parallele.evaluer_en_parallele(_points(3), PARAMS, storage, nom, 2,
+                                        script_etude="e.py", repo=_REPO,
+                                        lancer=_lanceur(muet=True),
+                                        tracer=lambda _m: None)
+    assert "sans sortie" in str(err.value)
+    assert "_doe_worker.log" in str(err.value), (
+        "le message doit dire OU regarder")
+
+
+def test_un_plan_troue_LEVE_au_lieu_de_passer_pour_complet(tmp_path):
+    """Nouveau garde : l'original remplissait `SOL` avec ce qu'il avait recu
+    et laissait le trou se manifester plus loin, en `KeyError`."""
+    storage, nom = _modele(tmp_path)
+
+    def lancer(argv, env, cwd, journal):
+        tache = json.load(open(env["_DOE_WORKER"]))
+        # le worker « oublie » son premier point
+        res = {str(p["idx"]): {"g": 0.0} for p in tache["points"][1:]}
+        return _FauxProcessus(argv, env, cwd, journal, res)
+
+    with pytest.raises(RuntimeError) as err:
+        _parallele.evaluer_en_parallele(_points(6), PARAMS, storage, nom, 2,
+                                        script_etude="e.py", repo=_REPO,
+                                        lancer=lancer, tracer=lambda _m: None)
+    assert "sans resultat" in str(err.value)
+
+
+def test_le_journal_dit_combien_de_workers_et_de_points(tmp_path):
+    messages = []
+    storage, nom = _modele(tmp_path)
+    _parallele.evaluer_en_parallele(_points(6), PARAMS, storage, nom, 3,
+                                    script_etude="e.py", repo=_REPO,
+                                    lancer=_lanceur(), tracer=messages.append)
+    texte = "\n".join(messages)
+    assert "6 pts -> 3 workers" in texte
+    assert texte.count("<- worker") == 3, "chaque worker doit rendre son code"
+
+
+# --------------------------------------------------------------------- #
+# les deux etudes partagent le meme mecanisme
+# --------------------------------------------------------------------- #
+@pytest.mark.parametrize("script", ["pure_flexion/AC3_pure_flexion.py",
+                                    "Moulinblanc/AC3_moulinblanc.py"])
+def test_les_scripts_ne_recopient_plus_le_mecanisme(script):
+    src = open(os.path.join(_REPO, script), encoding="utf-8",
+               errors="replace").read()
+    assert "_parallele.evaluer_en_parallele(" in src
+    for parti in ("_DOE_WORKER=", "MKL_NUM_THREADS", "shutil.copy2",
+                  "_sp.Popen"):
+        assert parti not in src, (
+            "%s porte encore `%s` : le mecanisme appartient a "
+            "`_doe/parallele.py`." % (script, parti))

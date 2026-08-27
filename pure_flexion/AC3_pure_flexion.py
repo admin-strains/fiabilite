@@ -9,7 +9,6 @@ d'importance -- ne dependent donc plus d'une licence.
 """
 import os
 import json
-import shutil
 import re
 import sys                  # etait utilise 8 fois SANS etre importe : il ne
                             # marchait que parce que le `import *` de Digital
@@ -49,6 +48,7 @@ import projection as _projection
 import grille as _grille
 import evaluation as _evaluation
 import plan as _plan
+import parallele as _parallele
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -477,122 +477,38 @@ if __name__ == '__main__':
 
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
-        """Parallelise les SOCP du DOE via subprocesses independants.
-        Chaque worker = launcher.py relance en mode _DOE_WORKER sur une copie .ds isolee.
+        """Le plan d'experiences reparti sur plusieurs solveurs.
 
-        Les workers passaient jusqu'ici par `launcher3.py`, une copie du lanceur
-        qui portait en dur les chemins du poste de l'auteur (`C:\\_workingDir\\_SF
-        \\test flexion\\_lib`). Ce chemin n'existant nulle part ailleurs, ce
-        chemin de code ne pouvait pas s'executer hors de ce poste -- ce qui
-        explique qu'il n'ait jamais ete couvert."""
-        import subprocess as _sp
-        base_ds = os.path.join(storage, base_modelname + ".ds")
-        npts = len(SOL)
-        n_workers = max(1, min(n_workers, npts))
-        threads_per = max(1, 32 // n_workers)
-        batches = [[] for _ in range(n_workers)]
-        for i in range(npts):
-            batches[i % n_workers].append(i)
-        print(f"  [DOE PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per} threads/worker)", flush=True)
-        procs = []
-        for w, idxs in enumerate(batches):
-            if not idxs:
-                continue
-            wname = base_modelname + ".ds\\_doe_workers\\doew%d" % w
-            wds = os.path.join(storage, wname + ".ds")
-            os.makedirs(wds, exist_ok=True)
-            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
-            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
-            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
-            task_file = wds + "\\_doe_task.json"
-            out_file = wds + "\\_doe_out.json"
-            with open(task_file, "w") as _f:
-                json.dump(task, _f)
-            if os.path.exists(out_file):
-                os.remove(out_file)
-            env = dict(os.environ,
-                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
-                       _DOE_MAIN_DS=base_ds,
-                       _FIAB_LOG_REDIRECTED="1",
-                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
-            wlog = open(wds + "\\_doe_worker.log", "w")
-            print(f"    -> worker {w}: points {idxs}", flush=True)
-            p = _sp.Popen([sys.executable, os.path.join(_REPO, "launcher.py"), "--garder-cwd", __file__],
-                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
-            procs.append((p, out_file, wlog, w, idxs))
-        for p, out_file, wlog, w, idxs in procs:
-            rc = p.wait(); wlog.close()
-            print(f"    <- worker {w} fini (rc={rc})", flush=True)
-        for p, out_file, wlog, w, idxs in procs:
-            if not os.path.exists(out_file):
-                raise RuntimeError(f"[DOE PARALLELE] worker {w} sans sortie {out_file} (voir _doe_worker.log)")
-            res = json.load(open(out_file))
-            for i_str, d in res.items():
-                i = int(i_str)
-                SOL[i]['g'] = d['g']
-                for q in params_names:
-                    SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
-            print("    collecte worker {}: ".format(w) + ", ".join(f"pt{i} g={SOL[i]['g']:.4f}" for i in idxs), flush=True)
+        Le mecanisme -- copies isolees du `.ds`, repartition en tourniquet,
+        collecte -- est dans `_doe/parallele.py`, en un exemplaire au lieu de
+        quatre.
+        """
+        resultats = _parallele.evaluer_en_parallele(
+            SOL, params_names, storage, base_modelname, n_workers,
+            script_etude=__file__, repo=_REPO)
+        for i, d in resultats.items():
+            SOL[i]['g'] = d['g']
+            for q in params_names:
+                SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
         return SOL
 
-    # --- HF GRILLE PARALLELE ---
     def run_HF_grid_parallel(u_points, n_workers=3):
-        """Calcule g sur une liste de points U en parallele via subprocesses.
-        Meme mecanisme que run_DOE_parallel (workers _DOE_WORKER).
-        Retourne une liste de g (meme ordre que u_points)."""
-        import subprocess as _sp
-        dist_X = dist_jointe()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        SOL = []
+        """Les points d'une grille, repartis sur plusieurs solveurs.
+
+        Retourne la liste des g, dans l'ordre de `u_points`.
+        """
+        T_inv = dist_jointe().getInverseIsoProbabilisticTransformation()
+        points = []
         for u in u_points:
             x = T_inv(ot.Point(list(u)))
-            SOL.append({p: float(x[j]) for j, p in enumerate(params_names)})
-        npts = len(SOL)
-        n_workers = max(1, min(n_workers, npts))
-        threads_per = max(1, 32 // n_workers)
-        base_ds = os.path.join(storage, modelname + ".ds")
-        batches = [[] for _ in range(n_workers)]
-        for i in range(npts):
-            batches[i % n_workers].append(i)
-        print(f"  [HF GRID PARALLELE] {npts} pts -> {n_workers} workers (MKL={threads_per})", flush=True)
-        procs = []
-        for w, idxs in enumerate(batches):
-            if not idxs:
-                continue
-            wname = modelname + ".ds\\_hf_workers\\hfw%d" % w
-            wds = os.path.join(storage, wname + ".ds")
-            os.makedirs(wds, exist_ok=True)
-            shutil.copy2(base_ds + "\\dsCad.txt", wds + "\\dsCad.txt")
-            shutil.copy2(base_ds + "\\dsLoad.txt", wds + "\\dsLoad.txt")
-            task = {"points": [dict({"idx": i}, **{p: float(SOL[i][p]) for p in params_names}) for i in idxs]}
-            task_file = wds + "\\_doe_task.json"
-            out_file = wds + "\\_doe_out.json"
-            with open(task_file, "w") as _f:
-                json.dump(task, _f)
-            if os.path.exists(out_file):
-                os.remove(out_file)
-            env = dict(os.environ,
-                       _DOE_WORKER=task_file, _DOE_OUT=out_file, _DOE_WORKER_MODELNAME=wname,
-                       _DOE_MAIN_DS=base_ds,
-                       _FIAB_LOG_REDIRECTED="1",
-                       MKL_NUM_THREADS=str(threads_per), OMP_NUM_THREADS=str(threads_per))
-            wlog = open(wds + "\\_hf_worker.log", "w")
-            print(f"    -> hf_worker {w}: {len(idxs)} points", flush=True)
-            p = _sp.Popen([sys.executable, os.path.join(_REPO, "launcher.py"), "--garder-cwd", __file__],
-                          env=env, stdout=wlog, stderr=_sp.STDOUT, cwd=wds)
-            procs.append((p, out_file, wlog, w, idxs))
-        g_results = [None] * npts
-        for p, out_file, wlog, w, idxs in procs:
-            rc = p.wait(); wlog.close()
-            print(f"    <- hf_worker {w} fini (rc={rc})", flush=True)
-        for p, out_file, wlog, w, idxs in procs:
-            if not os.path.exists(out_file):
-                raise RuntimeError(f"[HF GRID PARALLELE] worker {w} sans sortie (voir _hf_worker.log)")
-            res = json.load(open(out_file))
-            for i_str, d in res.items():
-                g_results[int(i_str)] = d['g']
-            print(f"    collecte hf_worker {w}: {len(idxs)} pts", flush=True)
-        return g_results
+            points.append({p: float(x[j]) for j, p in enumerate(params_names)})
+        resultats = _parallele.evaluer_en_parallele(
+            points, params_names, storage, modelname, n_workers,
+            script_etude=__file__, repo=_REPO,
+            sous_dossier="_hf_workers", prefixe="hfw",
+            nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE")
+        return [resultats[i]['g'] for i in range(len(points))]
+
 
     # --- DOE cache ---
     _DOE_CACHE_FILE = os.path.join(_path_ds, "doe_cache.json")

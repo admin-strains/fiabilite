@@ -86,7 +86,10 @@ PROJET = {
 #: 2421 -> 2334, 43 -> 42 fonctions.
 #: 27/08 (suite) : le tirage du plan, le tri des points sans gradient et
 #: l'augmentation de Taylor partent dans `_doe/plan.py`. 2334 -> 2278.
-PLAFOND_LIGNES = 2278
+#: 27/08 (suite) : les deux workers paralleles -- 115 lignes recopiees
+#: quatre fois, dans un chemin de code qui n'avait jamais pu s'executer
+#: -- deviennent `_doe/parallele.py`. 2278 -> 2194.
+PLAFOND_LIGNES = 2194
 PLAFOND_FONCTIONS = 42
 
 
