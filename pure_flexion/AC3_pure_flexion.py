@@ -44,6 +44,9 @@ import eff_ot as _eff_ot
 import form as _form
 import graphiques as _graphiques
 import figurer as _figurer
+# NOM : `ajuster`, pas `fit` -- `_lib/fit.py` (le clone UQLab) porte
+# deja ce nom sur le chemin d'import, et l'aurait eclipse.
+import ajuster as _fit
 from wrappers import (HFFunction, PCKRGFunction, oldGEPCKFunction,
                       GEPCKFunction, PCKFunction, GEKPLSFunction)
 import schema as _schema
@@ -914,15 +917,6 @@ if __name__ == '__main__':
         sa = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
         return np.array(sa.generate())  # shape (n_sp, n_var)
 
-    def build_Y_aug(yt, all_grad):
-        """
-        Construit le vecteur gradient-enhanced y_dot (eq. 6 Zuhal et al.).
-        y_dot = [y^1,...,y^n, dg/du1^1,...,dg/du1^n, ..., dg/dum^1,...,dg/dum^n]^T
-        Shape : (n0*(1+n_var),)
-        """
-        y_flat      = yt.flatten()                                         # (n0,)
-        grad_blocks = [all_grad[:, j] for j in range(all_grad.shape[1])]  # n_var blocs de (n0,)
-        return np.concatenate([y_flat] + grad_blocks)                      # (n0*(1+n_var),)
 
     # --------------------------------------------------------------------------- #
     # FONCTION ANALYTIQUE DE REFERENCE                                            #
@@ -1018,61 +1012,7 @@ if __name__ == '__main__':
     # FONCTIONS LIEES AU MODELE PCE                                               #
     # n0_min et update_degree supprimes : LARS gere P > N, max_degree fixe des le depart
 
-    def build_metamodel_PCE(xt, y_hf):
-        # 1. INITIALISATION : DOE ET DISTRIBUTION
-        inputSample = ot.Sample(xt)
-        outputSample = ot.Sample(y_hf)
-        n0 = xt.shape[0]
-        dist_X = dist_jointe()
-        dist_U = dist_X.getStandardDistribution()
 
-        # 2. BASE DE CANDIDATS : TYPE, ENUMERATION, DEGRE
-        n_var = inputSample.getDimension()
-        enumerateFunction = ot.HyperbolicAnisotropicEnumerateFunction(n_var, q)
-        basis = ot.OrthogonalProductPolynomialFactory([ot.HermiteFactory()] * n_var, enumerateFunction)
-        basis_size = enumerateFunction.getBasisSizeFromTotalDegree(max_degree)
-        basisStrategy = ot.FixedStrategy(basis, basis_size)
-
-        # 3. PROPOSITION / PROJECTION / SELECTION
-        selectionStrategy = ot.LeastSquaresMetaModelSelectionFactory(ot.LARS(), ot.CorrectedLeaveOneOut())
-        projectionStrategy = ot.LeastSquaresStrategy(selectionStrategy) 
-
-        # 4. RESULTAT
-        algo = ot.FunctionalChaosAlgorithm(inputSample, outputSample, dist_U, basisStrategy, projectionStrategy)
-        algo.run()
-        result = algo.getResult()
-        n_active = result.getCoefficients().getSize()
-        print(f"PCE construite : basis_size={basis_size}, coefficients actifs LARS={n_active}", flush=True)
-        indices = result.getIndices()
-        coeffs  = result.getCoefficients()
-        terms = []
-        for k in range(indices.getSize()):
-            mi = enumerateFunction(indices[k])
-            a, b = int(mi[0]), int(mi[1])
-            if   a == 0 and b == 0: label = "1"
-            elif a == 0:            label = f"H{b}(u2)"
-            elif b == 0:            label = f"H{a}(u1)"
-            else:                   label = f"H{a}(u1)*H{b}(u2)"
-            terms.append(f"{coeffs[k, 0]:+.4f}*{label}")
-        print(f"  PCE termes : {' '.join(terms)}", flush=True)
-        metamodel = result.getMetaModel()
-        return metamodel
-
-    def calculate_PCE(xt, y_hf, all_grad_hf, metamodel_PCE):
-        U_doe = ot.Sample(xt)                               
-        y_PCE = np.array(metamodel_PCE(U_doe))
-        n_var = U_doe.getDimension()
-        n0 = U_doe.getSize()
-        dist_X = dist_jointe()
-        T = dist_X.getIsoProbabilisticTransformation()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        all_grad_PCE = np.zeros((n0, n_var))
-        # all_sensib_PCE = np.zeros((n0, n_var))
-        for i in range(n0):
-            grad_pce_u = metamodel_PCE.gradient(U_doe[i])       
-            for j in range(n_var):
-                all_grad_PCE[i, j] = grad_pce_u[j, 0]
-        return y_PCE, all_grad_PCE
 
 
 
@@ -1142,52 +1082,11 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU KRG                                                      #
 
-    def build_metamodel_KRG(xt, yt):
-        n_var = xt.shape[1]
-        basis = ot.ConstantBasisFactory(n_var).build() 
-        #passer à linéaire avec ot.LinearBasisFactory(n_var).build()
-        covarianceModel = ot.SquaredExponential([1.0] * n_var)
-        algo_KRG = ot.KrigingAlgorithm(xt, yt, covarianceModel, basis)
-        if do_KRG:
-            algo_KRG.setOptimizationBounds(ot.Interval([1.0] * n_var, [100.0] * n_var))
-        algo_KRG.run()
-        result = algo_KRG.getResult()
-        cov_opt = result.getCovarianceModel()
-        print(f"  KRG theta={list(cov_opt.getScale())}  sigma={list(cov_opt.getAmplitude())}", flush=True)
-        return result.getMetaModel(), result
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS LIEES AU GEK                                                      #
 
     # --- Modèle smt  ---
-    def build_metamodel_GEK(xt, yt, all_grad):
-        xlimits = np.column_stack([xt.min(axis=0) - 1, xt.max(axis=0) + 1])
-        if do_GEK:
-            sm = GEKPLS(
-                n_comp=2,
-                theta0=[1e-2, 1e-2],
-                theta_bounds=[1.0, 5.0],
-                corr="squar_exp",
-                poly="constant",
-                xlimits=xlimits,
-                print_global=False,
-            )
-        else:
-            sm = GEKPLS(
-                n_comp=2,
-                theta0=[1e-2, 1e-2],
-                theta_bounds=[1.0, 5.0],
-                corr="squar_exp",
-                poly="constant",
-                xlimits=xlimits,
-                print_global=False,
-            )
-        sm.set_training_values(xt, yt)
-        for j in range(n_var):
-            sm.set_training_derivatives(xt, all_grad[:, j].reshape(-1, 1), j)
-        sm.train()
-        print(f"  GEK theta={list(sm.optimal_theta)}  sigma={float(np.sqrt(sm.optimal_par['sigma2'])):.6f}", flush=True)
-        return sm
 
     # --- Wrapper OpenTURNS avec gradients analytiques ---
     
@@ -1208,31 +1107,31 @@ if __name__ == '__main__':
                 "xt/yt/all_grad. (Sept branches portaient la meme ligne cachee, "
                 "ce qui rendait une figure capable de lancer n0 appels solveur.)")
         if do_KRG:
-            g_ot, result = build_metamodel_KRG(xt, yt)
+            g_ot, result = _fit.ajuster_KRG(xt, yt, borner_theta=do_KRG, theta_min=1.0)
             sigma_func = lambda u: float(np.sqrt(result.getConditionalMarginalVariance(ot.Point(list(u)))))
 
         elif do_GEK:
-            sm_GEK   = build_metamodel_GEK(xt, yt, all_grad)
+            sm_GEK   = _fit.ajuster_GEK(xt, yt, all_grad)
             gek_impl = GEKPLSFunction(n_var, sm_GEK)          
             g_ot     = ot.Function(gek_impl)
             sigma_func = gek_impl._exec_sigma
 
         elif do_PCKRG:
             y_hf, all_grad_hf = yt, all_grad
-            g_ot_PCE = build_metamodel_PCE(xt, y_hf)                                                      # on déduit le métamodèle PCE
-            y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE)                              # on calcule la composante PCE à partir des valeurs hf
+            g_ot_PCE = _fit.ajuster_PCE(xt, y_hf, dist_jointe(), q, max_degree)                                                      # on déduit le métamodèle PCE
+            y_PCE, all_grad_PCE = _fit.composante_PCE(xt, g_ot_PCE)                              # on calcule la composante PCE à partir des valeurs hf
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE                                         # on construit le residu
-            gr_ot, result_r = build_metamodel_KRG(xt, yr)                                                 # on construit le surrogate sur le residu
+            gr_ot, result_r = _fit.ajuster_KRG(xt, yr, borner_theta=do_KRG, theta_min=1.0)                                                 # on construit le surrogate sur le residu
             sigma_func = lambda u: float(np.sqrt(result_r.getConditionalMarginalVariance(ot.Point(list(u)))))  # on calcule sigma_func (locale donc sur surrogate)
             g_ot = ot.Function(PCKRGFunction(n_var, g_ot_PCE, gr_ot))
             yt, all_grad = y_hf, all_grad_hf                                                              # on stocke les valeurs hf pour si warmstart
 
         elif do_old_GEPCK:
             y_hf, all_grad_hf = yt, all_grad
-            g_ot_PCE = build_metamodel_PCE(xt, y_hf)
-            y_PCE, all_grad_PCE = calculate_PCE(xt, y_hf, all_grad_hf, g_ot_PCE) 
+            g_ot_PCE = _fit.ajuster_PCE(xt, y_hf, dist_jointe(), q, max_degree)
+            y_PCE, all_grad_PCE = _fit.composante_PCE(xt, g_ot_PCE) 
             yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
-            smr_GEK = build_metamodel_GEK(xt, yr, all_grad_r)
+            smr_GEK = _fit.ajuster_GEK(xt, yr, all_grad_r)
             gepck_impl = oldGEPCKFunction(n_var, g_ot_PCE, smr_GEK)
             g_ot  = ot.Function(gepck_impl)
             sigma_func = gepck_impl._exec_sigma
@@ -1255,7 +1154,7 @@ if __name__ == '__main__':
             else:
                 _opts = {'Mode': 'optimal',
                          'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-            _Y_aug = build_Y_aug(yt, all_grad)
+            _Y_aug = _fit.y_augmente(yt, all_grad)
             print(f"=== GEPCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')

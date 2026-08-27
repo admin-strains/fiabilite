@@ -105,7 +105,8 @@ _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
 _etapes/figurer.py          (existe)    2 fonctions     74 l.
 _surrogate/wrappers.py      (existe)    6 classes      193 l.
-_surrogate/ (le reste)      A CREER     9 fonctions    270 l.
+_surrogate/ajuster.py       (existe)    5 fonctions    104 l.
+_surrogate/ (init_g_ot...)  A CREER     4 fonctions    166 l.
 _doe/                       A CREER     6 fonctions    332 l.
 ---------------------------------------------------------------
 RESTE dans l'AC                         7 fonctions    108 l.
@@ -135,9 +136,9 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 783 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 689 l.** | <= 250 |
-| fonctions imbriquees | 58 / 60 | **55 / 55** | <= 8 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 682 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 589 l.** | <= 250 |
+| fonctions imbriquees | 58 / 60 | **50 / 50** | <= 8 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
 
@@ -182,6 +183,24 @@ revele deux defauts :
 * quatre lignes de trace codaient `n_var == 2` en dur (`u[0]`, `u[1]`) : avec
   trois variables le journal tronquait, avec une seule il levait `IndexError`
   au milieu d'un run.
+
+Les cinq ajustements de metamodeles ont suivi dans `_surrogate/ajuster.py`,
+et l'extraction a trouve **une cinquieme divergence entre les deux copies** :
+`build_metamodel_KRG` bornait l'optimisation des longueurs de correlation a
+`[1, 100]` sur la flexion pure et a `[0, 100]` sur le Moulin Blanc. Une borne
+inferieure nulle laisse l'optimiseur degenerer vers une correlation quasi
+nulle -- le krigeage cesse de lisser et interpole le bruit. Rien ne signalait
+l'ecart. Chaque etude garde sa valeur ; elle est desormais ecrite a l'appel.
+
+Deux defauts plus discrets au passage : `build_metamodel_GEK` portait un `if`
+dont les deux branches construisaient le meme objet au caractere pres, et
+`calculate_PCE` recevait `y_hf` et `all_grad_hf` sans jamais les lire -- ce
+qui laissait croire que la composante PCE etait comparee aux gradients
+exacts.
+
+Le renommage `fit.py` -> `ajuster.py` n'est pas cosmetique : `_lib/fit.py`
+(le clone UQLab) est sur le meme chemin d'import et se faisait eclipser. Seul
+l'echec de collecte de la suite l'a signale.
 
 ### Ordre d'extraction (du moins risque au plus risque)
 

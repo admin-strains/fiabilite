@@ -70,8 +70,10 @@ PROJET = {
 #: 27/08 (suite) : les six enveloppes OpenTURNS des metamodeles (193 l.
 #: par fichier, identiques au caractere pres) partent dans
 #: `_surrogate/wrappers.py`. 2974 -> 2783.
-PLAFOND_LIGNES = 2783
-PLAFOND_FONCTIONS = 55
+#: 27/08 (suite) : les cinq ajustements de metamodeles partent dans
+#: `_surrogate/ajuster.py`. 2783 -> 2682, 55 -> 50 fonctions.
+PLAFOND_LIGNES = 2682
+PLAFOND_FONCTIONS = 50
 
 
 def _imports_tiers(chemin):
