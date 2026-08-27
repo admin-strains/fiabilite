@@ -1127,9 +1127,9 @@ if __name__ == '__main__':
             return _hf_from_custom_points(_sd)
         if not print_HF:
             return None
-        ux_hf = np.linspace(_CX0, _CX1, n_grid_hf)
-        uy_hf = np.linspace(_CY0, _CY1, n_grid_hf)
-        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+        # Le maillage vient de la GRILLE QUI A CALCULE Z, et non du cadre
+        # des figures -- defaut corrige : `test_110_fond_hf_coordonnees`.
+        UX_hf, UY_hf = _GRILLE.maillage_2d()
         return _GRILLE.coupe(_sd, fichier=_cache, finale=finale), UX_hf, UY_hf
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff, fond_hf=None):
