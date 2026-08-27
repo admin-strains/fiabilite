@@ -151,7 +151,7 @@ def test_aucune_fonction_de_trace_n_appelle_le_solveur(script):
 def test_le_nombre_de_coupables_ne_REMONTE_pas(script):
     """Cliquet : la separation ne peut que progresser. Relever ce plafond pour
     faire passer un test reviendrait a supprimer la mesure."""
-    PLAFOND = 7
+    PLAFOND = 3
     fns, appels = _graphe(os.path.join(_REPO, script))
     traces = [n for n in fns if n.startswith("print_")]
     coupables = [n for n in traces if _atteint_le_solveur(n, appels)]

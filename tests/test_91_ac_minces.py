@@ -56,8 +56,14 @@ PROJET = {
 
 #: Cible de la phase 0 : un AC de 150 a 250 lignes. Le plafond descend a
 #: chaque etape d'extraction ; il ne remonte jamais.
-PLAFOND_LIGNES = 3000
-PLAFOND_FONCTIONS = 60
+#: Le 26/08/2026 : 3 000 -> 3 000 refuse, les fichiers etaient a 3 013 et
+#: 3 030 apres l'inversion des dependances de trace. Le cliquet a fait son
+#: office : plutot que de relever le plafond -- ce qui aurait supprime la
+#: mesure -- il a fallu SORTIR du code. 126 lignes de code MORT en sont
+#: ressorties (`print_visu_EFF`, `print_visu_sigma`, `init_surrogate`),
+#: invisibles depuis le debut du chantier parce que rien ne les mesurait.
+PLAFOND_LIGNES = 2995
+PLAFOND_FONCTIONS = 55
 
 
 def _imports_tiers(chemin):

@@ -1475,16 +1475,6 @@ if __name__ == '__main__':
         
         return g_ot, sigma_func, xt, yt, all_grad
 
-    def init_surrogate():
-        """
-        Construit le DOE HF et retourne xt, yt, all_grad.
-        Version allégée de init_g_ot sans wrapper OpenTURNS — pour les pipelines
-        qui n'utilisent pas FORM directement (GEPCK 5 branches, etc.).
-        sigma_func et event seront ajoutés ici quand FORM sera intégré.
-        """
-        xt, yt, all_grad = build_DOE()
-        return xt, yt, all_grad
-
     def init_FORM(g_ot, sigma_func, xt, yt, all_grad):
         """
         Cette fonction créé un metamodele si aucun existant et calcule l'event FORM.
@@ -1867,7 +1857,8 @@ if __name__ == '__main__':
 
             # --- Visu intermediaire apres ajout de point ---
             if print_EFF_progres:
-                print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
+                print_planche_EFF(g_ot, sigma_func, xt, xt_eff,
+                                  fond_hf=fond_hf_pour_figures())
 
             # --- Dump restart incremental (kill-safe) ---
             _eff_history_beta_IS = list(list_beta_IS)
@@ -1946,21 +1937,6 @@ if __name__ == '__main__':
 
     # --- Graphiques de suivi : _reliability/graphiques.py. Les courbes Pf
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.
-    def print_EFF_graphs():
-        return _graphiques.tracer_convergence_eff(
-            _eff_history_EFF, _eff_history_BB, _eff_history_BS,
-            _eff_history_theta, params_names, tol_EFF, tol_BB, tol_BS,
-            out_dir_eff, timestamp)
-
-    def print_Pf_evolution():
-        return _graphiques.tracer_pf_evolution(
-            _eff_history_Pf, modele, EFF_criteria, out_dir_eff, timestamp,
-            'lineaire')
-
-    def print_logPf_evolution():
-        return _graphiques.tracer_pf_evolution(
-            _eff_history_Pf, modele, EFF_criteria, out_dir_eff, timestamp, 'log')
-
     # --- HF GRID CACHE ---
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
@@ -2266,9 +2242,44 @@ if __name__ == '__main__':
         return _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="get_hf_slice",
                     cache_file=cache_file, sd=sd, grid_var_name=grid_var_name)
 
-    def print_planche_EFF(g_ot, sigma_func, xt, xt_eff):
+    def fond_hf_pour_figures(sd=None, cache=None, var='hf_2d_grid_fixed'):
+        """Le fond de contour haute fidelite, et CE QU'IL COUTE.
+
+        Fonction separee et nommee parce que c'est une ACTION, pas un detail
+        de trace : jusqu'a `n_grid_hf ** 2` appels au solveur. Sur le Moulin
+        Blanc regle a 15, cela fait 225 appels, soit 29 heures -- pour un fond
+        de figure. Appelee explicitement, elle se voit ; obtenue au fond d'un
+        `print_*`, elle ne se voyait pas.
+
+        Rendre None revient a tracer sans fond : les figures sortent quand
+        meme, et sans un seul appel au solveur.
+        """
+        _sd = sd if sd is not None else (slice_def if slice_def is not None else (0, 1, {}))
+        _cache = cache if cache is not None else _HF_CACHE_FILE
+        if hf_custom_points is not None:
+            return _hf_from_custom_points(_sd)
+        if not print_HF:
+            return None
+        ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
+        uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
+        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+        return _get_hf_slice(_sd, _cache, var), UX_hf, UY_hf
+
+    def print_planche_EFF(g_ot, sigma_func, xt, xt_eff, fond_hf=None):
         """Planche 3 graphiques cote a cote : EFF, sigma, g surrogate.
-        Utilise la globale slice_def pour definir la coupe 2D."""
+        Utilise la globale slice_def pour definir la coupe 2D.
+
+        `fond_hf` est le fond de contour haute fidelite, DEJA CALCULE :
+        `(Z_true, UX_hf, UY_hf)`, ou None pour tracer sans lui.
+
+        POURQUOI IL EST RECU ET NON CALCULE ICI -- 26/08/2026
+        Cette fonction l'obtenait elle-meme, ce qui lui faisait declencher
+        jusqu'a 225 appels au solveur -- 29 heures sur le Moulin Blanc --
+        sous un nom qui dit « imprime ». C'est ce qui a fait croire que la
+        grille arrivait EN DERNIER dans le run, alors qu'elle passe AVANT
+        l'enrichissement : cet appel-ci precede `run_EFF` d'une ligne.
+        Le cout appartient a l'appelant, qui sait ce qu'il engage.
+        """
         global hf_2d_grid_fixed
         _sd = slice_def if slice_def is not None else (0, 1, {})
         idx_x, idx_y, fixed = _sd
@@ -2290,16 +2301,8 @@ if __name__ == '__main__':
         Z_sigma = sigma_grid.reshape(n_grid, n_grid)
         Z_g     = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
-        # --- Contour g=0 HF ---
-        Z_true, UX_hf, UY_hf = None, None, None
-        _sd = slice_def if slice_def is not None else (0, 1, {})
-        if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = _hf_from_custom_points(_sd)
-        elif print_HF:
-            ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-            uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
-            UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-            Z_true = _get_hf_slice(_sd, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
+        # --- Contour g=0 HF : RECU, jamais calcule ici ---
+        Z_true, UX_hf, UY_hf = fond_hf if fond_hf is not None else (None, None, None)
 
         # --- Figure ---
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(21, 6))
@@ -2359,7 +2362,7 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [EFF visu] -> {fname}", flush=True)
 
-    def print_globalplanche_EFF(xt, yt, all_grad, xt_eff):
+    def print_globalplanche_EFF(xt, yt, all_grad, xt_eff, fond_hf=None, fond_hf_final=None):
         """Planche globale EFF : 3 colonnes (EFF, sigma, g) x N lignes (DOE initial + chaque etape EFF).
         Refit le surrogate a chaque etape. Utilise slice_def_final pour la coupe.
         Grille HF calculee une seule fois et reutilisee."""
@@ -2384,15 +2387,15 @@ if __name__ == '__main__':
         # --- Grille HF (une seule fois) ---
         Z_true, UX_hf, UY_hf = None, None, None
         if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            Z_true, UX_hf, UY_hf = fond_hf_final if fond_hf_final is not None else (None, None, None)
         elif print_HF:
             ux_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if slice_def_final == slice_def:
-                Z_true = _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
+                Z_true = fond_hf[0] if fond_hf is not None else None
             else:
-                Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+                Z_true = fond_hf_final[0] if fond_hf_final is not None else None
 
         _xlabel = f'u_{params_names[idx_x]}'
         _ylabel = f'u_{params_names[idx_y]}'
@@ -2466,114 +2469,6 @@ if __name__ == '__main__':
         plt.close(fig)
         print(f"  [GLOBAL PLANCHE] -> {fname}", flush=True)
 
-    def print_visu_EFF(g_ot, sigma_func, xt, xt_eff):
-        """Carte 2D des valeurs du critere EFF sur la meme grille que print_visu."""
-        global hf_2d_grid_fixed
-        u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
-        u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
-
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        cf = ax.contourf(U1, U2, Z_eff, levels=20, cmap='viridis', alpha=0.85)
-        plt.colorbar(cf, ax=ax, label='EFF')
-
-        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
-        if g_ot is not None:
-            Z_g = mu_grid.reshape(n_grid, n_grid)
-            ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
-
-        # --- Contour g=0 HF ---
-        if print_HF:
-            u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-            u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_EFF")
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
-
-        # --- Points DOE ---
-        if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
-                       edgecolors='black', linewidths=0.8, label='DOE')
-
-        # --- Points ajoutes par EFF ---
-        if xt_eff is not None and len(xt_eff) > 0:
-            xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
-                       marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
-        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
-        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
-        ax.set_title('Critere EFF')
-        ax.legend(loc='best', fontsize=9)
-        plt.tight_layout()
-        plt.show(block=False)
-
-    def print_visu_sigma(g_ot, sigma_func, xt, xt_eff):
-        """Carte 2D de l'ecart-type conditionnel du surrogate."""
-        global hf_2d_grid_fixed
-        u1 = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid)
-        u2 = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid)
-        U1, U2 = np.meshgrid(u1, u2)
-        grid = np.column_stack([U1.ravel(), U2.ravel()])
-
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        Z_sigma = sigma_grid.reshape(n_grid, n_grid)
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        cf = ax.contourf(U1, U2, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
-        plt.colorbar(cf, ax=ax, label='sigma (ecart-type surrogate)')
-
-        # --- Contour g=0 du surrogate (reutilise mu_grid) ---
-        if g_ot is not None:
-            Z_g = mu_grid.reshape(n_grid, n_grid)
-            ax.contour(U1, U2, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--', label='surrogate g=0')
-
-        # --- Contour g=0 HF ---
-        if print_HF:
-            u1_hf = np.linspace(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1, n_grid_hf)
-            u2_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
-            U1_hf, U2_hf = np.meshgrid(u1_hf, u2_hf)
-            if hf_2d_grid_fixed is not None:
-                Z_true = np.array(hf_2d_grid_fixed['Z'])
-            else:
-                grid_hf = np.column_stack([U1_hf.ravel(), U2_hf.ravel()])
-                Z_true = _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="print_visu_sigma")
-            ax.contour(U1_hf, U2_hf, Z_true, levels=[0], colors='red', linewidths=2)
-
-        if xt is not None:
-            ax.scatter(xt[:, 0], xt[:, 1], c='white', s=40, zorder=5,
-                       edgecolors='black', linewidths=0.8, label='DOE')
-
-        if xt_eff is not None and len(xt_eff) > 0:
-            xt_eff_arr = np.array(xt_eff)
-            ax.scatter(xt_eff_arr[:, 0], xt_eff_arr[:, 1], c='red', s=80, zorder=6,
-                       marker='^', label=f'EFF ({len(xt_eff)} pts)')
-            for i, pt in enumerate(xt_eff_arr):
-                ax.annotate(str(i + 1), (pt[0], pt[1]), textcoords='offset points',
-                            xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-
-        ax.set_xlabel('u1')
-        ax.set_ylabel('u2')
-        ax.set_xlim(eff_bounds_min[0] - 1, eff_bounds_max[0] + 1)
-        ax.set_ylim(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1)
-        ax.set_title('Ecart-type surrogate (sigma)')
-        ax.legend(loc='best', fontsize=9)
-        plt.tight_layout()
-        plt.show(block=False)
-
     def print_results(best_result, g_ot):
         _point_log_phase[0] = "USTAR"
         u_star = best_result.getStandardSpaceDesignPoint()
@@ -2611,7 +2506,7 @@ if __name__ == '__main__':
             print(f"Erreur FOSM  = {(u_FOSM - u_star).norm() / u_star.norm():.4f}", flush=True)
 
 
-    def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff):
+    def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, fond_hf=None, fond_hf_final=None):
         global u1_min, u1_max, u2_min, u2_max, hf_2d_grid_fixed, slice_def_final
         if slice_def_final is None:
             if best_result is not None:
@@ -2647,7 +2542,7 @@ if __name__ == '__main__':
 
         # --- Contour HF grossier ---
         if hf_custom_points is not None:
-            Z_true, UX_hf, UY_hf = _hf_from_custom_points(slice_def_final)
+            Z_true, UX_hf, UY_hf = fond_hf_final if fond_hf_final is not None else (None, None, None)
             if Z_true is not None:
                 ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
         elif print_HF:
@@ -2655,9 +2550,9 @@ if __name__ == '__main__':
             uy_hf = np.linspace(eff_bounds_min[1] - 1, eff_bounds_max[1] + 1, n_grid_hf)
             UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
             if slice_def_final == slice_def:
-                Z_true = _get_hf_slice(slice_def, _HF_CACHE_FILE, 'hf_2d_grid_fixed')
+                Z_true = fond_hf[0] if fond_hf is not None else None
             else:
-                Z_true = _get_hf_slice(slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final')
+                Z_true = fond_hf_final[0] if fond_hf_final is not None else None
             ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2, linestyles='--')
 
         # --- Points ---
@@ -2933,14 +2828,23 @@ if __name__ == '__main__':
     if print_HF and print_fullHF and n_var <= 3:
         _compute_hf_grid_full()
     if do_EFF:
-        print_planche_EFF(g_ot, sigma_func, xt, [])
+        print_planche_EFF(g_ot, sigma_func, xt, [],
+                          fond_hf=fond_hf_pour_figures())
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
         if not print_EFF_progres:
-            print_planche_EFF(g_ot, sigma_func, xt, xt_eff)
-        print_EFF_graphs()
+            print_planche_EFF(g_ot, sigma_func, xt, xt_eff,
+                              fond_hf=fond_hf_pour_figures())
+        _graphiques.tracer_convergence_eff(
+            _eff_history_EFF, _eff_history_BB, _eff_history_BS,
+            _eff_history_theta, params_names, tol_EFF, tol_BB, tol_BS,
+            out_dir_eff, timestamp)
         if print_Pf:
-            print_Pf_evolution()
-            print_logPf_evolution()
+            _graphiques.tracer_pf_evolution(
+                _eff_history_Pf, modele, EFF_criteria, out_dir_eff,
+                timestamp, 'lineaire')
+            _graphiques.tracer_pf_evolution(
+                _eff_history_Pf, modele, EFF_criteria, out_dir_eff,
+                timestamp, 'log')
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
     if event is None:
@@ -2987,7 +2891,14 @@ if __name__ == '__main__':
         print("=== IS sur surrogate projete (enveloppe position) ===", flush=True)
         result_IS_proj = run_IS_proj(modes, event_proj)
         print_results_IS(result_IS_proj)
-    print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff)
+    print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff,
+               fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
+               fond_hf_final=fond_hf_pour_figures(
+                   slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final'))
     if do_EFF and xt_eff:
-        print_globalplanche_EFF(xt, yt, all_grad, xt_eff)
+        print_globalplanche_EFF(
+            xt, yt, all_grad, xt_eff,
+            fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
+            fond_hf_final=fond_hf_pour_figures(
+                slice_def_final, _HF_CACHE_FILE_FINAL, 'hf_2d_grid_fixed_final'))
     _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sps[0] if best_sps else None, modes, result_IS)
