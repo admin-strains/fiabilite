@@ -121,7 +121,10 @@ PROJET = {
 #: `_doe/evaluation.py`. Sa branche PARALLELE est celle qui tourne sur le
 #: Moulin Blanc et qu'aucune chaine de verification ne traverse : ses tests
 #: unitaires sont son seul filet. 1627 -> 1598.
-PLAFOND_LIGNES = 1598
+#: 27/08 (suite) : le bilan de fin d'enrichissement -- decomposition du
+#: critere au point d'arret, et ce qui a arrete -- rejoint `_reliability`.
+#: `scipy` disparait des deux etudes par la meme occasion. 1598 -> 1568.
+PLAFOND_LIGNES = 1568
 PLAFOND_FONCTIONS = 42
 
 

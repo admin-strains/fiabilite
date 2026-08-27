@@ -194,7 +194,10 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: `_save_restart_state` passe de 54 a 21 lignes. 803 -> 767.
     #: 27/08 (suite) : l'evaluation du batch EFF part dans
     #: `_doe/evaluation.py`. 767 -> 738.
-    PLAFOND = 738
+    #: 27/08 (suite) : le bilan de fin d'enrichissement rejoint les notions
+    #: qu'il rapporte -- la decomposition dans `_reliability/eff.py`, les
+    #: compteurs dans `ArretEFF.bilan`. 738 -> 709.
+    PLAFOND = 709
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

@@ -23,7 +23,6 @@ matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 # `pyplot` n'est plus importe ici : l'etude ne dessine plus rien.
 # Le choix du backend, lui, doit rester AVANT tout import de figure.
 import re
-from scipy.stats import norm
 from datetime import datetime
 # fit_gepck/fit_pck sont partis avec le dispatch dans
 # `_surrogate/ajuster.py` ; l'etude ne fait plus que PREDIRE.
@@ -988,44 +987,15 @@ if __name__ == '__main__':
             u_opt = ot.Point(_batch_pts[0].tolist())
             f = ot.Function(EFFFunction(g_ot, sigma_func))
 
+        # Le bilan : la decomposition du critere au point d'arret
+        # (`_reliability/eff.py`), puis ce qui a arrete et sur quel
+        # historique (`_reliability/arret.py`, ou vivent les compteurs).
+        # sigma AVANT mu : l'ordre des deux appels est celui d'origine, et
+        # un metamodele peut journaliser.
         _sigG2 = sigma_func(u_opt)
-        _muG2  = g_ot(ot.Point(u_opt))[0]
-        _eps2  = epsilon_factor * _sigG2
-        if _sigG2 > 0:
-            # Decomposition fournie par _reliability/eff.py : elle est derivee de
-            # l'implementation unique, donc la ligne imprimee ne peut plus
-            # diverger du critere optimise. La copie manuelle qui se trouvait
-            # ici etait fausse (quatrieme terme), de 39 % a 1271 % d'ecart.
-            _tt = _eff.eff_termes(_muG2, _sigG2, epsilon_factor)
-            term1, term2, term3, term4 = (float(x) for x in _tt[3:])
-            print(f"  EFF converge debug : u_opt={list(np.round(np.array(u_opt),4))}  sigmaG={_sigG2:.8f}  muG={_muG2:.8f}  epsilon={_eps2:.8f}", flush=True)
-            print(f"    t1={float(_tt[0]):.6f}  t2={float(_tt[1]):.6f}  t3={float(_tt[2]):.6f}", flush=True)
-            print(f"    cdf(t1)={norm.cdf(float(_tt[0])):.8e}  cdf(-t2)={norm.cdf(-float(_tt[1])):.8e}  cdf(t3)={norm.cdf(float(_tt[2])):.8e}", flush=True)
-            print(f"    pdf(t2)={norm.pdf(float(_tt[1])):.8e}  pdf(t3)={norm.pdf(float(_tt[2])):.8e}", flush=True)
-            print(f"    term1={term1:.8e}  term2={term2:.8e}  term3={term3:.8e}  term4={term4:.8e}", flush=True)
-            print(f"    EFF = {term1+term2+term3+term4:.8e}", flush=True)
-        else:
-            print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
-        _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb, _exit_bs, _exit_both = _arret.raisons()
-        if _exit_eff:
-            _reason = "EFF"
-        elif _exit_bb:
-            _reason = "BB (3 iter valides)"
-        elif _exit_bs:
-            _reason = "BS (3 iter valides)"
-        elif _exit_both:
-            _reason = "both (2 iter valides)"
-        else:
-            _reason = "?"
-        print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}"
-              f"  count_valid_BB={_arret.n_BB}  count_valid_BS={_arret.n_BS}"
-              f"  count_valid_both={_arret.n_both}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
-        _fmt = lambda lst: [round(r, 4) if r is not None else None for r in lst]
-        if list_ratio_BB:
-            print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)
-        if list_ratio_BS:
-            print(f"  [historique ratio BS] {_fmt(list_ratio_BS)}  tol={tol_BS}", flush=True)
+        _muG2 = g_ot(ot.Point(u_opt))[0]
+        _eff.journaliser_decomposition(_muG2, _sigG2, epsilon_factor, u_opt)
+        _arret.bilan(f(u_opt)[0], len(xt_eff))
 
         # --- BB informatif final (1 appel _three_form_is apres la boucle) ---
         if print_Pf:

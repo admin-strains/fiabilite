@@ -200,6 +200,41 @@ class ArretEFF:
                 and ratio_bs is not None and ratio_bs < self.tol_BS)
 
     # ------------------------------------------------------------------ #
+    def bilan(self, eff_final, n_points_ajoutes):
+        """Ce qui a arrete l'enrichissement, et sur quel historique.
+
+        LE BILAN AFFICHE TROIS COMPTEURS, MAIS EN MODE `both` DEUX D'ENTRE
+        EUX NE BOUGENT JAMAIS -- `n_BB` et `n_BS` restent a zero pendant que
+        seul `n_both` est tenu. De meme, en mode `BB` l'historique BS reste
+        vide, et la ligne correspondante ne s'imprime pas. Ces deux
+        asymetries sont DECRITES, pas corrigees : Agnes, 27/08/2026, « on
+        n'est pas au clair sur nos criteres de convergence ». Les changer
+        avant cet arbitrage reviendrait a trancher a sa place.
+
+        `?` comme raison n'est pas un defaut d'affichage : c'est un run
+        arrete par le budget de points, ni par EFF ni par la convergence.
+        Le distinguer compte -- un plafond atteint ne prouve rien.
+        """
+        if abs(eff_final) <= self.tol_EFF:
+            raison = "EFF"
+        else:
+            bb, bs, both = self.raisons()
+            raison = ("BB (3 iter valides)" if bb else
+                      "BS (3 iter valides)" if bs else
+                      "both (2 iter valides)" if both else "?")
+        self.tracer("  EFF converge [%s] : EFF(u_opt)=%.4f  count_valid_BB=%d"
+                    "  count_valid_BS=%d  count_valid_both=%d  (%d point(s) "
+                    "ajoutes)" % (raison, eff_final, self.n_BB, self.n_BS,
+                                  self.n_both, n_points_ajoutes))
+        arrondi = lambda lst: [round(r, 4) if r is not None else None for r in lst]
+        if self.hist_BB:
+            self.tracer("  [historique ratio BB] %s  tol=%s"
+                        % (arrondi(self.hist_BB), self.tol_BB))
+        if self.hist_BS:
+            self.tracer("  [historique ratio BS] %s  tol=%s"
+                        % (arrondi(self.hist_BS), self.tol_BS))
+        return raison
+
     def raisons(self):
         """`(BB, BS, both)` -- lequel des criteres a effectivement arrete.
 

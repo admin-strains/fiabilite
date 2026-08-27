@@ -298,3 +298,82 @@ def test_les_scripts_ne_tiennent_plus_les_compteurs(script):
     assert "_arret.reprendre_depuis_historique()" in src, (
         "%s : la reprise des compteurs n'existait que d'un cote ; elle doit "
         "etre des deux." % script)
+
+
+# --------------------------------------------------------------------------- #
+# LE BILAN DE FIN D'ENRICHISSEMENT (extrait de `run_EFF` le 27/08/2026)        #
+# --------------------------------------------------------------------------- #
+class _Journal(list):
+    def __call__(self, message):
+        self.append(message)
+
+
+def _arret_avec(critere, **kw):
+    j = _Journal()
+    a = _arret.ArretEFF(critere, kw.pop("tol_BB", 0.05), kw.pop("tol_BS", 0.05),
+                        kw.pop("n_max_points", 10), kw.pop("tol_EFF", 0.001),
+                        hist_BB=kw.pop("hist_BB", None),
+                        hist_BS=kw.pop("hist_BS", None), tracer=j)
+    for nom, val in kw.items():
+        setattr(a, nom, val)
+    return a, j
+
+
+def test_un_EFF_sous_la_tolerance_est_la_raison_qui_prime():
+    a, j = _arret_avec("BB", n_BB=9)
+    assert a.bilan(0.0005, 4) == "EFF"
+    assert "EFF converge [EFF]" in j[0]
+    assert "(4 point(s) ajoutes)" in j[0]
+
+
+def test_un_EFF_negatif_compte_par_sa_valeur_absolue():
+    a, _ = _arret_avec("BB")
+    assert a.bilan(-0.0005, 1) == "EFF"
+
+
+def test_le_critere_BB_est_nomme_quand_c_est_lui_qui_a_arrete():
+    a, j = _arret_avec("BB", n_BB=3)
+    assert a.bilan(0.5, 7) == "BB (3 iter valides)"
+    assert "count_valid_BB=3" in j[0]
+
+
+def test_un_budget_epuise_ne_se_fait_pas_passer_pour_une_convergence():
+    """`?` n'est pas un defaut d'affichage : c'est un run arrete par le
+    plafond de points. Un plafond atteint ne prouve rien, et le bilan doit
+    le distinguer d'une convergence."""
+    a, j = _arret_avec("BB", n_BB=1)
+    assert a.bilan(0.5, 10) == "?"
+    assert "EFF converge [?]" in j[0]
+
+
+def test_le_bilan_affiche_TROIS_compteurs_dont_deux_restent_a_zero():
+    """ASYMETRIE MISE PAR ECRIT, PAS CORRIGEE. En mode `both`, seul `n_both`
+    est tenu ; `n_BB` et `n_BS` ne bougent jamais. Le bilan les affiche
+    quand meme, et un lecteur presse y lira que BB et BS n'ont jamais
+    converge. Agnes, 27/08/2026 : « on n'est pas au clair sur nos criteres
+    de convergence » -- l'arbitrage lui revient."""
+    a, j = _arret_avec("both", n_both=2)
+    assert a.bilan(0.5, 5) == "both (2 iter valides)"
+    assert "count_valid_BB=0" in j[0] and "count_valid_BS=0" in j[0]
+    assert "count_valid_both=2" in j[0]
+
+
+def test_un_historique_vide_ne_s_imprime_pas():
+    """L'autre face de la meme asymetrie : en mode `BB`, `hist_BS` reste
+    vide, donc la ligne BS n'apparait pas. La courbe de convergence de fin
+    de run ne montre pas la meme chose selon le critere choisi."""
+    a, j = _arret_avec("BB", hist_BB=[0.1, 0.02])
+    a.bilan(0.5, 3)
+    assert any("[historique ratio BB]" in m for m in j)
+    assert not any("[historique ratio BS]" in m for m in j)
+
+
+def test_les_trous_de_l_historique_s_impriment_comme_trous():
+    """Un round sans ratio vaut `None`. L'arrondir a 0.0 dirait « critere
+    satisfait » sur la courbe de convergence."""
+    a, j = _arret_avec("at_least_one", hist_BB=[None, 0.123456], hist_BS=[0.9])
+    a.bilan(0.5, 2)
+    ligne = [m for m in j if "[historique ratio BB]" in m][0]
+    assert "[None, 0.1235]" in ligne
+    assert "tol=0.05" in ligne
+    assert any("[historique ratio BS]" in m for m in j)

@@ -189,3 +189,46 @@ def test_la_decomposition_est_neutre_quand_sigma_est_nul():
     termes = e.eff_termes(np.array([1.0, 2.0]), np.array([0.0, -1.0]), 2.0)
     for t in termes[3:]:
         assert t.tolist() == [0.0, 0.0]
+
+
+# --------------------------------------------------------------------------- #
+# LE JOURNAL DE LA DECOMPOSITION (extrait de `run_EFF` le 27/08/2026)          #
+# --------------------------------------------------------------------------- #
+class _Journal(list):
+    def __call__(self, message):
+        self.append(message)
+
+
+def test_le_journal_decompose_le_critere_en_six_lignes():
+    e = _eff()
+    j = _Journal()
+    e.journaliser_decomposition(0.3, 0.5, 2.0, [1.0, -2.0], tracer=j)
+    assert len(j) == 6
+    assert j[0].startswith("  EFF converge debug : u_opt=")
+    assert "sigmaG=0.50000000" in j[0] and "muG=0.30000000" in j[0]
+    assert "epsilon=1.00000000" in j[0], "epsilon = eps_factor * sigma"
+    assert j[1].startswith("    t1=") and j[4].startswith("    term1=")
+    assert j[5].startswith("    EFF = ")
+
+
+def test_le_journal_dit_la_somme_du_critere_lui_meme():
+    """La ligne "EFF = ..." doit valoir `eff`, pas une recopie de la formule.
+    C'est exactement le defaut du 26/08 : la copie manuelle affichait de
+    39 % a 1271 % d'ecart, parfois de signe oppose."""
+    e = _eff()
+    for mu, sg, f in ((0.3, 0.5, 2.0), (-1.7, 0.9, 1.0), (0.0, 2.0, 0.5)):
+        j = _Journal()
+        e.journaliser_decomposition(mu, sg, f, [0.0, 0.0], tracer=j)
+        affiche = float(j[5].split("=")[1])
+        assert affiche == pytest.approx(float(e.eff(mu, sg, f)), rel=1e-8)
+
+
+def test_un_metamodele_interpolant_le_dit_en_une_ligne():
+    """`sigma = 0` n'est pas une anomalie : le krigeage interpole ses points
+    d'apprentissage, et le point d'arret peut tomber sur l'un d'eux. Une
+    decomposition n'aurait alors aucun sens -- tous les termes sont nuls."""
+    e = _eff()
+    j = _Journal()
+    e.journaliser_decomposition(1.0, 0.0, 2.0, [0.0, 0.0], tracer=j)
+    assert j == ["  EFF converge debug : sigmaG=0 (modele interpolant exact "
+                 "au point u_opt)"]

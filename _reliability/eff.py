@@ -24,6 +24,10 @@ import numpy as np
 from scipy.stats import norm
 
 
+def _ecrire(message):
+    print(message, flush=True)
+
+
 def eff(mu, sigma, eps_factor):
     """Critere EFF (Expected Feasibility Function), vectorise.
 
@@ -69,3 +73,40 @@ def eff_termes(mu, sigma, eps_factor):
             z * -(eps + mu) * norm.cdf(-t2),
             z * (eps - mu) * norm.cdf(t3),
             z * sigma * (-2 * norm.pdf(t1) + norm.pdf(t2) + norm.pdf(t3)))
+
+
+def journaliser_decomposition(mu, sigma, eps_factor, u_opt, tracer=_ecrire):
+    """Le detail du critere EFF au point ou l'enrichissement s'est arrete.
+
+    Six lignes de journal, imprimees une fois par run. Elles servent a
+    comprendre POURQUOI l'algorithme s'est arrete la : un EFF quasi nul avec
+    un `sigma` important ne dit pas la meme chose qu'un EFF nul parce que le
+    metamodele interpole exactement.
+
+    Les quatre termes viennent de `eff_termes`, donc de l'implementation
+    unique : la ligne imprimee ne peut plus diverger du critere maximise.
+    C'etait le defaut du 26/08 -- la copie manuelle avait un quatrieme terme
+    faux, de 39 % a 1271 % d'ecart, parfois de signe oppose.
+
+    `sigma = 0` n'est pas une anomalie : le krigeage interpole ses points
+    d'apprentissage, et le point d'arret peut tomber sur l'un d'eux.
+    """
+    eps = eps_factor * sigma
+    if not sigma > 0:
+        tracer("  EFF converge debug : sigmaG=0 (modele interpolant exact "
+               "au point u_opt)")
+        return
+    tt = eff_termes(mu, sigma, eps_factor)
+    term1, term2, term3, term4 = (float(x) for x in tt[3:])
+    tracer("  EFF converge debug : u_opt=%s  sigmaG=%.8f  muG=%.8f  "
+           "epsilon=%.8f" % (list(np.round(np.array(u_opt), 4)), sigma, mu, eps))
+    tracer("    t1=%.6f  t2=%.6f  t3=%.6f"
+           % (float(tt[0]), float(tt[1]), float(tt[2])))
+    tracer("    cdf(t1)=%.8e  cdf(-t2)=%.8e  cdf(t3)=%.8e"
+           % (norm.cdf(float(tt[0])), norm.cdf(-float(tt[1])),
+              norm.cdf(float(tt[2]))))
+    tracer("    pdf(t2)=%.8e  pdf(t3)=%.8e"
+           % (norm.pdf(float(tt[1])), norm.pdf(float(tt[2]))))
+    tracer("    term1=%.8e  term2=%.8e  term3=%.8e  term4=%.8e"
+           % (term1, term2, term3, term4))
+    tracer("    EFF = %.8e" % (term1 + term2 + term3 + term4,))
