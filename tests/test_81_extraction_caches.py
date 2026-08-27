@@ -264,9 +264,44 @@ def test_plus_aucune_variable_libre():
 
 
 EXTRAITES = ["_doe_cache_sig", "_save_doe_cache", "_load_doe_cache",
-             "_save_doe_cache_incremental", "_save_hf_cache", "_load_hf_cache",
-             "_save_hf_cache_partial", "_load_hf_cache_partial",
-             "_save_hf_grid_full", "_load_hf_grid_full"]
+             "_save_doe_cache_incremental"]
+
+#: Les caches de la GRILLE haute fidelite ont quitte les AC le 27/08/2026 :
+#: ils sont devenus des methodes de `_etapes.grille.Grille`, qui porte la
+#: geometrie et la signature une seule fois au lieu de les repasser a chaque
+#: appel. Les quatre delegues correspondants n'existent donc plus dans les
+#: scripts -- ce test verifie que la logique est bien passee au module, pas
+#: qu'elle a disparu.
+CACHES_DE_GRILLE = ["save_hf_cache", "load_hf_cache",
+                    "save_hf_cache_partial", "load_hf_cache_partial",
+                    "save_hf_grid_full", "load_hf_grid_full"]
+
+
+@pytest.mark.parametrize("rel", ["pure_flexion/AC3_pure_flexion.py",
+                                 "Moulinblanc/AC3_moulinblanc.py"])
+def test_les_caches_de_grille_ont_quitte_les_scripts(rel):
+    """Aucun script ne doit redefinir un acces au cache de grille."""
+    import ast
+    chemin = os.path.join(REPO, rel)
+    with open(chemin, encoding="utf-8", errors="replace") as fh:
+        arbre = ast.parse(fh.read(), chemin)
+    definies = {n.name for n in ast.walk(arbre)
+                if isinstance(n, ast.FunctionDef)}
+    revenues = sorted(definies & {"_" + n for n in CACHES_DE_GRILLE})
+    assert not revenues, (
+        "%s redefinit %s : ces acces appartiennent a `_etapes/grille.py`, "
+        "qui porte la signature et la geometrie une fois pour toutes."
+        % (rel, revenues))
+
+
+def test_la_grille_passe_bien_par_le_module_de_cache():
+    """Le pendant : la logique doit etre AU module, pas evaporee."""
+    src = open(os.path.join(REPO, "_etapes", "grille.py"),
+               encoding="utf-8").read()
+    for nom in CACHES_DE_GRILLE:
+        assert "_cache_hf.%s(" % nom in src, (
+            "_etapes/grille.py n'appelle pas `_cache_hf.%s` : la logique de "
+            "cache a ete reecrite au lieu d'etre reutilisee." % nom)
 
 
 @pytest.mark.parametrize("rel", ["pure_flexion/AC3_pure_flexion.py",

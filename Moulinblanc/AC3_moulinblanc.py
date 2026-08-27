@@ -34,7 +34,6 @@ from api import predict_gepck, predict_pck
 from lois import loi_fy
 import lois as _lois
 import doe as _cache_doe
-import hf as _cache_hf
 import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
@@ -44,6 +43,7 @@ import figurer as _figurer
 # deja ce nom sur le chemin d'import, et l'aurait eclipse.
 import ajuster as _fit
 import projection as _projection
+import grille as _grille
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -1437,156 +1437,48 @@ if __name__ == '__main__':
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
     hf_2d_grid_fixed_final = None
 
-    def _load_hf_cache(n_grid_hf_local, cache_file, sd):
-        # La signature porte le solveur ET la geometrie de la grille. Sans
-        # elle, une grille calculee sur d'autres bornes -- ou d'un autre cote,
-        # `n_grid_hf` n'etant meme pas controle -- serait relue telle quelle.
-        return _cache_hf.load_hf_cache(n_grid_hf_local, cache_file, sd,
-                                       config_is_identical,
-                                       signature=CFG.signature_grille_hf())
 
-    def _save_hf_cache(Z, n_grid_hf_local, cache_file, sd):
-        return _cache_hf.save_hf_cache(Z, n_grid_hf_local, cache_file, sd,
-                                      signature=CFG.signature_grille_hf())
 
-    def _save_hf_cache_partial(Z_flat, n_total, cache_file, sd):
-        return _cache_hf.save_hf_cache_partial(Z_flat, n_total, cache_file, sd,
-                                              signature=CFG.signature_grille_hf())
 
-    def _load_hf_cache_partial(cache_file, sd, n_total):
-        return _cache_hf.load_hf_cache_partial(cache_file, sd, n_total,
-                                              config_is_identical,
-                                              signature=CFG.signature_grille_hf())
+
+    _HF_FULL_CACHE_FILE = os.path.join(_path_ds, "hf_grid_full_cache.json")
+
+    # La grille haute fidelite -- geometrie, cache signe, reprise apres
+    # interruption -- est dans `_etapes/grille.py`. Ne reste ici que le
+    # rangement du resultat dans l'etat de CETTE etude.
+    _GRILLE = _grille.Grille(
+        evaluer=run_HF, n_var=n_var, cote=n_grid_hf,
+        bornes=(u1_min, u1_max, u2_min, u2_max),
+        fichier_cache=_HF_CACHE_FILE,
+        fichier_cache_complet=_HF_FULL_CACHE_FILE,
+        signature=CFG.signature_grille_hf(),
+        config_identique=config_is_identical,
+        marquer_phase=lambda p: _point_log_phase.__setitem__(0, p))
+
+    def _ranger_grille(dico, grid_var_name):
+        """Range une grille calculee la ou l'etat de reprise ira la chercher."""
+        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
+        if grid_var_name == 'hf_2d_grid_fixed_final':
+            hf_2d_grid_fixed_final = dico
+        else:
+            hf_2d_grid_fixed = dico
 
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
-                                        cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
-        """Calcule la grille HF point par point avec progress + ETA.
-        Lecture/ecriture automatique d'un cache sidecar JSON.
-        Sauvegarde incrementale dans cache_file.partial (reprise apres crash).
-        Retourne Z (n_grid_hf x n_grid_hf)."""
-        global hf_2d_grid_fixed, hf_2d_grid_fixed_final
-        if cache_file is None:
-            cache_file = _HF_CACHE_FILE
-        if sd is None:
-            sd = slice_def
-        cached = _load_hf_cache(n_grid_hf_local, cache_file, sd)
-        if cached is not None:
-            _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': cached.tolist()}
-            if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
-            else:
-                hf_2d_grid_fixed = _grid_dict
-            return cached
-        import time as _time_local
-        _point_log_phase[0] = "HF"
-        n_total = len(grid_hf)
-        # Charger le cache partiel (reprise apres crash)
-        Z_flat = _load_hf_cache_partial(cache_file, sd, n_total)
-        if Z_flat is None:
-            Z_flat = [None] * n_total
-        _n_skipped = sum(1 for v in Z_flat if v is not None)
-        _n_to_compute = n_total - _n_skipped
-        _t_start = _time_local.perf_counter()
-        print(f"\n##### HF GRID START: {n_grid_hf_local}x{n_grid_hf_local} = {n_total} points solveur ({context})"
-              f" [skip {_n_skipped}, calcul {_n_to_compute}] #####", flush=True)
-        _n_computed = 0
-        for i, pt in enumerate(grid_hf):
-            if Z_flat[i] is not None:
-                continue
-            _t_pt0 = _time_local.perf_counter()
-            g_val = run_HF(pt)[0]
-            Z_flat[i] = g_val
-            _n_computed += 1
-            _save_hf_cache_partial(Z_flat, n_total, cache_file, sd)
-            _t_pt = _time_local.perf_counter() - _t_pt0
-            _t_elapsed = _time_local.perf_counter() - _t_start
-            _t_avg = _t_elapsed / _n_computed
-            _t_eta = _t_avg * (_n_to_compute - _n_computed)
-            _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(len(pt)))
-            print(f"  [HF GRID {_n_skipped + _n_computed:2d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
-                  f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
-        _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF GRID DONE in {_t_total:.1f} min ({_n_computed} appels solveur, {_n_skipped} skip) #####\n", flush=True)
-        Z = np.array(Z_flat, dtype=float).reshape(n_grid_hf_local, n_grid_hf_local)
-        _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf_local}, 'Z': Z.tolist()}
-        if grid_var_name == 'hf_2d_grid_fixed_final':
-            hf_2d_grid_fixed_final = _grid_dict
-        else:
-            hf_2d_grid_fixed = _grid_dict
-        _save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
-        # supprimer le cache partiel
-        _partial_file = cache_file + '.partial'
-        if os.path.exists(_partial_file):
-            os.remove(_partial_file)
+                                       cache_file=None, sd=None,
+                                       grid_var_name='hf_2d_grid_fixed'):
+        Z, dico = _GRILLE.calculer_2d(
+            grid_hf, cote=n_grid_hf_local, contexte=context,
+            fichier=cache_file,
+            coupe=slice_def if sd is None else sd)
+        _ranger_grille(dico, grid_var_name)
         return Z
+
 
     # --- HF GRILLE FULL (n_var-D) ---
-    _HF_FULL_CACHE_FILE = os.path.join(_path_ds, "hf_grid_full_cache.json")
-    _hf_grid_full = [None]   # [Z_full] en memoire (array n_var-D), liste pour mutabilite dans closures
-    _hf_grid_full_axes = [None]  # axes de la grille (liste de 1D arrays)
 
-    def _load_hf_grid_full():
-        return _cache_hf.load_hf_grid_full(
-            _HF_FULL_CACHE_FILE, n_var, n_grid_hf, config_is_identical,
-            signature=CFG.signature_grille_hf())
 
-    def _save_hf_grid_full(Z_full):
-        return _cache_hf.save_hf_grid_full(_HF_FULL_CACHE_FILE, Z_full, n_var,
-                                          n_grid_hf,
-                                          signature=CFG.signature_grille_hf())
 
-    def _compute_hf_grid_full():
-        """Calcule la grille HF complete (n_grid_hf^n_var points solveur)."""
-        cached = _load_hf_grid_full()
-        if cached is not None:
-            _hf_grid_full[0] = cached
-            axes = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
-            _hf_grid_full_axes[0] = axes
-            return cached
-        import time as _time_local
-        _point_log_phase[0] = "HF_FULL"
-        axes = [np.linspace(u1_min, u1_max, n_grid_hf) for _ in range(n_var)]
-        grids = np.meshgrid(*axes, indexing='ij')
-        grid_flat = np.column_stack([g.ravel() for g in grids])
-        n_total = len(grid_flat)
-        Z_flat = []
-        _t_start = _time_local.perf_counter()
-        print(f"\n##### HF FULL GRID START: {n_grid_hf}^{n_var} = {n_total} points solveur #####", flush=True)
-        for i, pt in enumerate(grid_flat):
-            _t_pt0 = _time_local.perf_counter()
-            g_val = run_HF(pt)[0]
-            Z_flat.append(g_val)
-            _t_pt = _time_local.perf_counter() - _t_pt0
-            _t_elapsed = _time_local.perf_counter() - _t_start
-            _t_avg = _t_elapsed / (i + 1)
-            _t_eta = _t_avg * (n_total - i - 1)
-            _u_str = ', '.join(f'{pt[j]:+.3f}' for j in range(n_var))
-            print(f"  [HF FULL {i+1:3d}/{n_total}]  u=[{_u_str}]  g={g_val:+.4f}  "
-                  f"dt={_t_pt:.0f}s  elapsed={_t_elapsed/60:.1f}min  ETA={_t_eta/60:.1f}min", flush=True)
-        _t_total = (_time_local.perf_counter() - _t_start) / 60
-        print(f"\n##### HF FULL GRID DONE in {_t_total:.1f} min ({n_total} appels solveur) #####\n", flush=True)
-        Z_full = np.array(Z_flat).reshape([n_grid_hf] * n_var)
-        _hf_grid_full[0] = Z_full
-        _hf_grid_full_axes[0] = axes
-        _save_hf_grid_full(Z_full)
-        return Z_full
 
-    def _extract_hf_slice(sd):
-        """Extrait une coupe 2D (n_grid_hf x n_grid_hf) depuis la grille full par interpolation."""
-        from scipy.interpolate import RegularGridInterpolator
-        idx_x, idx_y, fixed = sd
-        axes = _hf_grid_full_axes[0]
-        interp = RegularGridInterpolator(axes, _hf_grid_full[0], method='linear')
-        ux = np.linspace(u1_min, u1_max, n_grid_hf)
-        uy = np.linspace(u2_min, u2_max, n_grid_hf)
-        UX, UY = np.meshgrid(ux, uy)
-        pts = np.zeros((n_grid_hf * n_grid_hf, n_var))
-        pts[:, idx_x] = UX.ravel()
-        pts[:, idx_y] = UY.ravel()
-        for idx, val in fixed.items():
-            pts[:, idx] = val
-        Z = interp(pts).reshape(n_grid_hf, n_grid_hf)
-        return Z
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _hf_custom_result = [None]   # cache memoire (evite relecture JSON a chaque print)
@@ -1695,47 +1587,46 @@ if __name__ == '__main__':
         return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
-        """Retourne Z_true (n_grid_hf x n_grid_hf) pour une coupe sd.
-        Cascade : cache 2D memoire -> cache 2D disque -> grille full -> recalcul 2D."""
+        """Z sur une coupe, par la voie la MOINS CHERE disponible.
+
+        Cascade, du gratuit au couteux :
+          1. cache memoire        -- 0 appel
+          2. cache disque signe   -- 0 appel
+          3. grille complete      -- 0 appel (interpolation)
+          4. calcul               -- n_grid_hf^2 appels solveur
+        """
         global hf_2d_grid_fixed, hf_2d_grid_fixed_final
-        if cache_file is None:
-            cache_file = _HF_CACHE_FILE
-        # 1. Cache 2D memoire
-        _mem = hf_2d_grid_fixed_final if grid_var_name == 'hf_2d_grid_fixed_final' else hf_2d_grid_fixed
+        _final = grid_var_name == 'hf_2d_grid_fixed_final'
+
+        _mem = hf_2d_grid_fixed_final if _final else hf_2d_grid_fixed
         if _mem is not None:
             return np.array(_mem['Z'])
-        # 2. Cache 2D disque
-        Z_cached = _load_hf_cache(n_grid_hf, cache_file, sd)
+
+        Z_cached = _GRILLE.lire_cache_2d(sd, fichier=cache_file)
         if Z_cached is not None:
-            _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf}, 'Z': Z_cached.tolist()}
-            if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
-            else:
-                hf_2d_grid_fixed = _grid_dict
+            _ranger_grille(_GRILLE._description(sd, n_grid_hf, Z_cached),
+                           grid_var_name)
             return Z_cached
-        # 3. Grille full
-        if _hf_grid_full[0] is not None:
+
+        if _GRILLE.complete is not None:
             print(f"[HF SLICE] extraction depuis grille full pour coupe ({sd[0]},{sd[1]})", flush=True)
-            Z = _extract_hf_slice(sd)
-            _save_hf_cache(Z, n_grid_hf, cache_file, sd)
-            _grid_dict = {'params': {'slice_def': sd, 'n_grid_hf': n_grid_hf}, 'Z': Z.tolist()}
-            if grid_var_name == 'hf_2d_grid_fixed_final':
-                hf_2d_grid_fixed_final = _grid_dict
-            else:
-                hf_2d_grid_fixed = _grid_dict
+            Z = _GRILLE.coupe_depuis_complete(sd)
+            _GRILLE.ecrire_cache_2d(Z, sd, fichier=cache_file)
+            _ranger_grille(_GRILLE._description(sd, n_grid_hf, Z), grid_var_name)
             return Z
-        # 4. Recalcul 2D (49 SOCP)
+
         idx_x, idx_y, fixed = sd
-        ux_hf = np.linspace(u1_min, u1_max, n_grid_hf)
-        uy_hf = np.linspace(u2_min, u2_max, n_grid_hf)
-        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
+        UX_hf, UY_hf = _GRILLE.maillage_2d()
         grid_hf = np.zeros((n_grid_hf * n_grid_hf, n_var))
         grid_hf[:, idx_x] = UX_hf.ravel()
         grid_hf[:, idx_y] = UY_hf.ravel()
         for idx, val in fixed.items():
             grid_hf[:, idx] = val
-        return _compute_hf_grid_with_progress(grid_hf, n_grid_hf, context="get_hf_slice",
-                    cache_file=cache_file, sd=sd, grid_var_name=grid_var_name)
+        return _compute_hf_grid_with_progress(grid_hf, n_grid_hf,
+                                              context="get_hf_slice",
+                                              cache_file=cache_file, sd=sd,
+                                              grid_var_name=grid_var_name)
+
 
     def fond_hf_pour_figures(sd=None, cache=None, var='hf_2d_grid_fixed'):
         """Le fond de contour haute fidelite, et CE QU'IL COUTE.
@@ -2337,7 +2228,7 @@ if __name__ == '__main__':
         print(f"[PLAN] plan initial construit : {len(xt)} points", flush=True)
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
     if print_HF and print_fullHF and n_var <= 3:
-        _compute_hf_grid_full()
+        _GRILLE.calculer_complete()
     if do_EFF:
         print_planche_EFF(g_ot, sigma_func, xt, [],
                           fond_hf=fond_hf_pour_figures())

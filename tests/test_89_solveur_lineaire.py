@@ -603,7 +603,20 @@ def test_les_caches_HF_custom_sont_verifies(script):
     """Ecrits en clair dans les AC, ils ne validaient que `n_total`."""
     with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert src.count("signature_grille_hf()") >= 10, (
-        "%s : %d sites seulement -- les caches HF custom (complet et partiel) "
-        "et la grille n-dim doivent tous porter la signature"
-        % (script, src.count("signature_grille_hf()")))
+    # Depuis le 27/08/2026 la grille est dans `_etapes/grille.py`, qui porte
+    # la signature UNE FOIS (en attribut) au lieu de la repasser a chaque
+    # appel. Le comptage suit donc les deux fichiers -- ce qui compte n'est
+    # pas le nombre de sites, mais qu'aucune lecture de cache n'en soit
+    # depourvue.
+    grille = open(os.path.join(_REPO, "_etapes", "grille.py"),
+                  encoding="utf-8").read()
+    assert src.count("signature_grille_hf()") >= 3, (
+        "%s : la signature de grille doit etre calculee et transmise au "
+        "module (%d sites)" % (script, src.count("signature_grille_hf()")))
+    sans_signature = [l for l in grille.splitlines()
+                      if "_cache_hf." in l and "load" in l]
+    assert sans_signature, "aucune lecture de cache trouvee dans grille.py"
+    assert grille.count("signature=self.signature") >= 6, (
+        "_etapes/grille.py : %d transmissions de signature seulement -- "
+        "chaque lecture ET chaque ecriture de cache doit la porter."
+        % grille.count("signature=self.signature"))

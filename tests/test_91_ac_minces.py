@@ -78,8 +78,11 @@ PROJET = {
 #: 27/08 (suite) : `projection_surrogate` part dans
 #: `_surrogate/projection.py`, et 80 lignes de bannieres annoncant des
 #: sections desormais VIDES disparaissent. 2593 -> 2530.
-PLAFOND_LIGNES = 2530
-PLAFOND_FONCTIONS = 50
+#: 27/08 (suite) : la grille haute fidelite -- cache signe, reprise
+#: apres interruption, coupes interpolees -- part dans
+#: `_etapes/grille.py`. 2530 -> 2421, 50 -> 43 fonctions.
+PLAFOND_LIGNES = 2421
+PLAFOND_FONCTIONS = 43
 
 
 def _imports_tiers(chemin):

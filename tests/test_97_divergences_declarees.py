@@ -180,8 +180,9 @@ def test_chaque_divergence_porte_une_raison():
 def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     """Le 26/08/2026 : 1 861 lignes identiques sur 1 975 communes. Chaque
     extraction en retire ; ce plafond descend, il ne remonte jamais."""
-    #: 27/08 apres les extractions figurer/wrappers/ajuster : 601 lignes.
-    PLAFOND = 601
+    #: 27/08, apres figurer + wrappers + ajuster + projection + grille :
+    #: 601 -> 449 lignes.
+    PLAFOND = 449
     communes, differentes, A, B = comparaison
     identiques = sum(len(A[n]) for n in communes
                      if "".join(A[n]) == "".join(B[n]))
