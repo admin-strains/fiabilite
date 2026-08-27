@@ -72,6 +72,12 @@ IPARM0_SOLVEUR_LINEAIRE_CINEMATIQUE = 21
 #:
 #: N'y figurent PAS les parametres qui font autre chose des memes points --
 #: metamodele, enrichissement, FORM : ceux-la n'invalident rien.
+
+#: Ce qui, EN PLUS, determine ou tombent les points de la grille HF.
+#: Sans eux, une grille calculee sur d'autres bornes ou d'un autre cote
+#: serait relue telle quelle -- cf. `Configuration.signature_grille_hf`.
+CHAMPS_GEOMETRIE_GRILLE = ("n_grid_hf", "u1_min", "u1_max", "u2_min", "u2_max")
+
 CHAMPS_QUI_INVALIDENT_LE_CACHE = (
     "modelname", "storage", "solveur", "solveur_lineaire",
     "global_size", "geo_min_approx", "max_size",
@@ -432,6 +438,24 @@ class Configuration:
         `CHAMPS_QUI_INVALIDENT_LE_CACHE`.
         """
         return {nom: getattr(self, nom) for nom in CHAMPS_QUI_INVALIDENT_LE_CACHE}
+
+    def signature_grille_hf(self) -> dict:
+        """Ce qui rend un cache de grille haute fidelite inutilisable.
+
+        La signature du solveur NE SUFFIT PAS : la grille depend aussi de sa
+        propre GEOMETRIE. Les caches HF ne validaient que la coupe -- quels
+        axes -- et le nombre de points ; `n_grid_hf` etait recu et jamais lu.
+
+        Le cas etait sur le disque le 26/08/2026. En bornant le domaine du
+        Moulin Blanc de +/- 7,5 a +/- 6, `hf_grid_cache.json.partial` a
+        survecu avec la valeur calculee en u = [-7,5 ; -7,5] sous CuDss. Le run
+        suivant, a +/- 6 et sous MUMPS, l'aurait relue comme la valeur en
+        u = [-6 ; -6] -- fy = 54 MPa au lieu de 8,9. Les deux controles
+        existants passaient tous les deux.
+        """
+        sig = self.signature_solveur()
+        sig.update({nom: getattr(self, nom) for nom in CHAMPS_GEOMETRIE_GRILLE})
+        return sig
 
 
 # ------------------------------------------------------------------------- #

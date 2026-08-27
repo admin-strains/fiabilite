@@ -456,3 +456,154 @@ def test_le_script_reprend_et_saute_les_points_connus(script):
     assert "if 'g' in SOL[i]:" in src, (
         "%s : run_one_SOL doit SAUTER un point deja calcule, sinon la reprise "
         "ne fait rien gagner" % script)
+
+
+# --------------------------------------------------------------------- #
+# cache de la grille HF -- meme defaut, deuxieme instance
+# --------------------------------------------------------------------- #
+from _cache import hf as cache_hf                     # noqa: E402
+
+
+def test_la_signature_de_grille_porte_AUSSI_la_geometrie():
+    """La signature du solveur ne suffit pas : la grille depend de ses propres
+    bornes et de son cote. `n_grid_hf` etait recu par `load_hf_cache` et
+    JAMAIS lu."""
+    cfg = schema.Configuration(modelname="x")
+    sig = cfg.signature_grille_hf()
+    for champ in schema.CHAMPS_GEOMETRIE_GRILLE:
+        assert champ in sig, "%s manque a la signature de grille" % champ
+    for champ in schema.CHAMPS_QUI_INVALIDENT_LE_CACHE:
+        assert champ in sig, "%s manque a la signature de grille" % champ
+
+
+def test_les_champs_de_geometrie_existent_vraiment():
+    noms = {f.name for f in schema.fields(schema.Configuration)}
+    inconnus = [n for n in schema.CHAMPS_GEOMETRIE_GRILLE if n not in noms]
+    assert not inconnus, "champs inexistants : %s" % inconnus
+
+
+def test_borner_le_domaine_invalide_la_grille():
+    """LE cas du 26/08, qui etait SUR LE DISQUE : en passant de +/- 7,5 a
+    +/- 6, `hf_grid_cache.json.partial` a survecu avec la valeur calculee en
+    u = [-7,5 ; -7,5]. Le run suivant l'aurait relue comme la valeur en
+    u = [-6 ; -6]."""
+    large = schema.Configuration(modelname="x").signature_grille_hf()
+    serre = schema.Configuration(modelname="x", u1_min=-6.0, u1_max=6.0,
+                                 u2_min=-6.0, u2_max=6.0).signature_grille_hf()
+    assert large != serre
+
+
+def _ecrire_grille(chemin, signature, n_grid=2, sd=(0, 1, {})):
+    with open(chemin, "w") as fh:
+        json.dump({"Z": [[1.0, 2.0], [3.0, 4.0]], "n_grid_hf": n_grid,
+                   "signature": signature,
+                   "slice_def": [sd[0], sd[1], {}]}, fh)
+
+
+def test_la_grille_est_relue_quand_tout_coincide(tmp_path):
+    f = str(tmp_path / "hf.json")
+    sig = {"u1_min": -6.0}
+    _ecrire_grille(f, sig)
+    assert cache_hf.load_hf_cache(2, f, (0, 1, {}), True, signature=sig) is not None
+
+
+def test_la_grille_est_refusee_quand_les_bornes_ont_change(tmp_path):
+    f = str(tmp_path / "hf.json")
+    _ecrire_grille(f, {"u1_min": -7.5})
+    assert cache_hf.load_hf_cache(2, f, (0, 1, {}), True,
+                                  signature={"u1_min": -6.0}) is None
+
+
+def test_une_grille_2x2_n_est_pas_relue_pour_une_demande_15x15(tmp_path):
+    """`n_grid_hf_local` etait recu et jamais controle."""
+    f = str(tmp_path / "hf.json")
+    sig = {"u1_min": -6.0}
+    _ecrire_grille(f, sig, n_grid=2)
+    assert cache_hf.load_hf_cache(15, f, (0, 1, {}), True, signature=sig) is None
+
+
+def test_une_grille_sans_signature_est_refusee(tmp_path):
+    f = str(tmp_path / "hf.json")
+    _ecrire_grille(f, None)
+    assert cache_hf.load_hf_cache(2, f, (0, 1, {}), True,
+                                  signature={"u1_min": -6.0}) is None
+
+
+def test_le_cache_partiel_de_grille_est_protege_pareil(tmp_path):
+    """C'est LUI qui portait le point empoisonne sur le disque."""
+    base = str(tmp_path / "hf.json")
+    with open(base + ".partial", "w") as fh:
+        json.dump({"Z_flat": [-0.8555958883063973, None, None, None],
+                   "n_total": 4, "complet": False,
+                   "signature": {"u1_min": -7.5},
+                   "slice_def": [0, 1, {}]}, fh)
+    assert cache_hf.load_hf_cache_partial(base, (0, 1, {}), 4, True,
+                                          signature={"u1_min": -6.0}) is None
+    assert cache_hf.load_hf_cache_partial(base, (0, 1, {}), 4, True,
+                                          signature={"u1_min": -7.5}) is not None
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_les_scripts_passent_la_signature_de_grille(script):
+    with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert src.count("signature_grille_hf()") >= 4, (
+        "%s : les quatre delegues HF (save/load, complet/partiel) doivent "
+        "tous passer la signature" % script)
+
+
+# --------------------------------------------------------------------- #
+# recensement exhaustif des points de reprise -- 26/08/2026
+# --------------------------------------------------------------------- #
+#: Les huit endroits ou un run RELIT un etat persiste. Chacun doit verifier
+#: sous quelle configuration cet etat a ete produit, sinon il melange
+#: silencieusement deux calculs. Recensement fait par balayage de tous les
+#: `json.load` du depot -- pas au fil des pannes.
+POINTS_DE_REPRISE = {
+    "doe complet":        ("_cache/doe.py", "load_doe_cache"),
+    "doe partiel":        ("_cache/doe.py", "charger_doe_partiel"),
+    "grille complete":    ("_cache/hf.py", "load_hf_cache"),
+    "grille partielle":   ("_cache/hf.py", "load_hf_cache_partial"),
+    "grille n-dim":       ("_cache/hf.py", "load_hf_grid_full"),
+}
+
+
+@pytest.mark.parametrize("etiquette", sorted(POINTS_DE_REPRISE))
+def test_chaque_lecteur_de_cache_accepte_une_signature(etiquette):
+    """Un lecteur qui n'a pas de parametre `signature` ne peut pas verifier
+    sous quelle configuration son cache a ete produit."""
+    import inspect
+    rel, nom = POINTS_DE_REPRISE[etiquette]
+    mod = {"_cache/doe.py": cache_doe, "_cache/hf.py": cache_hf}[rel]
+    fn = getattr(mod, nom)
+    assert "signature" in inspect.signature(fn).parameters, (
+        "%s.%s n'accepte pas de signature" % (rel, nom))
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_le_dump_de_reprise_est_verifie(script):
+    """LE point le plus couteux : `restart_state.json` porte jusqu'a 90 h
+    d'enrichissement. Il ECRIVAIT une signature que personne ne lisait --
+    et une signature FAIBLE (`_doe_cache_sig` ignore le solveur lineaire, le
+    maillage et les bornes)."""
+    with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert 'st["signature_solveur"] = CFG.signature_solveur()' in src, (
+        "%s : le dump n'ecrit pas la vraie signature" % script)
+    assert "_rs.get('signature_solveur')" in src, (
+        "%s : le dump est relu SANS verifier sa signature -- c'est le defaut "
+        "du 26/08, avec 90 h en jeu" % script)
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_les_caches_HF_custom_sont_verifies(script):
+    """Ecrits en clair dans les AC, ils ne validaient que `n_total`."""
+    with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert src.count("signature_grille_hf()") >= 10, (
+        "%s : %d sites seulement -- les caches HF custom (complet et partiel) "
+        "et la grille n-dim doivent tous porter la signature"
+        % (script, src.count("signature_grille_hf()")))

@@ -779,7 +779,13 @@ if __name__ == '__main__':
                 return None
         st = {}
         try:
+            # `_doe_cache_sig()` est la signature FAIBLE (n0, params, n_var,
+            # modelname) : elle ignore le solveur, le solveur lineaire, le
+            # maillage et les bornes. Elle est conservee telle quelle -- des
+            # outils la lisent -- mais elle ne protege rien.
             st["signature"] = _doe_cache_sig()
+            # Celle-ci, si. Elle porte 90 heures d'enrichissement.
+            st["signature_solveur"] = CFG.signature_solveur()
             st["modele"]    = modele
             st["timestamp"] = timestamp
             try:    st["max_degree"] = int(max_degree)
@@ -1966,16 +1972,25 @@ if __name__ == '__main__':
     hf_2d_grid_fixed_final = None
 
     def _load_hf_cache(n_grid_hf_local, cache_file, sd):
-        return _cache_hf.load_hf_cache(n_grid_hf_local, cache_file, sd, config_is_identical)
+        # La signature porte le solveur ET la geometrie de la grille. Sans
+        # elle, une grille calculee sur d'autres bornes -- ou d'un autre cote,
+        # `n_grid_hf` n'etant meme pas controle -- serait relue telle quelle.
+        return _cache_hf.load_hf_cache(n_grid_hf_local, cache_file, sd,
+                                       config_is_identical,
+                                       signature=CFG.signature_grille_hf())
 
     def _save_hf_cache(Z, n_grid_hf_local, cache_file, sd):
-        return _cache_hf.save_hf_cache(Z, n_grid_hf_local, cache_file, sd)
+        return _cache_hf.save_hf_cache(Z, n_grid_hf_local, cache_file, sd,
+                                      signature=CFG.signature_grille_hf())
 
     def _save_hf_cache_partial(Z_flat, n_total, cache_file, sd):
-        return _cache_hf.save_hf_cache_partial(Z_flat, n_total, cache_file, sd)
+        return _cache_hf.save_hf_cache_partial(Z_flat, n_total, cache_file, sd,
+                                              signature=CFG.signature_grille_hf())
 
     def _load_hf_cache_partial(cache_file, sd, n_total):
-        return _cache_hf.load_hf_cache_partial(cache_file, sd, n_total, config_is_identical)
+        return _cache_hf.load_hf_cache_partial(cache_file, sd, n_total,
+                                              config_is_identical,
+                                              signature=CFG.signature_grille_hf())
 
     def _compute_hf_grid_with_progress(grid_hf, n_grid_hf_local, context="",
                                         cache_file=None, sd=None, grid_var_name='hf_2d_grid_fixed'):
@@ -2046,10 +2061,13 @@ if __name__ == '__main__':
 
     def _load_hf_grid_full():
         return _cache_hf.load_hf_grid_full(
-            _HF_FULL_CACHE_FILE, n_var, n_grid_hf, config_is_identical)
+            _HF_FULL_CACHE_FILE, n_var, n_grid_hf, config_is_identical,
+            signature=CFG.signature_grille_hf())
 
     def _save_hf_grid_full(Z_full):
-        return _cache_hf.save_hf_grid_full(_HF_FULL_CACHE_FILE, Z_full, n_var, n_grid_hf)
+        return _cache_hf.save_hf_grid_full(_HF_FULL_CACHE_FILE, Z_full, n_var,
+                                          n_grid_hf,
+                                          signature=CFG.signature_grille_hf())
 
     def _compute_hf_grid_full():
         """Calcule la grille HF complete (n_grid_hf^n_var points solveur)."""
@@ -2126,7 +2144,10 @@ if __name__ == '__main__':
         if config_is_identical and os.path.exists(_HF_CUSTOM_CACHE_FILE):
             try:
                 _dc = json.load(open(_HF_CUSTOM_CACHE_FILE))
-                if _dc.get('complet') and _dc.get('n_total') == n_total:
+                # La signature manquait : une grille custom calculee sous un
+                # autre solveur, un autre maillage ou d'autres bornes etait
+                # relue telle quelle.
+                if _dc.get('complet') and _dc.get('n_total') == n_total                         and _dc.get('signature') == CFG.signature_grille_hf():
                     print(f"[HF CUSTOM] cache complet charge ({n_total} pts) -> 0 SOCP", flush=True)
                     g_arr = np.array(_dc['g_vals'], dtype=float)
                     _margin = 0.1
@@ -2146,7 +2167,7 @@ if __name__ == '__main__':
         if config_is_identical and os.path.exists(_partial_file):
             try:
                 _d = json.load(open(_partial_file))
-                if _d.get('n_total') == n_total:
+                if _d.get('n_total') == n_total                         and _d.get('signature') == CFG.signature_grille_hf():
                     g_vals = _d['g_vals']
             except Exception:
                 pass
@@ -2170,7 +2191,8 @@ if __name__ == '__main__':
                     # Save incremental
                     g_vals[_idx_todo[_k]] = g_val
                     try:
-                        json.dump({'n_total': n_total, 'g_vals': g_vals},
+                        json.dump({'n_total': n_total, 'g_vals': g_vals,
+                                   'signature': CFG.signature_grille_hf()},
                                   open(_partial_file, 'w'), indent=1)
                     except Exception:
                         pass
@@ -2188,7 +2210,8 @@ if __name__ == '__main__':
         # Supprimer le cache partiel, sauver le cache final
         g_arr = np.array(g_vals, dtype=float)
         try:
-            json.dump({'n_total': n_total, 'pts': pts.tolist(), 'g_vals': g_vals, 'complet': True},
+            json.dump({'n_total': n_total, 'pts': pts.tolist(), 'g_vals': g_vals,
+                       'complet': True, 'signature': CFG.signature_grille_hf()},
                       open(_HF_CUSTOM_CACHE_FILE, 'w'), indent=1)
             if os.path.exists(_partial_file):
                 os.remove(_partial_file)
@@ -2840,6 +2863,28 @@ if __name__ == '__main__':
                 "  restart_enrich_only = false\n"
                 "dans le fichier d'etude." % _RESTART_STATE_FILE)
         _rs = json.load(open(_RESTART_STATE_FILE))
+
+        # LE DUMP PORTAIT UNE SIGNATURE QUE PERSONNE NE LISAIT (26/08/2026).
+        # Reprendre un enrichissement apres avoir change de solveur lineaire,
+        # de maillage ou de bornes melangeait tout, sans une ligne de journal.
+        # C'est le meme defaut que les caches DOE et HF -- mais ici il porte
+        # jusqu'a 90 heures de calcul, et le melange serait indetectable dans
+        # le resultat.
+        _sig_attendue = CFG.signature_solveur()
+        _sig_dump = _rs.get('signature_solveur')
+        if _sig_dump != _sig_attendue:
+            _ecarts = ["  %s : dump=%r  courant=%r" % (k, (_sig_dump or {}).get(k), v)
+                       for k, v in _sig_attendue.items()
+                       if (_sig_dump or {}).get(k) != v]
+            raise SystemExit(
+                "restart_enrich_only = true, mais le dump n'a PAS ete produit "
+                "sous la configuration courante :\n"
+                + ("\n".join(_ecarts) if _sig_dump is not None else
+                   "  (dump anterieur au controle : aucune signature)")
+                + "\n\nReprendre melangerait des points calcules autrement.\n"
+                  "Soit on retablit la configuration du dump, soit on repart "
+                  "de zero avec `restart_enrich_only = false`.")
+
         xt = np.array(_rs['xt'], float)
         yt = np.array(_rs['yt'], float)
         all_grad = np.array(_rs['all_grad'], float)
