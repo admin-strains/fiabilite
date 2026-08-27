@@ -33,6 +33,7 @@ from api import predict_gepck, predict_pck
 from lois import loi_fy
 import lois as _lois
 import doe as _cache_doe
+import reprise as _reprise
 import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
@@ -543,60 +544,31 @@ if __name__ == '__main__':
         return _cache_doe.doe_cache_sig(n0, params_names, n_var, modelname)
 
     # --- DUMP RESTART ---
-    _RESTART_STATE_FILE = os.path.join(_path_ds, "restart_state.json")
+    _RESTART_STATE_FILE = _reprise.fichier_de(_path_ds)
     def _save_restart_state(xt, yt, all_grad, xt_eff, best_result, best_sp, modes, result_IS):
-        def _u_beta(r):
-            try:
-                return {"u_star": [float(v) for v in np.array(r.getStandardSpaceDesignPoint())],
-                        "beta": float(r.getHasoferReliabilityIndex())}
-            except Exception:
-                return None
-        st = {}
-        try:
-            # `_doe_cache_sig()` est la signature FAIBLE (n0, params, n_var,
-            # modelname) : elle ignore le solveur, le solveur lineaire, le
-            # maillage et les bornes. Elle est conservee telle quelle -- des
-            # outils la lisent -- mais elle ne protege rien.
-            st["signature"] = _doe_cache_sig()
-            # Celle-ci, si. Elle porte 90 heures d'enrichissement.
-            st["signature_solveur"] = CFG.signature_solveur()
-            st["modele"]    = modele
-            st["timestamp"] = timestamp
-            try:    st["max_degree"] = int(max_degree)
-            except Exception: st["max_degree"] = None
-            st["xt"]       = np.asarray(xt).tolist()       if xt       is not None else None
-            st["yt"]       = np.asarray(yt).tolist()       if yt       is not None else None
-            st["all_grad"] = np.asarray(all_grad).tolist() if all_grad is not None else None
-            st["xt_eff"]   = [np.asarray(p).tolist() for p in xt_eff] if xt_eff else []
-            st["n_doe"]    = n0
-            st["n_total"]  = int(len(xt)) if xt is not None else 0
-            _prev_tot = sum(_round_sizes_prev) if _round_sizes_prev else 0
-            if _enrich_round > 0:
-                st["round_sizes"] = list(_round_sizes_prev) + [int(len(xt)) - _prev_tot]
-            else:
-                st["round_sizes"] = [int(len(xt))] if xt is not None else []
-            st["enrich_round"]     = int(_enrich_round)
-            st["round_boundaries"] = list(np.cumsum([0] + st["round_sizes"]).astype(int).tolist())
-            st["hist_EFF"]     = [float(v) for v in _eff_history_EFF]
-            st["hist_BB"]      = [None if v is None else float(v) for v in _eff_history_BB]
-            st["hist_BS"]      = [None if v is None else float(v) for v in _eff_history_BS]
-            st["hist_theta"]   = [[float(x) for x in t] for t in _eff_history_theta]
-            st["hist_beta_IS"] = [None if v is None else float(v) for v in _eff_history_beta_IS]
-            try:    st["hf_2d_grid"] = _GRILLE.coupes["courante"]
-            except Exception: st["hf_2d_grid"] = None
-            st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
-            st["best_result"] = _u_beta(best_result) if best_result is not None else None
-            st["modes"]       = [_u_beta(m) for m in modes] if modes else []
-            try:
-                st["IS"] = {"Pf": float(result_IS.getProbabilityEstimate())} if result_IS is not None else None
-            except Exception:
-                st["IS"] = None
-            json.dump(st, open(_RESTART_STATE_FILE, "w"), indent=1)
-            print(f"[RESTART DUMP] etat sauve dans {_RESTART_STATE_FILE} "
-                  f"(n_total={st['n_total']}, n_eff={len(st['xt_eff'])}, "
-                  f"hist_EFF={len(st['hist_EFF'])}, modes={len(st['modes'])})", flush=True)
-        except Exception as e:
-            print(f"[RESTART DUMP] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
+        """Le dump de reprise -- jusqu'a 90 heures de calcul dans un fichier.
+
+        La serialisation est dans `_cache/reprise.py`. Ne reste ici que ce
+        qui appartient a l'etude : ou vivent les historiques et la coupe.
+        """
+        # Les deux appels -- fin de round dans `run_EFF`, et dump final --
+        # sont posterieurs a la construction de `_GRILLE` : le `try/except`
+        # d'origine autour de cette lecture ne protegeait rien. L'ordre est
+        # verifie par `test_105_reprise`. Les deux clefs de `coupes` existent
+        # des la construction, `.get` suffit.
+        return _reprise.enregistrer(
+            _RESTART_STATE_FILE,
+            signature=_doe_cache_sig(),
+            signature_solveur=CFG.signature_solveur(),
+            modele=modele, timestamp=timestamp, max_degree=max_degree, n0=n0,
+            xt=xt, yt=yt, all_grad=all_grad, xt_eff=xt_eff,
+            enrich_round=_enrich_round, round_sizes_prev=_round_sizes_prev,
+            historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
+                         "BS": _eff_history_BS, "theta": _eff_history_theta,
+                         "beta_IS": _eff_history_beta_IS},
+            coupe_hf=_GRILLE.coupes.get("courante"),
+            best_result=best_result, best_sp=best_sp, modes=modes,
+            result_IS=result_IS)
 
     # --- LOG INCREMENTAL PAR POINT ---
     _POINT_LOG_FILE = os.path.join(_path_ds, "points_log.jsonl")
@@ -1383,40 +1355,10 @@ if __name__ == '__main__':
 
     # --- Mode restart : charger le dump et preparer le re-enrichissement ---
     if restart_enrich_only:
-        # Sans ce controle, l'absence du dump donnait un FileNotFoundError brut
-        # APRES plusieurs minutes de construction du modele CAD. Le cas se
-        # produit des qu'on reprend une etude sur un autre poste : le dump vit
-        # dans le .ds du modele, il n'est pas dans le depot.
-        if not os.path.isfile(_RESTART_STATE_FILE):
-            raise SystemExit(
-                "restart_enrich_only = true, mais aucun etat a reprendre :\n"
-                "  %s\n\n"
-                "Ce fichier est produit par un run precedent, dans le .ds du\n"
-                "modele. Pour repartir de zero, mettre\n"
-                "  restart_enrich_only = false\n"
-                "dans le fichier d'etude." % _RESTART_STATE_FILE)
-        _rs = json.load(open(_RESTART_STATE_FILE))
-
-        # LE DUMP PORTAIT UNE SIGNATURE QUE PERSONNE NE LISAIT (26/08/2026).
-        # Reprendre un enrichissement apres avoir change de solveur lineaire,
-        # de maillage ou de bornes melangeait tout, sans une ligne de journal.
-        # C'est le meme defaut que les caches DOE et HF -- mais ici il porte
-        # jusqu'a 90 heures de calcul, et le melange serait indetectable dans
-        # le resultat.
-        _sig_attendue = CFG.signature_solveur()
-        _sig_dump = _rs.get('signature_solveur')
-        if _sig_dump != _sig_attendue:
-            _ecarts = ["  %s : dump=%r  courant=%r" % (k, (_sig_dump or {}).get(k), v)
-                       for k, v in _sig_attendue.items()
-                       if (_sig_dump or {}).get(k) != v]
-            raise SystemExit(
-                "restart_enrich_only = true, mais le dump n'a PAS ete produit "
-                "sous la configuration courante :\n"
-                + ("\n".join(_ecarts) if _sig_dump is not None else
-                   "  (dump anterieur au controle : aucune signature)")
-                + "\n\nReprendre melangerait des points calcules autrement.\n"
-                  "Soit on retablit la configuration du dump, soit on repart "
-                  "de zero avec `restart_enrich_only = false`.")
+        # Les deux controles -- le dump existe, et il a ete produit sous la
+        # configuration courante -- sont dans `_cache/reprise.py`, avec le
+        # detail des deux defauts qu'ils ferment.
+        _rs = _reprise.charger(_RESTART_STATE_FILE, CFG.signature_solveur())
 
         xt = np.array(_rs['xt'], float)
         yt = np.array(_rs['yt'], float)
@@ -1425,11 +1367,10 @@ if __name__ == '__main__':
         if _rs.get('max_degree') is not None:
             max_degree = int(_rs['max_degree'])
         _GRILLE.coupes['courante'] = _rs.get('hf_2d_grid')
-        _eff_history_EFF   = list(_rs.get('hist_EFF', []))
-        _eff_history_BB    = list(_rs.get('hist_BB', []))
-        _eff_history_BS    = list(_rs.get('hist_BS', []))
-        _eff_history_theta = list(_rs.get('hist_theta', []))
-        _eff_history_beta_IS = list(_rs.get('hist_beta_IS', []))
+        _h = _reprise.historiques_de(_rs)
+        _eff_history_EFF, _eff_history_BB    = _h["EFF"], _h["BB"]
+        _eff_history_BS,  _eff_history_theta = _h["BS"],  _h["theta"]
+        _eff_history_beta_IS = _h["beta_IS"]
         _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
         _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
         _point_log_round[0] = _enrich_round

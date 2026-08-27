@@ -638,11 +638,18 @@ def test_le_dump_de_reprise_est_verifie(script):
     maillage et les bornes)."""
     with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert 'st["signature_solveur"] = CFG.signature_solveur()' in src, (
+    assert "signature_solveur=CFG.signature_solveur()" in src, (
         "%s : le dump n'ecrit pas la vraie signature" % script)
-    assert "_rs.get('signature_solveur')" in src, (
-        "%s : le dump est relu SANS verifier sa signature -- c'est le defaut "
-        "du 26/08, avec 90 h en jeu" % script)
+    assert "_reprise.charger(_RESTART_STATE_FILE, CFG.signature_solveur())" in src, (
+        "%s : le dump est relu SANS lui opposer la signature courante -- "
+        "c'est le defaut du 26/08, avec 90 h en jeu" % script)
+
+    # la comparaison elle-meme, dans le module
+    with open(os.path.join(_REPO, "_cache", "reprise.py"), encoding="utf-8") as fh:
+        src_mod = fh.read()
+    assert 'rs.get("signature_solveur")' in src_mod
+    assert "if sig_dump != signature_attendue:" in src_mod, (
+        "`reprise.charger` ne compare plus la signature du dump")
 
 
 @pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",

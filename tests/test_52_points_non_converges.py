@@ -193,14 +193,19 @@ def test_une_reprise_sans_etat_a_reprendre_est_annoncee(nom):
     et la ligne exacte a changer.
     """
     src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert "os.path.isfile(_RESTART_STATE_FILE)" in src, \
-        "%s : rien ne verifie que l'etat a reprendre existe" % nom
-    # le message doit nommer le fichier ET la sortie
-    i_garde = src.index("os.path.isfile(_RESTART_STATE_FILE)")
-    extrait = src[i_garde:i_garde + 900]
+    assert "_reprise.charger(_RESTART_STATE_FILE" in src, \
+        "%s : la reprise ne passe plus par le controle de `_cache/reprise`" % nom
+
+    # le controle lui-meme, et son message, sont un cran plus bas
+    src_mod = io.open(os.path.join(REPO, "_cache", "reprise.py"),
+                      encoding="utf-8").read()
+    assert "os.path.isfile(fichier)" in src_mod, \
+        "rien ne verifie que l'etat a reprendre existe"
+    i_garde = src_mod.index("os.path.isfile(fichier)")
+    extrait = src_mod[i_garde:i_garde + 900]
     assert "restart_enrich_only = false" in extrait, \
-        "%s : le message ne dit pas comment repartir de zero" % nom
-    assert "_RESTART_STATE_FILE" in extrait
+        "le message ne dit pas comment repartir de zero"
+    assert "% fichier" in extrait, "le message ne nomme pas le fichier absent"
 
 
 def test_aucune_etude_ne_demande_de_reprise():
