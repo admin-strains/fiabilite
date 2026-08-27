@@ -267,8 +267,22 @@ copie pure.
    fonction du depot, et celle qui porte les quatre criteres d'arret.
 
 A chaque etape : temoin d'extraction, puis la chaine complete sur l'etat limite
-**analytique** (140 s, bit-reproductible, sans licence) comme controle de
+**analytique** (bit-reproductible, sans licence) comme controle de
 non-regression.
+
+**Deux etudes analytiques, et pourquoi il en faut deux.**
+`studies/pure_flexion_analytique.toml` exerce le plan, le metamodele,
+l'enrichissement, FORM et le tirage d'importance -- mais elle tourne avec
+`print_HF = false`, donc **pas la grille haute fidelite**. Ce trou a coute
+cher : le doublon de grille du 27/08/2026 (29 h sur le Moulin Blanc) a du
+etre mesure a la main, en retirant la garde et en relancant, parce
+qu'aucune etude rejouable n'exercait ce chemin -- et la suite de tests
+etait verte.
+
+`studies/pure_flexion_grille.toml` le couvre desormais : meme chaine,
+grille activee a 7x7, six secondes, aucune licence. `test_103` la lance et
+compte ce qui se passe reellement. Ce n'est pas un test de VALEUR mais un
+test de COUT : on paie ce qu'on croit payer, une fois et pas deux.
 
 ---
 

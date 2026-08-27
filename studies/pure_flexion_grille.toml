@@ -1,0 +1,64 @@
+# Flexion pure, etat limite ANALYTIQUE, GRILLE HAUTE FIDELITE ACTIVEE.
+#
+# POURQUOI CETTE ETUDE EXISTE
+# ----------------------------
+# `pure_flexion_analytique.toml` tourne avec `print_HF = false` : elle
+# exerce le plan, le metamodele, l'enrichissement, FORM et le tirage
+# d'importance -- mais PAS la grille haute fidelite.
+#
+# Ce trou a coute cher. Le 27/08/2026, on a decouvert que la grille etait
+# calculee DEUX FOIS : `slice_def` et `slice_def_final` valent tous deux
+# (0, 1, {}) des qu'il y a deux variables, mais ils etaient servis par deux
+# fichiers de cache differents. Sur le Moulin Blanc regle a 15, cela faisait
+# 225 appels solveur en double, soit 29 heures. Le defaut a du etre mesure
+# A LA MAIN, en retirant la garde et en relancant, parce qu'aucune etude
+# rejouable n'exercait ce chemin.
+#
+# Celle-ci le fait, en quelques secondes : 49 evaluations d'une formule de
+# section, la ou le Moulin Blanc en demanderait 225 au solveur.
+#
+# CE QU'ELLE N'EXERCE PAS
+# ------------------------
+# Ni l'enrichissement, ni le tirage d'importance : `pure_flexion_analytique`
+# s'en charge. Cette etude-ci va droit a la grille et aux figures, pour
+# rester assez rapide pour tourner dans la suite de tests.
+
+modelname = "test_pure_flexion"
+storage = 'C:\workspace\storage\admin\SF'
+solveur = "analytique"
+
+# --- metamodele : le plus simple qui tienne debout
+modele = "PCK"
+max_degree = 0
+max_of_maxdegree = 2
+n0 = 5
+
+# --- ce qu'on n'exerce pas ici
+do_EFF = false
+do_IS = false
+do_FORM_filter = false
+do_multistart = false
+
+# --- FORM
+tol_FORM = 0.002
+
+# --- execution : sequentiel, aucun cache relu, aucun historique
+n_workers_DOE = 1
+config_is_identical = false
+restart_enrich_only = false
+save_history = false
+
+# --- LA GRILLE, c'est tout l'objet de cette etude
+# 7 x 7 = 49 evaluations. Le cout croit comme le carre : ne pas monter sans
+# raison, ce fichier tourne dans la suite de tests.
+n_grid_hf = 7
+print_HF = true
+
+# --- le reste du trace : rien
+print_fullHF = false
+print_DOE = false
+print_3D = false
+print_Pf = false
+do_custom_hf = false
+print_ana = false
+erreur_fosm = false
