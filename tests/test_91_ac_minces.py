@@ -116,7 +116,12 @@ PROJET = {
 #: recopiees a l'identique -- part dans `_cache/reprise.py`. Le fichier le
 #: plus cher du depot : jusqu'a 90 h d'enrichissement.
 #: 1686 -> 1627.
-PLAFOND_LIGNES = 1627
+#: 27/08 (suite) : l'evaluation du batch EFF -- le bloc de `run_EFF` qui
+#: appelle le solveur et verse les points au plan -- part dans
+#: `_doe/evaluation.py`. Sa branche PARALLELE est celle qui tourne sur le
+#: Moulin Blanc et qu'aucune chaine de verification ne traverse : ses tests
+#: unitaires sont son seul filet. 1627 -> 1598.
+PLAFOND_LIGNES = 1598
 PLAFOND_FONCTIONS = 42
 
 

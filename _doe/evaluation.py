@@ -28,6 +28,7 @@ l'enrichissement a demande CE point-la parce que l'algorithme le veut la.
 L'ecarter en silence lui ferait reproposer le meme point, indefiniment.
 """
 
+import numpy as np
 import openturns as ot
 
 
@@ -189,3 +190,85 @@ class Evaluateur:
                 "`exclure_points_sans_gradient`." % (list(u), grad_X))
         self.journaliser(u, x_point, ev.g)
         return ev.g, grad_U, grad_X
+
+
+# --------------------------------------------------------------------------- #
+# LE BATCH D'ENRICHISSEMENT : des points choisis, evalues, verses au plan      #
+# --------------------------------------------------------------------------- #
+def evaluer_batch_EFF(batch, xt, yt, all_grad, xt_eff, *,
+                      n_max_points, n_batch, n_workers, n_var,
+                      evaluer_un_point, executer_en_parallele=None,
+                      dist_jointe=None, params_names=None,
+                      taylor=False, eps_taylor=0.0, tracer=_ecrire):
+    """Les points proposes par le critere EFF, evalues et verses au plan.
+
+    Deux chemins, et c'est le batch qui tranche :
+
+    * a plusieurs points ET plusieurs workers, ils partent ensemble au pool
+      (`executer_en_parallele`) ;
+    * sinon, un par un (`evaluer_un_point`), avec la possibilite d'ajouter
+      des points VIRTUELS de Taylor autour du point reel.
+
+    ATTENTION -- LE CHEMIN PARALLELE N'EST EXERCE PAR AUCUNE CHAINE DE
+    VERIFICATION. `n_workers_DOE` vaut 1 dans les etudes analytiques, 6 sur
+    le Moulin Blanc : la branche qui tourne EN PRODUCTION est precisement
+    celle qu'aucun run de controle ne traverse. Ses tests unitaires sont donc
+    le seul filet -- voir `test_106_batch_EFF`.
+
+    Les deux journaux different (precision 4 et compteur d'un cote, precision
+    10 de l'autre). C'est ainsi depuis l'origine ; les formats sont repris
+    verbatim, parce que la comparaison des journaux est ce qui atteste des
+    extractions.
+
+    Retourne `(xt, yt, all_grad, xt_eff)` -- les quatre etats du plan.
+    """
+    n_actuel = min(n_batch, n_max_points - len(xt_eff))
+    a_evaluer = batch[:n_actuel]
+
+    if len(a_evaluer) > 1 and n_workers > 1:
+        # `dist_jointe` est un APPEL, pas une distribution : la construire
+        # coute, et le chemin sequentiel n'en a aucun besoin.
+        T_inv = dist_jointe().getInverseIsoProbabilisticTransformation()
+        SOL = []
+        for u_pt in a_evaluer:
+            x_pt = T_inv(ot.Point(list(u_pt)))
+            SOL.append({p: float(x_pt[j]) for j, p in enumerate(params_names)})
+        SOL = executer_en_parallele(SOL, min(n_workers, len(a_evaluer)))
+        for k, u_pt in enumerate(a_evaluer):
+            g_k = SOL[k]['g']
+            grad_k = [SOL[k].get('dg_%s' % p, 0.0) for p in params_names]
+            xt_eff.append(np.array(u_pt))
+            xt = np.vstack([xt, [np.array(u_pt)]])
+            yt = np.vstack([yt, [[g_k]]])
+            all_grad = np.vstack([all_grad, [grad_k]])
+            tracer("[EFF HF %d/%d] u=%s  g=%.6f  grad_U=%s"
+                   % (k + 1, len(a_evaluer), list(np.round(u_pt, 4)), g_k,
+                      [round(v, 6) for v in grad_k]))
+        return xt, yt, all_grad, xt_eff
+
+    for u_pt in a_evaluer:
+        g_val, grad_U, _ = evaluer_un_point(np.array(u_pt))
+        xt_eff.append(np.array(u_pt))
+        xt = np.vstack([xt, [np.array(u_pt)]])
+        yt = np.vstack([yt, [[g_val]]])
+        grad_val = np.array([[float(grad_U[i]) for i in range(n_var)]])
+        all_grad = np.vstack([all_grad, grad_val])
+        tracer("[EFF HF] u=%s  g=%.10f  grad_U=%s"
+               % (list(np.round(u_pt, 10)), g_val,
+                  [round(float(grad_U[i]), 10) for i in range(n_var)]))
+
+        # Points virtuels au premier ordre autour du point qui vient d'etre
+        # calcule. MEME formule que `_doe.plan.augmenter_par_taylor`, qui la
+        # fait sur tout le plan a la fois -- seuls les journaux different.
+        # L'egalite numerique des deux est verifiee par `test_106_batch_EFF`
+        # ; les unifier changerait le journal, donc pas aujourd'hui.
+        if taylor and eps_taylor > 0:
+            for i_dim in range(n_var):
+                u_virt = np.array(u_pt) + eps_taylor * np.eye(n_var)[i_dim]
+                y_virt = g_val + eps_taylor * float(grad_U[i_dim])
+                xt = np.vstack([xt, [u_virt]])
+                yt = np.vstack([yt, [[y_virt]]])
+                all_grad = np.vstack([all_grad, grad_val])
+                tracer("[EFF Taylor] u=%s  y_taylor=%.10f  (eps=%s, dim=%d)"
+                       % (list(np.round(u_virt, 10)), y_virt, eps_taylor, i_dim))
+    return xt, yt, all_grad, xt_eff
