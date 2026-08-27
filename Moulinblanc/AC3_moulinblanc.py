@@ -45,6 +45,7 @@ import ajuster as _fit
 import projection as _projection
 import grille as _grille
 import evaluation as _evaluation
+import plan as _plan
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -697,125 +698,82 @@ if __name__ == '__main__':
 
     # --- DOE ---
     def build_DOE(n_doe=n0, eval_hf=True):
+        """Le plan d'experiences initial : n_doe appels solveur.
+
+        Le tirage, le tri des points sans gradient et l'augmentation de Taylor
+        sont dans `_doe/plan.py`. Ne reste ici que l'enchainement, et les
+        caches propres a cette etude.
+        """
         if not do_HF and eval_hf:
             _cached = _load_doe_cache()
             if _cached is not None:
                 return _cached
-        dist_X   = dist_jointe()
-        T     = dist_X.getIsoProbabilisticTransformation()
-        T_inv = dist_X.getInverseIsoProbabilisticTransformation()
-        dist_U = ot.JointDistribution([ot.Uniform(eff_bounds_min[i], eff_bounds_max[i]) for i in range(n_var)])
-        lhs    = ot.LHSExperiment(dist_U, n_doe)
-        sa     = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
-        U_doe  = sa.generate()
+
+        dist_X = dist_jointe()
+        U_doe, X_doe, xt = _plan.tirer_plan_lhs(
+            dist_X, n_doe, eff_bounds_min, eff_bounds_max)
         if print_DOE:
-                print("U_doe_fixed = ot.Sample([")
-                for i in range(U_doe.getSize()):
-                    vals = []
-                    for j in range(U_doe.getDimension()):
-                        v = U_doe[i][j]
-                        vals.append(f' {v:.16f}' if v >= 0 else f'{v:.16f}')
-                    print(f"    [{', '.join(vals)}],")
-                print("])", flush=True)
-        X_doe  = T_inv(U_doe)
-        xt = np.array(U_doe)
-        if not do_HF and eval_hf:
-            SOL = [{} for _ in range(n_doe)]
-            for i in range(n_doe):
-                for j in range(n_var):
-                    SOL[i][params_names[j]] = X_doe[i][j]
+            _plan.tracer_plan(U_doe)
+        if do_HF or not eval_hf:
+            return xt
 
-            # REPRISE D'UN PLAN INTERROMPU. Le cache incremental est ecrit
-            # apres chaque point ; jusqu'au 26/08/2026 il n'etait jamais relu,
-            # et chaque interruption coutait tout le plan -- trois fois dans la
-            # meme journee, ~75 min de solveur a chaque fois.
-            #
-            # `charger_doe_partiel` VERIFIE que le tirage redonne les memes
-            # points avant d'en reprendre un seul : il ne le suppose pas.
-            _repris = None
-            if config_is_identical:
-                _repris = _cache_doe.charger_doe_partiel(
-                    _DOE_CACHE_FILE, n0, signature=_SIG_SOLVEUR, xt_attendu=xt)
-            if _repris is not None:
-                _xt_r, _yt_r, _ag_r, _n_faits = _repris
-                for i in range(_n_faits):
-                    SOL[i]['g'] = float(_yt_r[i][0])
-                    SOL[i]['_u'] = [float(v) for v in _xt_r[i]]
-                    for j, p in enumerate(params_names):
-                        SOL[i][f'dg_{p}'] = float(_ag_r[i][j])
+        SOL = [{params_names[j]: X_doe[i][j] for j in range(n_var)}
+               for i in range(n_doe)]
 
-            if n_workers_DOE and n_workers_DOE > 1:
-                SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
-            else:
-                SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True, with_sens_dict=None)
-            # run_one_SOL a deja converti les gradients en U.
-            #
-            # UN POINT PEUT N'AVOIR AUCUN GRADIENT. Digital Structure rend
-            # alors `Sensitivity = {fy1: None, fy2: None}` -- c'est arrive le
-            # 26/08/2026 sur un point NUMERICAL_ERROR, et le plan partait en
-            # `TypeError: unsupported format string passed to NoneType`, apres
-            # cinq appels au solveur.
-            #
-            # `.get(f'dg_{p}', 0.0)` ne protegeait rien : la clef EXISTE, avec
-            # la valeur None. Le defaut 0.0 n'etait donc jamais utilise -- et
-            # tant mieux, un gradient nul affirmerait que l'etat limite est
-            # plat en ce point, ce que GEPCK ajusterait.
-            _complets = [i for i in range(n_doe)
-                         if all(SOL[i].get(f'dg_{p}') is not None for p in params_names)]
-            _sans = [i for i in range(n_doe) if i not in _complets]
-            if _sans:
-                for i in _sans:
-                    print("  [PLAN] point %d SANS GRADIENT (le solveur n'en rend "
-                          "aucun) u=%s g=%+.6f -- %s"
-                          % (i, [round(float(v), 4) for v in U_doe[i]], SOL[i]['g'],
-                             "ECARTE" if CFG.exclure_points_sans_gradient
-                             else "CONSERVE avec un gradient FABRIQUE a 0"),
-                          flush=True)
-                if CFG.exclure_points_sans_gradient:
-                    print("  [PLAN] %d point(s) ecarte(s) : le plan passe de %d a %d."
-                          % (len(_sans), n_doe, len(_complets)), flush=True)
-                    if not _complets:
-                        raise RuntimeError(
-                            "aucun point du plan d'experiences n'a de gradient : "
-                            "il n'y a rien a ajuster. Verifier que les regions de "
-                            "sensibilite du modele correspondent aux variables.")
-                else:
-                    _complets = list(range(n_doe))
+        # REPRISE D'UN PLAN INTERROMPU. Le cache incremental est ecrit apres
+        # chaque point ; jusqu'au 26/08/2026 il n'etait jamais relu, et chaque
+        # interruption coutait tout le plan -- trois fois dans la meme
+        # journee, ~75 min de solveur a chaque fois.
+        #
+        # `charger_doe_partiel` VERIFIE que le tirage redonne les memes points
+        # avant d'en reprendre un seul : il ne le suppose pas.
+        _repris = None
+        if config_is_identical:
+            _repris = _cache_doe.charger_doe_partiel(
+                _DOE_CACHE_FILE, n0, signature=_SIG_SOLVEUR, xt_attendu=xt)
+        if _repris is not None:
+            _xt_r, _yt_r, _ag_r, _n_faits = _repris
+            for i in range(_n_faits):
+                SOL[i]['g'] = float(_yt_r[i][0])
+                SOL[i]['_u'] = [float(v) for v in _xt_r[i]]
+                for j, p in enumerate(params_names):
+                    SOL[i][f'dg_{p}'] = float(_ag_r[i][j])
 
-            xt = xt[_complets]
-            yt = np.array([SOL[i]['g'] for i in _complets]).reshape(-1, 1)
-            all_grad = np.array([[SOL[i].get(f'dg_{p}') or 0.0 for p in params_names]
-                                 for i in _complets], dtype=float)
-            for i in _complets:
-                _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
-            if print_DOE:
-                print("yt_doe = [")
-                for k in range(len(_complets)):
-                    print(f"    {yt[k][0]:.16f},")
-                print("]", flush=True)
-                print("all_grad_doe = [")
-                for k in range(len(_complets)):
-                    print("    [" + ", ".join(f"{v:.10f}" for v in all_grad[k]) + "],")
-                print("]", flush=True)
-            _save_doe_cache(xt, yt, all_grad)
-            if do_PCK and eps_taylor > 0:
-                _n_real = len(xt)
-                for _i_pt in range(_n_real):
-                    for _i_dim in range(n_var):
-                        _u_virt = xt[_i_pt] + eps_taylor * np.eye(n_var)[_i_dim]
-                        _y_virt = yt[_i_pt, 0] + eps_taylor * all_grad[_i_pt, _i_dim]
-                        xt = np.vstack([xt, [_u_virt]])
-                        yt = np.vstack([yt, [[_y_virt]]])
-                        all_grad = np.vstack([all_grad, [all_grad[_i_pt]]])
-                print(f"  [Taylor DOE] {_n_real} HF + {_n_real * n_var} virtuels = {len(xt)} pts", flush=True)
-            return xt, yt, all_grad
-        return xt
+        if n_workers_DOE and n_workers_DOE > 1:
+            SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
+        else:
+            SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True)
+
+        _complets = _plan.points_avec_gradient(
+            SOL, params_names, U_doe, CFG.exclure_points_sans_gradient)
+
+        xt = xt[_complets]
+        yt = np.array([SOL[i]['g'] for i in _complets]).reshape(-1, 1)
+        # `or 0.0` : le gradient FABRIQUE annonce par `points_avec_gradient`
+        # quand on choisit de conserver un point sans gradient.
+        all_grad = np.array([[SOL[i].get(f'dg_{p}') or 0.0 for p in params_names]
+                             for i in _complets], dtype=float)
+        for i in _complets:
+            _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
+        if print_DOE:
+            print("yt_doe = [")
+            for k in range(len(_complets)):
+                print(f"    {yt[k][0]:.16f},")
+            print("]", flush=True)
+            print("all_grad_doe = [")
+            for k in range(len(_complets)):
+                print("    [" + ", ".join(f"{v:.10f}" for v in all_grad[k]) + "],")
+            print("]", flush=True)
+        _save_doe_cache(xt, yt, all_grad)
+        if do_PCK:
+            xt, yt, all_grad = _plan.augmenter_par_taylor(
+                xt, yt, all_grad, eps_taylor, n_var)
+        return xt, yt, all_grad
 
     def build_starting_points():
-        dist_U = ot.JointDistribution([ot.Uniform(eff_bounds_min[i], eff_bounds_max[i]) for i in range(n_var)])
-        lhs = ot.LHSExperiment(dist_U, n_sp)
-        sa = ot.SimulatedAnnealingLHS(lhs, ot.SpaceFillingMinDist())
-        return np.array(sa.generate())  # shape (n_sp, n_var)
+        """Les points de depart du FORM multimodal. ZERO appel solveur."""
+        return _plan.tirer_points_de_depart(n_sp, eff_bounds_min, eff_bounds_max)
+
 
 
     # --------------------------------------------------------------------------- #

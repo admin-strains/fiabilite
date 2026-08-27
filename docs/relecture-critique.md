@@ -108,7 +108,8 @@ _surrogate/wrappers.py      (existe)    6 classes      193 l.
 _surrogate/ajuster.py       (existe)    9 fonctions    270 l.
 _surrogate/projection.py    (existe)    1 fonction      37 l.
 _doe/evaluation.py          (existe)    1 classe       116 l.
-_doe/ (build_DOE, workers)  A CREER     4 fonctions    216 l.
+_doe/plan.py                (existe)    5 fonctions    137 l.
+_doe/ (workers paralleles)  A CREER     2 fonctions    115 l.
 _etapes/grille.py           (existe)    1 classe       179 l.
 ---------------------------------------------------------------
 RESTE dans l'AC                         7 fonctions    108 l.
@@ -138,10 +139,10 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 334 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 225 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 278 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 183 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **42 / 42** | <= 8 |
-| lignes recopiees a l'identique | 1 861 | **354** | 0 |
+| lignes de fonctions communes aux deux etudes | 1 975 | **1 451** | 0 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
 

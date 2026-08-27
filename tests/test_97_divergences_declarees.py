@@ -178,18 +178,40 @@ def test_chaque_divergence_porte_une_raison():
 # le cliquet : la duplication ne doit que decroitre
 # --------------------------------------------------------------------- #
 def test_la_duplication_ne_REGROSSIT_pas(comparaison):
-    """Le 26/08/2026 : 1 861 lignes identiques sur 1 975 communes. Chaque
-    extraction en retire ; ce plafond descend, il ne remonte jamais."""
-    #: 27/08, apres figurer + wrappers + ajuster + projection + grille :
-    #: 601 -> 449 lignes.
-    PLAFOND = 354
+    """La charge de copie : TOUTES les lignes de fonctions presentes des deux
+    cotes, identiques ou non.
+
+    CE CLIQUET A ETE CORRIGE LE 27/08/2026, ET C'EST INSTRUCTIF
+    ------------------------------------------------------------
+    Il comptait d'abord les lignes IDENTIQUES. Unifier deux copies qui avaient
+    DIVERGE -- ce qui est un progres -- faisait donc REMONTER le chiffre, et
+    le cliquet refusait le commit. Autrement dit : la mesure recompensait la
+    divergence.
+
+    Elle compte desormais la charge de copie totale. Une fonction presente
+    dans les deux scripts coute deux corrections a chaque defaut et deux tests
+    a chaque garantie, qu'elle soit identique ou non -- et si elle differe,
+    elle coute EN PLUS une divergence a trouver. Seule l'extraction fait
+    baisser ce nombre.
+
+    Changer la definition d'un cliquet n'est legitime que dans ce sens-la :
+    quand l'ancienne mesure recompensait le mauvais comportement. Jamais pour
+    faire passer un commit.
+    """
+    #: 26/08 : 1 975 lignes de fonctions communes.
+    #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
+    #: evaluation + plan : 1 451.
+    PLAFOND = 1451
     communes, differentes, A, B = comparaison
+    total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes
                      if "".join(A[n]) == "".join(B[n]))
-    assert identiques <= PLAFOND, (
-        "%d lignes recopiees a l'identique d'une etude a l'autre, au-dela du "
-        "plafond %d. ABAISSER le plafond quand une extraction en retire ; "
-        "jamais le relever." % (identiques, PLAFOND))
+    assert total <= PLAFOND, (
+        "%d lignes de fonctions presentes dans les DEUX etudes (%d identiques, "
+        "%d divergentes), au-dela du plafond %d.\n"
+        "Chacune coute deux corrections par defaut et deux tests par garantie. "
+        "ABAISSER le plafond quand une extraction en retire ; jamais le "
+        "relever." % (total, identiques, total - identiques, PLAFOND))
 
 
 # --------------------------------------------------------------------- #

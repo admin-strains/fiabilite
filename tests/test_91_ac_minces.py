@@ -84,7 +84,9 @@ PROJET = {
 #: 27/08 (suite) : l'appel au solveur -- quatre exemplaires, un par
 #: script x deux fonctions -- devient `_doe/evaluation.py`.
 #: 2421 -> 2334, 43 -> 42 fonctions.
-PLAFOND_LIGNES = 2334
+#: 27/08 (suite) : le tirage du plan, le tri des points sans gradient et
+#: l'augmentation de Taylor partent dans `_doe/plan.py`. 2334 -> 2278.
+PLAFOND_LIGNES = 2278
 PLAFOND_FONCTIONS = 42
 
 
