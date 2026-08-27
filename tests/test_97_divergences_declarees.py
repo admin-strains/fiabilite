@@ -62,10 +62,6 @@ MOULIN = "Moulinblanc/AC3_moulinblanc.py"
 #: Une entree ici est un engagement : quelqu'un a lu les deux versions et a
 #: conclu que l'ecart est voulu. Tout ce qui n'y figure pas est une derive.
 DIVERGENCES_DECLAREES = {
-    "run_EFF":
-        "321 lignes pour 16 de difference, toutes de journalisation : le "
-        "Moulin Blanc suit davantage la convergence. A unifier quand la "
-        "boucle d'enrichissement rejoindra `_reliability/eff.py`.",
     "print_visu":
         "La flexion pure superpose sa solution ANALYTIQUE de reference "
         "(`flexion_claude`) aux planches ; le Moulin Blanc n'en a pas. C'est "
@@ -201,7 +197,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 26/08 : 1 975 lignes de fonctions communes.
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
     #: evaluation + plan : 1 451.
-    PLAFOND = 1273
+    PLAFOND = 1177
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

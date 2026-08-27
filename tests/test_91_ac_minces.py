@@ -92,7 +92,9 @@ PROJET = {
 #: 27/08 (suite) : la grille de points CHOISIS -- 102 lignes identiques
 #: dans les deux etudes, jamais couvertes -- rejoint `_etapes/grille.py`.
 #: 2194 -> 2103.
-PLAFOND_LIGNES = 2103
+#: 27/08 (suite) : le juge FORM+IS et les quatre criteres d'arret sortent
+#: de `run_EFF`, qui passe de 321 a 225 lignes. 2103 -> 2009.
+PLAFOND_LIGNES = 2009
 PLAFOND_FONCTIONS = 42
 
 

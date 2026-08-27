@@ -36,6 +36,8 @@ import doe as _cache_doe
 import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
+import controle as _controle
+import arret as _arret_eff
 import graphiques as _graphiques
 import figurer as _figurer
 # NOM : `ajuster`, pas `fit` -- `_lib/fit.py` (le clone UQLab) porte
@@ -872,99 +874,38 @@ if __name__ == '__main__':
         Cette fonction reçoit le métamodele et ses paramètres, et l'améliore jusqu'à vérifier le critère EFF puis
         renvoie métamodèle+ paramètres mis à jour.
         """
-        # --- Si aucune branche ne tourne, on ne fait rien ---
         global _eff_history_EFF, _eff_history_BB, _eff_history_BS, _eff_history_Pf, _eff_history_beta_IS
+        # --- Si aucune branche ne tourne, on ne fait rien ---
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
         _point_log_phase[0] = "EFF"
 
         xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
 
+        # FORM + tirage d'importance sur le metamodele COURANT : le juge de
+        # l'arret. 80 lignes sont dans `_reliability/controle.py` ; l'etat du
+        # plan (`xt`, `yt`, `all_grad`) leur est PASSE, alors qu'il etait
+        # capture par fermeture -- juste, mais invisible : rien ne disait que
+        # le tirage adaptatif travaillait sur l'etat courant.
+        _controleur = _controle.ControleurFORM(
+            n_var, n_max_FORM, tol_FORM, executer_is=run_IS,
+            adaptatif=(adaptive_is if (_IS_PARALLEL and not do_PCK) else None),
+            cov_cible=cov_IS, n_is=n_IS,
+            K=_IS_K, chunk=_IS_CHUNK, sondes=_IS_PROBE)
+
+        def _etat_courant():
+            return dict(xt=xt, yt=yt, all_grad=all_grad, max_degree=max_degree)
+
         def _form_is_iter(g_ot_i, label, sign=0, fm=None):
-            """FORM depuis [0,0] + IS sur le surrogate courant. Affiche une ligne résumé.
-            sign/fm : si _IS_PARALLEL et fm fourni, l'IS passe par adaptive_is (sonde+ramp-up)
-            au lieu d'OpenTURNS. sign = 0 (g moyen) / +1 (g+2sigma) / -1 (g-2sigma)."""
-            distribution_i = ot.JointDistribution([ot.Normal(0, 1)] * n_var)
-            X_i  = ot.RandomVector(distribution_i)
-            Y_i  = ot.CompositeRandomVector(g_ot_i, X_i)
-            ev_i = ot.ThresholdEvent(Y_i, ot.Less(), 0.0)
-            try:
-                solver_i = ot.AbdoRackwitz()
-                solver_i.setStartingPoint([0.0] * n_var)
-                solver_i.setMaximumIterationNumber(n_max_FORM)
-                solver_i.setCheckStatus(False)
-                solver_i.setMaximumConstraintError(tol_FORM)
-                form_i = ot.FORM(solver_i, ev_i)
-                form_i.run()
-                r_i = form_i.getResult()
-            except Exception as e:
-                print(f"  [{label}] FORM echoue ({type(e).__name__})", flush=True)
-                return None, None
-            beta_f  = r_i.getHasoferReliabilityIndex()
-            pf_f    = r_i.getEventProbability()
-            # --- IS adaptatif parallelisable (sonde + ramp-up) ---
-            if _IS_PARALLEL and fm is not None and not do_PCK:
-                u_star  = list(r_i.getStandardSpaceDesignPoint())
-                _state  = dict(xt=xt, yt=yt, all_grad=all_grad, max_degree=max_degree)
-                _cap    = int(os.environ.get("_IS_CAP", str(n_IS)))
-                _r      = adaptive_is(fm, _state, u_star, sign=sign,
-                                      cov_target=cov_IS, cap_blocks=_cap,
-                                      K=_IS_K, chunk=_IS_CHUNK, probe_blocks=_IS_PROBE)
-                pf_IS   = _r['pf']
-                beta_IS = float(-ot.Normal().computeQuantile(pf_IS)[0]) if pf_IS > 0 else float('nan')
-                print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
-                      f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={_r['cov']:.3f}  [PAR:{_r['mode']}]", flush=True)
-                print(f"  [IS DETAIL PAR] {label} : blocs={_r['n_blocks']} evals~{_r['n_evals']:,} "
-                      f"COV={_r['cov']:.4f} (cible {cov_IS})", flush=True)
-                return beta_IS, pf_IS
-            # --- IS OpenTURNS classique (fallback) ---
-            res_IS  = run_IS([r_i], ev_i)
-            pf_IS   = res_IS.getProbabilityEstimate()
-            beta_IS = float(-ot.Normal().computeQuantile(pf_IS)[0])
-            cov_v   = res_IS.getCoefficientOfVariation()
-            print(f"  [{label}] beta_FORM={beta_f:.4f}  Pf_FORM={pf_f:.3e}"
-                  f" | Pf_IS={pf_IS:.3e}  beta_IS={beta_IS:.4f}  COV={cov_v:.3f}", flush=True)
-            return beta_IS, pf_IS
+            return _controleur.beta_et_pf(g_ot_i, label, sign=sign, fm=fm,
+                                          etat=_etat_courant())
 
         def _three_form_is(g_ot_i, sigma_func_i, label, b_mid_precalc=None):
-            """FORM+IS sur g, g+2sigma, g-2sigma. Affiche les 3 lignes + ratio.
-            b_mid_precalc=(beta_IS, pf_IS) : reutilise le mu deja calcule (evite 1 FORM+IS redondant).
-            Retourne (ratio, pf_mid, pf_sup, pf_inf) ou (None, None, None, None)."""
-            g_sup_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, +1))
-            g_inf_i = ot.Function(BoundSurrogateFunction(g_ot_i, sigma_func_i, -1))
-            _FM = getattr(getattr(sigma_func_i, '__self__', None), 'fm', None)
-            if b_mid_precalc is not None:
-                b_mid, pf_mid = b_mid_precalc
-                print(f"  [{label} mu] reutilise mu conv (pas de recalcul FORM/IS redondant)", flush=True)
-            else:
-                b_mid, pf_mid = _form_is_iter(g_ot_i, f"{label} mu", sign=0, fm=_FM)
-            b_sup, pf_sup = _form_is_iter(g_sup_i, f"{label} sup", sign=+1, fm=_FM)
-            b_inf, pf_inf = _form_is_iter(g_inf_i, f"{label} inf", sign=-1, fm=_FM)
-            if b_mid is not None and b_sup is not None and b_inf is not None and b_mid != 0:
-                ratio = abs(b_sup - b_inf) / abs(b_mid)
-                print(f"  [{label}] |beta_IS_sup - beta_IS_inf| / beta_IS = {ratio:.4f}", flush=True)
-                return ratio, pf_mid, pf_sup, pf_inf
-            return None, None, None, None
+            return _controleur.encadrement(
+                g_ot_i, sigma_func_i, label, BoundSurrogateFunction,
+                etat=_etat_courant(), beta_central=b_mid_precalc)
 
-        # --- FORM+IS sur le DOE initial (avant EFF) ---
-        count_valid_BB   = 0
-        count_valid_BS   = 0
-        count_valid_both = 0
-        # Reprendre les compteurs de convergence depuis l'historique (restart)
-        if restart_enrich_only and _eff_history_BS:
-            for _v in reversed(_eff_history_BS):
-                if _v < tol_BS:
-                    count_valid_BS += 1
-                else:
-                    break
-        if restart_enrich_only and _eff_history_BB:
-            for _v in reversed(_eff_history_BB):
-                if _v < tol_BB:
-                    count_valid_BB += 1
-                else:
-                    break
-        if count_valid_BS > 0 or count_valid_BB > 0:
-            print(f"  [RESTART] compteurs repris : count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}", flush=True)
+
         # --- On résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
         _batch_pts, _eff_val_init = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
         u_opt = ot.Point(_batch_pts[0].tolist())
@@ -976,16 +917,6 @@ if __name__ == '__main__':
         print(f"  EFF initial : EFF(u_opt)={_eff_val_init:.6f}, tol={tol_EFF}", flush=True)
 
         iter_count = 0
-        if EFF_criteria == 'BB':
-            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BB < 3
-        elif EFF_criteria == 'BS':
-            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_BS < 3
-        elif EFF_criteria == 'both':
-            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and count_valid_both < 2
-        elif EFF_criteria == 'at_least_one':
-            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF and not (count_valid_BB >= 3 or count_valid_BS >= 3 or count_valid_both >= 2)
-        else:
-            _cond = lambda: len(xt_eff) < n_max_EFF_points and abs(f(u_opt)[0]) > tol_EFF
 
         _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
         if restart_enrich_only:
@@ -999,16 +930,34 @@ if __name__ == '__main__':
         list_ratio_BB = _eff_history_BB   # alias — même objet
         list_ratio_BS = _eff_history_BS
         list_Pf = _eff_history_Pf
+        # --- Les criteres d'arret : quatre branches de 68 lignes sont dans
+        # --- `_reliability/arret.py`, avec les deux asymetries qu'elles
+        # --- portaient et que personne n'avait ecrites.
+        # Construit APRES la remise a zero des historiques : `_eff_history_BB
+        # = []` rebinde la globale, et un objet capture avant cette ligne
+        # serait abandonne -- les ratios finiraient dans une liste que plus
+        # personne ne lit.
+        _arret = _arret_eff.ArretEFF(
+            EFF_criteria, tol_BB, tol_BS, n_max_EFF_points, tol_EFF,
+            hist_BB=list_ratio_BB, hist_BS=list_ratio_BS)
+        if restart_enrich_only:
+            # N'existait QUE sur le Moulin Blanc : sans elle, une reprise
+            # repartait de zero compteur et repayait jusqu'a deux appels
+            # solveur pour reprouver ce qui l'etait deja.
+            _arret.reprendre_depuis_historique()
+        # La condition de boucle, une fois pour les quatre criteres.
+        _cond = lambda: _arret.continuer(len(xt_eff), f(u_opt)[0])
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         # --- Ratio BB initial (avant tout enrichissement) ---
         if print_Pf:
             _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
             list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
-        if EFF_criteria in ('BB', 'both', 'at_least_one') and print_Pf:
-            list_ratio_BB.append(_ratio_init_bb)
-            if EFF_criteria in ('BB', 'at_least_one') and _ratio_init_bb is not None and _ratio_init_bb < tol_BB:
-                count_valid_BB = 1
+        if print_Pf:
+            # Le ratio BB du plan INITIAL compte deja pour une iteration
+            # valide : un plan qui part convergent ne paie pas trois
+            # iterations pour le prouver.
+            _arret.amorcer(_ratio_init_bb)
 
         while _cond():
             _sigG = sigma_func(u_opt)
@@ -1065,75 +1014,19 @@ if __name__ == '__main__':
             print(f"  [TIMING _form_is_iter] dt={_t_mod.perf_counter()-_t0_is:.2f}s (fm={'oui' if _fm_eff else 'non'})", flush=True)
 
             # --- FORM+IS mid/sup/inf (conditionne par print_Pf) ---
+            _ratio_bb = None
             if print_Pf:
                 _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
                 list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
 
-            # --- Critere BB ---
-            if EFF_criteria == 'BB':
-                if not print_Pf:
-                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
-                if _ratio_bb is not None and _ratio_bb < tol_BB:
-                    count_valid_BB += 1
-                else:
-                    count_valid_BB = 0
-                list_ratio_BB.append(_ratio_bb)
-
-            # --- Critere BS ---
-            if EFF_criteria == 'BS':
-                if _b_mid is not None and list_beta_IS and _b_mid != 0:
-                    _ratio_conv = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
-                    print(f"  [N={len(xt)}] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_conv:.4f}", flush=True)
-                    if _ratio_conv < tol_BS:
-                        count_valid_BS += 1
-                    else:
-                        count_valid_BS = 0
-                    list_ratio_BS.append(_ratio_conv)
-                else:
-                    count_valid_BS = 0
-                    list_ratio_BS.append(None)
-
-            # --- Critere both ---
-            if EFF_criteria == 'both':
-                if not print_Pf:
-                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
-                if _b_mid is not None and list_beta_IS and _b_mid != 0:
-                    _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
-                    print(f"  [N={len(xt)} both] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
-                else:
-                    _ratio_bs = None
-                if (_ratio_bb is not None and _ratio_bb < tol_BB and
-                        _ratio_bs is not None and _ratio_bs < tol_BS):
-                    count_valid_both += 1
-                else:
-                    count_valid_both = 0
-                list_ratio_BB.append(_ratio_bb)
-                list_ratio_BS.append(_ratio_bs)
-
-            # --- Critere at_least_one ---
-            if EFF_criteria == 'at_least_one':
-                if not print_Pf:
-                    _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
-                if _b_mid is not None and list_beta_IS and _b_mid != 0:
-                    _ratio_bs = abs(_b_mid - list_beta_IS[-1]) / abs(_b_mid)
-                    print(f"  [N={len(xt)} alo] |beta_IS - beta_IS_prec| / beta_IS = {_ratio_bs:.4f}", flush=True)
-                else:
-                    _ratio_bs = None
-                if _ratio_bb is not None and _ratio_bb < tol_BB:
-                    count_valid_BB += 1
-                else:
-                    count_valid_BB = 0
-                if _ratio_bs is not None and _ratio_bs < tol_BS:
-                    count_valid_BS += 1
-                else:
-                    count_valid_BS = 0
-                if (_ratio_bb is not None and _ratio_bb < tol_BB and
-                        _ratio_bs is not None and _ratio_bs < tol_BS):
-                    count_valid_both += 1
-                else:
-                    count_valid_both = 0
-                list_ratio_BB.append(_ratio_bb)
-                list_ratio_BS.append(_ratio_bs)
+            # --- Les criteres, en un seul endroit ---
+            if _arret.a_besoin_de_l_encadrement and not print_Pf:
+                _ratio_bb, _, _, _ = _three_form_is(
+                    g_ot, sigma_func, f"N={len(xt)} iter {iter_count}",
+                    b_mid_precalc=(_b_mid, _pf_mid_conv))
+            _arret.enregistrer(_ratio_bb, _b_mid,
+                               list_beta_IS[-1] if list_beta_IS else None,
+                               prefixe=f"N={len(xt)}")
 
             if _b_mid is not None:
                 list_beta_IS.append(_b_mid)
@@ -1171,9 +1064,7 @@ if __name__ == '__main__':
         else:
             print(f"  EFF converge debug : sigmaG=0 (modele interpolant exact au point u_opt)", flush=True)
         _exit_eff = abs(f(u_opt)[0]) <= tol_EFF
-        _exit_bb   = count_valid_BB   >= 3 and EFF_criteria in ('BB', 'at_least_one')
-        _exit_bs   = count_valid_BS   >= 3 and EFF_criteria in ('BS', 'at_least_one')
-        _exit_both = count_valid_both >= 2 and EFF_criteria in ('both', 'at_least_one')
+        _exit_bb, _exit_bs, _exit_both = _arret.raisons()
         if _exit_eff:
             _reason = "EFF"
         elif _exit_bb:
@@ -1185,8 +1076,8 @@ if __name__ == '__main__':
         else:
             _reason = "?"
         print(f"  EFF converge [{_reason}] : EFF(u_opt)={f(u_opt)[0]:.4f}"
-              f"  count_valid_BB={count_valid_BB}  count_valid_BS={count_valid_BS}"
-              f"  count_valid_both={count_valid_both}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
+              f"  count_valid_BB={_arret.n_BB}  count_valid_BS={_arret.n_BS}"
+              f"  count_valid_both={_arret.n_both}  ({len(xt_eff)} point(s) ajoutes)", flush=True)
         _fmt = lambda lst: [round(r, 4) if r is not None else None for r in lst]
         if list_ratio_BB:
             print(f"  [historique ratio BB] {_fmt(list_ratio_BB)}  tol={tol_BB}", flush=True)

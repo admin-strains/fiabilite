@@ -100,6 +100,8 @@ Trois raisons, et la troisieme est deja constatee :
 
 ```
 _reliability/eff.py         (existe)    5 fonctions    401 l.
+_reliability/controle.py    (existe)    1 classe       128 l.
+_reliability/arret.py       (existe)    1 classe       155 l.
 _reliability/form.py        (existe)    7 fonctions     79 l.
 _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
@@ -139,10 +141,11 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 103 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 009 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 009 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **1 900 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **42 / 42** | <= 8 |
-| lignes de fonctions communes aux deux etudes | 1 975 | **1 273** | 0 |
+| lignes de fonctions communes aux deux etudes | 1 975 | **1 177** | 0 |
+| divergences declarees | 6 (trouvees a la main) | **5** (verifiees) | 0 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
 
