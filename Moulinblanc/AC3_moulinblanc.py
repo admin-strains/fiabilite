@@ -781,64 +781,19 @@ if __name__ == '__main__':
         return _eff_ot.eff_function(g_ot, sigma_func, n_var, epsilon_factor)
 
     def _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad):
-        """Trouve n_batch_EFF points EFF par Kriging Believer.
-        Si n_batch_EFF=1 : equivalent a une seule maximisation EFF (pas de KB).
-        Si n_batch_EFF>1 : maximise EFF, impute mu comme observation fictive,
-        refit le surrogate a theta fixe, re-maximise, etc.
-        Retourne la liste des points (list of ndarray) et la valeur EFF du premier."""
-        # --- Premier point : maximisation EFF standard ---
-        f = ot.Function(EFFFunction(g_ot, sigma_func))
-        bounds = ot.Interval(eff_bounds_min, eff_bounds_max)
-        problem = ot.OptimizationProblem(f, ot.Function(), ot.Function(), bounds)
-        problem.setMinimization(False)
-        algo_opti = ot.NLopt(problem, "GN_DIRECT")
-        algo_opti.setStartingPoint([0.0] * n_var)
-        algo_opti.setMaximumCallsNumber(n_NLopt_EFF)
-        algo_opti.run()
-        u1 = np.array(algo_opti.getResult().getOptimalPoint())
-        eff_val = f(ot.Point(u1.tolist()))[0]
-        batch = [u1]
+        """Les points d'enrichissement du prochain tour.
 
-        if n_batch_EFF <= 1:
-            return batch, eff_val
-
-        # --- Points suivants : Kriging Believer ---
-        xt_kb  = np.copy(xt)
-        yt_kb  = np.copy(yt)
-        ag_kb  = np.copy(all_grad)
-        g_kb   = g_ot
-        s_kb   = sigma_func
-        # recuperer le fm du surrogate courant pour fixer theta + polynomes
-        _fm_kb = getattr(getattr(s_kb, '__self__', None), 'fm', None)
-
-        for k in range(1, n_batch_EFF):
-            # impute mu comme observation fictive
-            u_prev = batch[-1]
-            y_fictif = float(g_kb(ot.Point(u_prev.tolist()))[0])
-            xt_kb = np.vstack([xt_kb, [u_prev]])
-            yt_kb = np.vstack([yt_kb, [[y_fictif]]])
-            # gradient fictif = gradient du surrogate
-            if do_GEPCK:
-                grad_fictif = np.array([[float(g_kb.gradient(ot.Point(u_prev.tolist()))[i, 0])
-                                         for i in range(n_var)]])
-            else:
-                grad_fictif = np.zeros((1, n_var))
-            ag_kb = np.vstack([ag_kb, grad_fictif])
-            # refit surrogate a theta fixe + polynomes fixes (KB)
-            g_kb, s_kb, xt_kb, yt_kb, ag_kb = init_g_ot(None, None, xt_kb, yt_kb, ag_kb, fixed_fm=_fm_kb)
-            # re-maximise EFF sur le surrogate believer
-            f_kb = ot.Function(EFFFunction(g_kb, s_kb))
-            problem_kb = ot.OptimizationProblem(f_kb, ot.Function(), ot.Function(), bounds)
-            problem_kb.setMinimization(False)
-            algo_kb = ot.NLopt(problem_kb, "GN_DIRECT")
-            algo_kb.setStartingPoint([0.0] * n_var)
-            algo_kb.setMaximumCallsNumber(n_NLopt_EFF)
-            algo_kb.run()
-            u_k = np.array(algo_kb.getResult().getOptimalPoint())
-            batch.append(u_k)
-            print(f"  [KB {k+1}/{n_batch_EFF}] u={list(np.round(u_k, 3))}  EFF={f_kb(ot.Point(u_k.tolist()))[0]:.6f}", flush=True)
-
-        return batch, eff_val
+        L'algorithme -- maximisation globale du critere, puis Kriging
+        Believer pour en obtenir plusieurs sans appeler le solveur -- est
+        dans `_reliability/eff_ot.py`. Ne restent ici que les reglages de
+        l'etude et le reajustement du metamodele, qui lui appartient.
+        """
+        return _eff_ot.batch_kriging_believer(
+            g_ot, sigma_func, xt, yt, all_grad,
+            n_batch=n_batch_EFF, bornes_min=eff_bounds_min,
+            bornes_max=eff_bounds_max, n_var=n_var, n_appels=n_NLopt_EFF,
+            epsilon_factor=epsilon_factor, reajuster=init_g_ot,
+            gradient_du_surrogate=do_GEPCK)
 
     def run_EFF(g_ot, sigma_func, xt, yt, all_grad):
         """

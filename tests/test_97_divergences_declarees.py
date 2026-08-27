@@ -197,7 +197,10 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 27/08 (suite) : le bilan de fin d'enrichissement rejoint les notions
     #: qu'il rapporte -- la decomposition dans `_reliability/eff.py`, les
     #: compteurs dans `ArretEFF.bilan`. 738 -> 709.
-    PLAFOND = 709
+    #: 27/08 (suite) : le choix des points d'enrichissement (maximisation
+    #: globale + Kriging Believer) part dans `_reliability/eff_ot.py`.
+    #: 709 -> 664.
+    PLAFOND = 664
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

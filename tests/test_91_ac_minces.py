@@ -124,7 +124,10 @@ PROJET = {
 #: 27/08 (suite) : le bilan de fin d'enrichissement -- decomposition du
 #: critere au point d'arret, et ce qui a arrete -- rejoint `_reliability`.
 #: `scipy` disparait des deux etudes par la meme occasion. 1598 -> 1568.
-PLAFOND_LIGNES = 1568
+#: 27/08 (suite) : `_find_batch_EFF_points` (59 l.) devient un appel de 6
+#: lignes -- maximisation globale du critere et Kriging Believer sont dans
+#: `_reliability/eff_ot.py`. 1568 -> 1523.
+PLAFOND_LIGNES = 1523
 PLAFOND_FONCTIONS = 42
 
 
