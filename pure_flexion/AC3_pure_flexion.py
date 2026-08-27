@@ -1289,6 +1289,7 @@ if __name__ == '__main__':
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.
     # --- HF GRID CACHE ---
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
+    _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
     hf_2d_grid_fixed_final = None
 
@@ -1306,6 +1307,9 @@ if __name__ == '__main__':
         bornes=(u1_min, u1_max, u2_min, u2_max),
         fichier_cache=_HF_CACHE_FILE,
         fichier_cache_complet=_HF_FULL_CACHE_FILE,
+        fichier_cache_points=_HF_CUSTOM_CACHE_FILE,
+        evaluer_lot=(lambda pts: run_HF_grid_parallel(pts, n_workers=n_workers_DOE))
+                    if n_workers_DOE and n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
         config_identique=config_is_identical,
         marquer_phase=lambda p: _point_log_phase.__setitem__(0, p))
@@ -1335,111 +1339,16 @@ if __name__ == '__main__':
 
 
 
-    _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
-    _hf_custom_result = [None]   # cache memoire (evite relecture JSON a chaque print)
 
     def _hf_from_custom_points(sd):
-        """Calcule g par run_HF sur les coordonnees hf_custom_points [[u_s, u_fy], ...],
-        puis interpole (griddata) sur une grille reguliere.
-        Cache incremental : sauve apres chaque point, reprend apres crash.
-        Retourne (Z_true, UX_hf, UY_hf) ou (None, None, None) si hf_custom_points est None."""
-        if hf_custom_points is None:
-            return None, None, None
-        if _hf_custom_result[0] is not None:
-            return _hf_custom_result[0]
-        from scipy.interpolate import griddata
-        import time as _time_local
-        idx_x, idx_y, fixed = sd
-        pts = np.array(hf_custom_points)   # (N, 2) : coordonnees U
-        n_total = len(pts)
+        """La surface a partir des points CHOISIS de l'etude.
 
-        # Charger cache final complet (skip tout le calcul)
-        if config_is_identical and os.path.exists(_HF_CUSTOM_CACHE_FILE):
-            try:
-                _dc = json.load(open(_HF_CUSTOM_CACHE_FILE))
-                # La signature manquait : une grille custom calculee sous un
-                # autre solveur, un autre maillage ou d'autres bornes etait
-                # relue telle quelle.
-                if _dc.get('complet') and _dc.get('n_total') == n_total                         and _dc.get('signature') == CFG.signature_grille_hf():
-                    print(f"[HF CUSTOM] cache complet charge ({n_total} pts) -> 0 SOCP", flush=True)
-                    g_arr = np.array(_dc['g_vals'], dtype=float)
-                    _margin = 0.1
-                    _n_interp = 50
-                    ux_hf = np.linspace(pts[:, 0].min() - _margin, pts[:, 0].max() + _margin, _n_interp)
-                    uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
-                    UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-                    Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
-                    _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
-                    return Z_true, UX_hf, UY_hf
-            except Exception:
-                pass
+        Les 102 lignes de cache, reprise et interpolation sont dans
+        `_etapes/grille.py`. `sd` n'a jamais ete lu : la coupe ne joue aucun
+        role, les points portent deja leurs coordonnees.
+        """
+        return _GRILLE.depuis_points_libres(hf_custom_points)
 
-        # Charger cache partiel (reprise)
-        _partial_file = _HF_CUSTOM_CACHE_FILE + '.partial'
-        g_vals = [None] * n_total
-        if config_is_identical and os.path.exists(_partial_file):
-            try:
-                _d = json.load(open(_partial_file))
-                if _d.get('n_total') == n_total                         and _d.get('signature') == CFG.signature_grille_hf():
-                    g_vals = _d['g_vals']
-            except Exception:
-                pass
-        _n_skipped = sum(1 for v in g_vals if v is not None)
-        _n_to_compute = n_total - _n_skipped
-        print(f"[HF CUSTOM] {n_total} points, {_n_skipped} deja calcules, {_n_to_compute} a faire", flush=True)
-
-        # Calculer g sur les points manquants
-        _idx_todo = [i for i in range(n_total) if g_vals[i] is None]
-        if _idx_todo:
-            _pts_todo = [list(pts[i]) for i in _idx_todo]
-            if n_workers_DOE and n_workers_DOE > 1 and len(_pts_todo) > 1:
-                _g_todo = run_HF_grid_parallel(_pts_todo, n_workers=n_workers_DOE)
-            else:
-                _point_log_phase[0] = "HF_CUSTOM"
-                _g_todo = []
-                _t_start = _time_local.perf_counter()
-                for _k, pt in enumerate(_pts_todo):
-                    g_val = run_HF(pt)[0]
-                    _g_todo.append(g_val)
-                    # Save incremental
-                    g_vals[_idx_todo[_k]] = g_val
-                    try:
-                        json.dump({'n_total': n_total, 'g_vals': g_vals,
-                                   'signature': CFG.signature_grille_hf()},
-                                  open(_partial_file, 'w'), indent=1)
-                    except Exception:
-                        pass
-                    _t_elapsed = _time_local.perf_counter() - _t_start
-                    _t_avg = _t_elapsed / (_k + 1)
-                    _t_eta = _t_avg * (len(_pts_todo) - _k - 1)
-                    print(f"  [HF CUSTOM {_n_skipped + _k + 1}/{n_total}]  u=[{pt[0]:+.3f}, {pt[1]:+.3f}]  g={g_val:+.4f}  "
-                          f"ETA={_t_eta/60:.1f}min", flush=True)
-            # Remplir g_vals depuis les resultats (parallele ou sequentiel)
-            for _k, i in enumerate(_idx_todo):
-                if g_vals[i] is None:
-                    g_vals[i] = _g_todo[_k]
-            print(f"[HF CUSTOM] {len(_idx_todo)} points calcules ({_n_skipped} skip)", flush=True)
-
-        # Sauver cache final, supprimer partiel
-        g_arr = np.array(g_vals, dtype=float)
-        try:
-            json.dump({'n_total': n_total, 'pts': pts.tolist(), 'g_vals': g_vals,
-                       'complet': True, 'signature': CFG.signature_grille_hf()},
-                      open(_HF_CUSTOM_CACHE_FILE, 'w'), indent=1)
-            if os.path.exists(_partial_file):
-                os.remove(_partial_file)
-        except Exception:
-            pass
-
-        # Griddata sur grille reguliere adaptee aux bornes des custom points
-        _margin = 0.1
-        _n_interp = 50
-        ux_hf = np.linspace(pts[:, 0].min() - _margin, pts[:, 0].max() + _margin, _n_interp)
-        uy_hf = np.linspace(pts[:, 1].min() - _margin, pts[:, 1].max() + _margin, _n_interp)
-        UX_hf, UY_hf = np.meshgrid(ux_hf, uy_hf)
-        Z_true = griddata(pts, g_arr, (UX_hf, UY_hf), method='linear')
-        _hf_custom_result[0] = (Z_true, UX_hf, UY_hf)
-        return Z_true, UX_hf, UY_hf
 
     def _get_hf_slice(sd, cache_file=None, grid_var_name='hf_2d_grid_fixed'):
         """Z sur une coupe, par la voie la MOINS CHERE disponible.

@@ -244,3 +244,141 @@ def test_le_module_ne_connait_ni_le_modele_ni_la_licence():
                      "STRAINS", "CetSOLV"):
         assert interdit not in src, (
             "grille.py mentionne %r : l'evaluateur lui est PASSE." % interdit)
+
+
+# --------------------------------------------------------------------- #
+# une grille de points CHOISIS plutot qu'un quadrillage
+# --------------------------------------------------------------------- #
+# Un quadrillage regulier depense la moitie de son budget loin de l'etat
+# limite. Quand on sait deja ou il passe, on place les points a la main et on
+# interpole entre eux -- c'est `hf_custom_points`.
+#
+# Ces 102 lignes etaient recopiees a l'identique dans les deux etudes et
+# n'avaient jamais ete couvertes.
+def _grille_points(tmp_path, evaluer, signature="sig-A", evaluer_lot=None):
+    return _grille.Grille(
+        evaluer=evaluer, n_var=2, cote=4, bornes=(-3.0, 3.0, -3.0, 3.0),
+        fichier_cache=str(tmp_path / "hf_grid_cache.json"),
+        fichier_cache_complet=str(tmp_path / "hf_grid_full_cache.json"),
+        fichier_cache_points=str(tmp_path / "hf_custom_cache.json"),
+        evaluer_lot=evaluer_lot,
+        signature=signature, config_identique=True,
+        tracer=lambda _m: None)
+
+
+CHOISIS = [[-1.0, -1.0], [0.0, 0.5], [1.0, -0.5], [2.0, 1.0], [-2.0, 2.0]]
+
+
+def test_sans_points_choisis_rien_n_est_calcule(tmp_path):
+    ev = _Compteur()
+    g = _grille_points(tmp_path, ev)
+    assert g.depuis_points_libres(None) == (None, None, None)
+    assert ev.points == []
+
+
+def test_chaque_point_choisi_coute_un_appel(tmp_path):
+    ev = _Compteur()
+    g = _grille_points(tmp_path, ev)
+    Z, UX, UY = g.depuis_points_libres(CHOISIS)
+    assert len(ev.points) == len(CHOISIS)
+    assert Z.shape == UX.shape == UY.shape
+
+
+def test_le_resultat_est_garde_en_memoire(tmp_path):
+    """Plusieurs figures redemandent le meme fond ; relire le JSON a chaque
+    fois etait le motif du memo d'origine."""
+    ev = _Compteur()
+    g = _grille_points(tmp_path, ev)
+    a = g.depuis_points_libres(CHOISIS)
+    b = g.depuis_points_libres(CHOISIS)
+    assert a is b
+    assert len(ev.points) == len(CHOISIS)
+
+
+def test_un_second_objet_relit_le_cache_sans_rien_payer(tmp_path):
+    _grille_points(tmp_path, _Compteur()).depuis_points_libres(CHOISIS)
+    ev2 = _Compteur()
+    Z, _UX, _UY = _grille_points(tmp_path, ev2).depuis_points_libres(CHOISIS)
+    assert ev2.points == [], "le cache complet doit couter ZERO appel"
+    assert Z is not None
+
+
+def test_le_cache_des_points_choisis_porte_sa_signature(tmp_path):
+    """Il ne la portait pas : une grille calculee sous un autre solveur, un
+    autre maillage ou d'autres bornes etait relue telle quelle."""
+    _grille_points(tmp_path, _Compteur(), signature="cuDSS").depuis_points_libres(CHOISIS)
+    ev2 = _Compteur()
+    _grille_points(tmp_path, ev2, signature="MUMPS").depuis_points_libres(CHOISIS)
+    assert len(ev2.points) == len(CHOISIS), (
+        "un cache d'une AUTRE configuration a ete servi tel quel")
+
+
+def test_une_interruption_ne_perd_pas_les_points_choisis_deja_payes(tmp_path):
+    ev = _Compteur(mourir_apres=3)
+    g = _grille_points(tmp_path, ev)
+    with pytest.raises(KeyboardInterrupt):
+        g.depuis_points_libres(CHOISIS)
+    assert len(ev.points) == 3
+
+    ev2 = _Compteur()
+    g2 = _grille_points(tmp_path, ev2)
+    Z, _UX, _UY = g2.depuis_points_libres(CHOISIS)
+    assert len(ev2.points) == len(CHOISIS) - 3, (
+        "la reprise doit payer les %d points manquants, pas %d"
+        % (len(CHOISIS) - 3, len(ev2.points)))
+    assert Z is not None
+
+
+def test_un_partiel_d_une_autre_configuration_ne_sert_pas(tmp_path):
+    ev = _Compteur(mourir_apres=2)
+    with pytest.raises(KeyboardInterrupt):
+        _grille_points(tmp_path, ev, signature="cuDSS").depuis_points_libres(CHOISIS)
+    ev2 = _Compteur()
+    _grille_points(tmp_path, ev2, signature="MUMPS").depuis_points_libres(CHOISIS)
+    assert len(ev2.points) == len(CHOISIS)
+
+
+def test_l_evaluation_en_lot_est_utilisee_quand_elle_existe(tmp_path):
+    """Le chemin parallele : un seul appel groupe au lieu de N appels."""
+    lots = []
+
+    def en_lot(points):
+        lots.append(list(points))
+        return [float(len(p)) for p in points]
+
+    ev = _Compteur()
+    g = _grille_points(tmp_path, ev, evaluer_lot=en_lot)
+    g.depuis_points_libres(CHOISIS)
+    assert ev.points == [], "l'evaluation point par point a ete utilisee quand meme"
+    assert len(lots) == 1 and len(lots[0]) == len(CHOISIS)
+
+
+def test_la_surface_interpolee_encadre_les_points(tmp_path):
+    """La grille d'interpolation est cadree sur l'enveloppe des points,
+    elargie d'une marge -- sinon les points du bord tombent hors domaine et
+    `griddata` rend des NaN."""
+    g = _grille_points(tmp_path, _Compteur())
+    _Z, UX, UY = g.depuis_points_libres(CHOISIS, marge=0.1, n_interp=20)
+    pts = np.array(CHOISIS)
+    assert UX.min() == pytest.approx(pts[:, 0].min() - 0.1)
+    assert UX.max() == pytest.approx(pts[:, 0].max() + 0.1)
+    assert UY.min() == pytest.approx(pts[:, 1].min() - 0.1)
+    assert UY.max() == pytest.approx(pts[:, 1].max() + 0.1)
+    assert UX.shape == (20, 20)
+
+
+def test_la_grille_d_interpolation_n_est_construite_qu_une_fois():
+    """L'original la construisait DEUX FOIS -- une fois dans la branche
+    « cache complet », une fois a la fin -- avec les memes constantes
+    recopiees."""
+    src = open(os.path.join(_REPO, "_etapes", "grille.py"),
+               encoding="utf-8").read()
+    import ast as _ast
+    assert src.count("griddata(") == 1, "l'interpolation est ecrite deux fois"
+    appels = [n for n in _ast.walk(_ast.parse(src))
+              if isinstance(n, _ast.Call)
+              and isinstance(n.func, _ast.Attribute)
+              and n.func.attr == "_interpoler"]
+    assert len(appels) == 1, (
+        "la grille d'interpolation doit etre construite en UN endroit "
+        "(%d appels a `_interpoler`)" % len(appels))

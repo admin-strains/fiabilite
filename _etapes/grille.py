@@ -34,6 +34,7 @@ sortira du domaine. `verifier_bornes()` le dit tout haut plutot que de
 laisser la surprise pour plus tard.
 """
 
+import json
 import os
 import time
 
@@ -55,6 +56,7 @@ class Grille:
 
     def __init__(self, evaluer, n_var, cote, bornes,
                  fichier_cache, fichier_cache_complet,
+                 fichier_cache_points=None, evaluer_lot=None,
                  signature=None, config_identique=None,
                  marquer_phase=None, tracer=_ecrire):
         self.evaluer = evaluer
@@ -63,6 +65,10 @@ class Grille:
         self.u1_min, self.u1_max, self.u2_min, self.u2_max = bornes
         self.fichier_cache = fichier_cache
         self.fichier_cache_complet = fichier_cache_complet
+        self.fichier_cache_points = fichier_cache_points
+        #: `evaluer_lot(points) -> [g]` -- l'evaluation en parallele, quand
+        #: elle est disponible. None = un point apres l'autre.
+        self.evaluer_lot = evaluer_lot
         self.signature = signature
         self.config_identique = config_identique
         self.marquer_phase = marquer_phase or (lambda _p: None)
@@ -71,6 +77,9 @@ class Grille:
         #: `calculer_complete`, lus par `coupe_depuis_complete`.
         self.complete = None
         self.axes_complets = None
+        #: memo de `depuis_points_libres` : eviter de relire le JSON a chaque
+        #: figure qui redemande le meme fond.
+        self._resultat_points = None
 
     # ------------------------------------------------------------------ #
     # geometrie
@@ -268,3 +277,140 @@ class Grille:
         for idx, val in fixes.items():
             pts[:, idx] = val
         return interp(pts).reshape(self.cote, self.cote)
+
+    # ------------------------------------------------------------------ #
+    # une grille de points CHOISIS, plutot qu'un quadrillage
+    # ------------------------------------------------------------------ #
+    def depuis_points_libres(self, points, marge=0.1, n_interp=50):
+        """La surface a partir d'une liste de points quelconques.
+
+        Un quadrillage regulier depense la moitie de son budget loin de l'etat
+        limite. Quand on sait deja ou il passe -- apres un premier run, ou
+        d'apres un modele analytique -- on peut placer les points a la main et
+        interpoler entre eux. C'est ce que fait `hf_custom_points`.
+
+        Retourne `(Z, UX, UY)` sur une grille reguliere de `n_interp` cotes,
+        cadree sur l'enveloppe des points elargie de `marge`.
+
+        COUT : un appel solveur par point non deja calcule. Le cache partiel
+        est ecrit APRES CHAQUE POINT.
+        """
+        if points is None:
+            return None, None, None
+        if self._resultat_points is not None:
+            return self._resultat_points
+
+        pts = np.array(points)
+        n_total = len(pts)
+
+        g_vals = self._lire_cache_points_complet(n_total)
+        if g_vals is None:
+            g_vals = self._calculer_points_manquants(
+                pts, self._lire_cache_points_partiel(n_total))
+            self._ecrire_cache_points(pts, g_vals, n_total)
+
+        self._resultat_points = self._interpoler(pts, np.array(g_vals, float),
+                                                 marge, n_interp)
+        return self._resultat_points
+
+    # -- les quatre morceaux, separes : la version d'origine les melait, et
+    # -- construisait DEUX FOIS la meme grille d'interpolation.
+    def _lire_cache_points_complet(self, n_total):
+        if not self.config_identique or not self.fichier_cache_points:
+            return None
+        if not os.path.exists(self.fichier_cache_points):
+            return None
+        try:
+            d = json.load(open(self.fichier_cache_points))
+        except Exception:
+            return None
+        # La signature manquait : une grille calculee sous un autre solveur,
+        # un autre maillage ou d'autres bornes etait relue telle quelle.
+        if not (d.get('complet') and d.get('n_total') == n_total
+                and d.get('signature') == self.signature):
+            return None
+        self.tracer("[HF CUSTOM] cache complet charge (%d pts) -> 0 SOCP" % n_total)
+        return d['g_vals']
+
+    def _lire_cache_points_partiel(self, n_total):
+        vide = [None] * n_total
+        if not self.config_identique or not self.fichier_cache_points:
+            return vide
+        partiel = self.fichier_cache_points + '.partial'
+        if not os.path.exists(partiel):
+            return vide
+        try:
+            d = json.load(open(partiel))
+        except Exception:
+            return vide
+        if d.get('n_total') == n_total and d.get('signature') == self.signature:
+            return d['g_vals']
+        return vide
+
+    def _ecrire_cache_points(self, pts, g_vals, n_total):
+        if not self.fichier_cache_points:
+            return
+        try:
+            json.dump({'n_total': n_total, 'pts': pts.tolist(),
+                       'g_vals': g_vals, 'complet': True,
+                       'signature': self.signature},
+                      open(self.fichier_cache_points, 'w'), indent=1)
+            partiel = self.fichier_cache_points + '.partial'
+            if os.path.exists(partiel):
+                os.remove(partiel)
+        except Exception:
+            pass
+
+    def _sauver_partiel_points(self, g_vals, n_total):
+        if not self.fichier_cache_points:
+            return
+        try:
+            json.dump({'n_total': n_total, 'g_vals': g_vals,
+                       'signature': self.signature},
+                      open(self.fichier_cache_points + '.partial', 'w'), indent=1)
+        except Exception:
+            pass
+
+    def _calculer_points_manquants(self, pts, g_vals):
+        n_total = len(pts)
+        a_faire = [i for i in range(n_total) if g_vals[i] is None]
+        n_sautes = n_total - len(a_faire)
+        self.tracer("[HF CUSTOM] %d points, %d deja calcules, %d a faire"
+                    % (n_total, n_sautes, len(a_faire)))
+        if not a_faire:
+            return g_vals
+
+        liste = [list(pts[i]) for i in a_faire]
+        if self.evaluer_lot is not None and len(liste) > 1:
+            for k, valeur in enumerate(self.evaluer_lot(liste)):
+                g_vals[a_faire[k]] = valeur
+        else:
+            self.marquer_phase("HF_CUSTOM")
+            t_debut = time.perf_counter()
+            for k, pt in enumerate(liste):
+                g_val = self.evaluer(pt)[0]
+                g_vals[a_faire[k]] = g_val
+                self._sauver_partiel_points(g_vals, n_total)
+                t_ecoule = time.perf_counter() - t_debut
+                t_eta = (t_ecoule / (k + 1)) * (len(liste) - k - 1)
+                self.tracer("  [HF CUSTOM %d/%d]  u=[%s]  g=%+.4f  ETA=%.1fmin"
+                            % (n_sautes + k + 1, n_total,
+                               ", ".join("%+.3f" % v for v in pt),
+                               g_val, t_eta / 60))
+        self.tracer("[HF CUSTOM] %d points calcules (%d skip)"
+                    % (len(a_faire), n_sautes))
+        return g_vals
+
+    @staticmethod
+    def _interpoler(pts, g_arr, marge, n_interp):
+        """Une surface reguliere a partir de points epars.
+
+        La grille etait construite DEUX FOIS dans la version d'origine -- une
+        fois dans la branche « cache complet », une fois a la fin -- avec les
+        memes constantes recopiees.
+        """
+        from scipy.interpolate import griddata
+        ux = np.linspace(pts[:, 0].min() - marge, pts[:, 0].max() + marge, n_interp)
+        uy = np.linspace(pts[:, 1].min() - marge, pts[:, 1].max() + marge, n_interp)
+        UX, UY = np.meshgrid(ux, uy)
+        return griddata(pts, g_arr, (UX, UY), method='linear'), UX, UY

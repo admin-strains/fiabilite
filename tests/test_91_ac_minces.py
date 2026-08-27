@@ -89,7 +89,10 @@ PROJET = {
 #: 27/08 (suite) : les deux workers paralleles -- 115 lignes recopiees
 #: quatre fois, dans un chemin de code qui n'avait jamais pu s'executer
 #: -- deviennent `_doe/parallele.py`. 2278 -> 2194.
-PLAFOND_LIGNES = 2194
+#: 27/08 (suite) : la grille de points CHOISIS -- 102 lignes identiques
+#: dans les deux etudes, jamais couvertes -- rejoint `_etapes/grille.py`.
+#: 2194 -> 2103.
+PLAFOND_LIGNES = 2103
 PLAFOND_FONCTIONS = 42
 
 

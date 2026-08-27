@@ -554,11 +554,51 @@ def test_le_cache_partiel_de_grille_est_protege_pareil(tmp_path):
 @pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
                                     "pure_flexion/AC3_pure_flexion.py"])
 def test_les_scripts_passent_la_signature_de_grille(script):
+    """Elle etait repassee a chaque appel de cache -- quatre fois par script.
+    Depuis le 27/08/2026, `Grille` la porte en attribut : le script la calcule
+    une fois et la lui confie. Une transmission, mais obligatoire."""
     with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert src.count("signature_grille_hf()") >= 4, (
-        "%s : les quatre delegues HF (save/load, complet/partiel) doivent "
-        "tous passer la signature" % script)
+    assert "signature=CFG.signature_grille_hf()" in src, (
+        "%s : la grille doit recevoir la signature de configuration -- sans "
+        "elle, un cache d'un autre solveur ou d'autres bornes serait relu "
+        "tel quel." % script)
+
+
+def test_aucune_lecture_de_cache_de_grille_n_echappe_a_la_signature():
+    """Le pendant : dans le module, chaque acces au cache doit la porter.
+
+    Une seule lecture sans signature suffirait a rejouer le defaut du
+    26/08/2026 -- un cache partiel calcule a +/- 7,5 sous cuDSS servi comme
+    etant celui du domaine +/- 6 sous MUMPS.
+    """
+    import ast as _ast
+    src = open(os.path.join(_REPO, "_etapes", "grille.py"),
+               encoding="utf-8").read()
+    arbre = _ast.parse(src)
+    manquants = []
+    for n in _ast.walk(arbre):
+        if not isinstance(n, _ast.Call):
+            continue
+        f = n.func
+        if not (isinstance(f, _ast.Attribute)
+                and isinstance(f.value, _ast.Name)
+                and f.value.id == "_cache_hf"):
+            continue
+        if not any(kw.arg == "signature" for kw in n.keywords):
+            manquants.append(f.attr)
+    assert not manquants, (
+        "acces au cache sans signature : %s" % sorted(set(manquants)))
+    # le cache des points CHOISIS est ecrit en clair (JSON maison) : ses
+    # deux ecritures et ses deux lectures doivent porter la signature.
+    assert src.count("'signature': self.signature") == 2, (
+        "les deux ecritures du cache de points choisis (complet et partiel) "
+        "doivent porter la signature (%d trouvees)"
+        % src.count("'signature': self.signature"))
+    assert src.count("d.get('signature') == self.signature") == 2, (
+        "les deux lectures du cache de points choisis doivent VERIFIER la "
+        "signature (%d trouvees)"
+        % src.count("d.get('signature') == self.signature"))
 
 
 # --------------------------------------------------------------------- #
@@ -618,9 +658,9 @@ def test_les_caches_HF_custom_sont_verifies(script):
     # depourvue.
     grille = open(os.path.join(_REPO, "_etapes", "grille.py"),
                   encoding="utf-8").read()
-    assert src.count("signature_grille_hf()") >= 3, (
+    assert "signature=CFG.signature_grille_hf()" in src, (
         "%s : la signature de grille doit etre calculee et transmise au "
-        "module (%d sites)" % (script, src.count("signature_grille_hf()")))
+        "module" % script)
     sans_signature = [l for l in grille.splitlines()
                       if "_cache_hf." in l and "load" in l]
     assert sans_signature, "aucune lecture de cache trouvee dans grille.py"
