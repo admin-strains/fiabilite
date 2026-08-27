@@ -169,6 +169,32 @@ def test_le_nom_de_la_planche_porte_le_nombre_de_points_ajoutes(tmp_path):
 # (`print_3D_HF -> run_HF`) pour expliquer pourquoi ce module existe.
 
 
+def test_la_planche_globale_dessine_une_ligne_par_etape(tmp_path):
+    """Elle montre le RAISONNEMENT de l'algorithme, pas son resultat : le
+    critere designe un point, l'ecart-type s'effondre autour a l'etape
+    suivante, la frontiere se rapproche. Un enrichissement qui tourne en rond
+    s'y lit d'un coup d'oeil."""
+    d = _decor(tmp_path, n_grid=4)
+    Z = np.zeros((4, 4))
+    etapes = [dict(n_pts=5 + k, xt=np.zeros((5 + k, 2)),
+                   xt_eff=[np.array([0.1 * i, 0.1 * i]) for i in range(k)],
+                   Z_eff=Z, Z_sigma=Z, Z_g=Z)
+              for k in range(3)]
+    nom = figurer.planche_globale(d, (0, 1, {}), etapes)
+    assert os.path.isfile(os.path.join(str(tmp_path), nom))
+
+
+def test_la_planche_globale_supporte_une_seule_etape(tmp_path):
+    """Sans point d'enrichissement, `plt.subplots` rend un tableau a une
+    dimension : le reshape qui suit n'est pas cosmetique."""
+    d = _decor(tmp_path, n_grid=4)
+    Z = np.zeros((4, 4))
+    etapes = [dict(n_pts=5, xt=np.zeros((5, 2)), xt_eff=[],
+                   Z_eff=Z, Z_sigma=Z, Z_g=Z)]
+    nom = figurer.planche_globale(d, (0, 1, {}), etapes)
+    assert os.path.isfile(os.path.join(str(tmp_path), nom))
+
+
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_le_script_delegue_le_dessin(script):
     src = open(os.path.join(_REPO, script), encoding="utf-8",
@@ -177,5 +203,7 @@ def test_le_script_delegue_le_dessin(script):
     assert "_figurer.planche_EFF(" in src
     # ce qui reste dans l'etude, c'est le CALCUL sur la coupe, pas le trace
     assert "_batch_mu_sigma(" in src
-    assert "plt.subplots(1, 3" not in src, (
-        "%s dessine encore la planche lui-meme" % script)
+    assert "_figurer.planche_globale(" in src
+    for reste in ("plt.subplots(1, 3", "plt.subplots(n_steps"):
+        assert reste not in src, (
+            "%s dessine encore une planche lui-meme (%s)" % (script, reste))

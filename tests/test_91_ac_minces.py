@@ -102,7 +102,10 @@ PROJET = {
 #: 27/08 (suite) : `print_planche_EFF` (96 l.) devient un calcul de coupe
 #: de 26 lignes ; le dessin part dans `_etapes/figurer.py` avec le decor
 #: commun a toutes les figures. 1982 -> 1919.
-PLAFOND_LIGNES = 1919
+#: 27/08 (suite) : `print_globalplanche_EFF` (103 l.) se scinde en un
+#: reajustement du metamodele (33 l., du calcul, il reste) et un dessin
+#: (parti dans `_etapes/figurer.py`). 1919 -> 1849.
+PLAFOND_LIGNES = 1849
 PLAFOND_FONCTIONS = 42
 
 

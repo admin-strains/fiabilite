@@ -313,3 +313,86 @@ def planche_EFF(decor, coupe, xt, xt_eff, Z_eff, Z_sigma, Z_g,
     plt.close(fig)
     decor.tracer("  [EFF visu] -> %s" % nom)
     return nom
+
+
+# --------------------------------------------------------------------------- #
+# LA PLANCHE GLOBALE : l'enrichissement etape par etape                        #
+# --------------------------------------------------------------------------- #
+def planche_globale(decor, coupe, etapes, fond_hf=None, sous_titre=""):
+    """Une ligne par etape de l'enrichissement, trois vues par ligne.
+
+    C'est la figure qui montre le RAISONNEMENT de l'algorithme, et non son
+    resultat : on y voit le critere EFF designer un point, l'ecart-type
+    s'effondrer autour de lui a l'etape suivante, et la frontiere du
+    metamodele se rapprocher de la vraie. Un enrichissement qui tourne en
+    rond s'y lit d'un coup d'oeil, la ou les chiffres de convergence ne
+    disent que « ca ne bouge plus ».
+
+    `etapes` est une liste de dictionnaires DEJA CALCULES, portant `n_pts`,
+    `xt`, `xt_eff`, `Z_eff`, `Z_sigma` et `Z_g`. Le reajustement du
+    metamodele a chaque etape appartient a l'etude : c'est du calcul.
+
+    ZERO appel solveur.
+    """
+    import matplotlib.pyplot as plt
+
+    idx_x, idx_y, _fixes = coupe
+    UX, UY = decor.maillage()
+    Z_vrai, UX_hf, UY_hf = fond_hf if fond_hf is not None else (None, None, None)
+    xlabel, ylabel, _ = decor.etiquettes(coupe)
+
+    fig, axes = plt.subplots(len(etapes), 3, figsize=(21, 6 * len(etapes)))
+    if len(etapes) == 1:
+        axes = axes.reshape(1, 3)
+
+    for ligne, etape in zip(axes, etapes):
+        ax1, ax2, ax3 = ligne
+        Z_g = etape["Z_g"]
+        xt_k, xt_eff_k = etape["xt"], etape["xt_eff"]
+
+        def _decorer(ax, _Z_g=Z_g, _xt=xt_k, _eff=xt_eff_k):
+            ax.contour(UX, UY, _Z_g, levels=[0], colors="cyan", linewidths=2,
+                       linestyles="--")
+            if Z_vrai is not None:
+                ax.contour(UX_hf, UY_hf, Z_vrai, levels=[0], colors="red",
+                           linewidths=2)
+            ax.scatter(_xt[:, idx_x], _xt[:, idx_y], c="white", s=40, zorder=5,
+                       edgecolors="black", linewidths=0.8)
+            if len(_eff) > 0:
+                ajoutes = np.array(_eff)
+                ax.scatter(ajoutes[:, idx_x], ajoutes[:, idx_y], c="red", s=80,
+                           zorder=6, marker="^")
+                for i, pt in enumerate(ajoutes):
+                    ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]),
+                                textcoords="offset points", xytext=(0, 8),
+                                ha="center", fontsize=8, color="red", zorder=7)
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            decor.cadrer(ax)
+
+        cf1 = ax1.contourf(UX, UY, etape["Z_eff"], levels=20, cmap="viridis",
+                           alpha=0.85)
+        plt.colorbar(cf1, ax=ax1, label="EFF")
+        ax1.set_title("EFF  N=%d  (%d pts EFF)" % (etape["n_pts"], len(xt_eff_k)))
+        _decorer(ax1)
+
+        cf2 = ax2.contourf(UX, UY, etape["Z_sigma"], levels=20, cmap="plasma",
+                           alpha=0.85)
+        plt.colorbar(cf2, ax=ax2, label="sigma")
+        ax2.set_title("sigma  N=%d" % etape["n_pts"])
+        _decorer(ax2)
+
+        cf3 = ax3.contourf(UX, UY, Z_g, levels=20, cmap="RdYlGn", alpha=0.6)
+        plt.colorbar(cf3, ax=ax3, label="g surrogate")
+        ax3.contour(UX, UY, Z_g, levels=[0], colors="blue", linewidths=2)
+        ax3.set_title("g surrogate  N=%d" % etape["n_pts"])
+        _decorer(ax3)
+
+    fig.suptitle("Evolution EFF - %s - %s" % (decor.modele, sous_titre),
+                 fontsize=14, y=1.0)
+    plt.tight_layout()
+    nom = "globalplanche_EFF_%s.png" % decor.horodatage
+    decor.enregistrer(fig, nom, dpi=100)
+    plt.close(fig)
+    decor.tracer("  [GLOBAL PLANCHE] -> %s" % nom)
+    return nom
