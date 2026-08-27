@@ -219,3 +219,27 @@ def charger_doe_partiel(fichier, n0, signature=None, xt_attendu=None, tol=1e-9):
     print("[DOE PARTIEL] %d/%d points repris du cache -> autant de SOCP evites"
           % (n_faits, n0), flush=True)
     return xt[:n_faits], yt[:n_faits], ag[:n_faits], n_faits
+
+
+def greffer_reprise(SOL, repris, params_names):
+    """Verse dans `SOL` les points d'un plan interrompu, deja calcules.
+
+    Le cache incremental est ecrit apres CHAQUE point ; jusqu'au 26/08/2026
+    il n'etait jamais relu, et chaque interruption coutait tout le plan --
+    trois fois dans la meme journee, environ 75 min de solveur a chaque fois.
+
+    `charger_doe_partiel` a deja VERIFIE que le tirage redonne les memes
+    points : cette fonction ne suppose rien, elle recopie.
+
+    `repris = None` -- rien a reprendre -- n'est pas une erreur : c'est le
+    cas courant d'un plan qui demarre. Retourne le nombre de points greffes.
+    """
+    if repris is None:
+        return 0
+    xt_r, yt_r, ag_r, n_faits = repris
+    for i in range(n_faits):
+        SOL[i]["g"] = float(yt_r[i][0])
+        SOL[i]["_u"] = [float(v) for v in xt_r[i]]
+        for j, p in enumerate(params_names):
+            SOL[i]["dg_%s" % p] = float(ag_r[i][j])
+    return n_faits

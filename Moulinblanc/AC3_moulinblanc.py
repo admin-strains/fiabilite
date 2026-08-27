@@ -610,24 +610,15 @@ if __name__ == '__main__':
         SOL = [{params_names[j]: X_doe[i][j] for j in range(n_var)}
                for i in range(n_doe)]
 
-        # REPRISE D'UN PLAN INTERROMPU. Le cache incremental est ecrit apres
-        # chaque point ; jusqu'au 26/08/2026 il n'etait jamais relu, et chaque
-        # interruption coutait tout le plan -- trois fois dans la meme
-        # journee, ~75 min de solveur a chaque fois.
-        #
-        # `charger_doe_partiel` VERIFIE que le tirage redonne les memes points
-        # avant d'en reprendre un seul : il ne le suppose pas.
-        _repris = None
+        # Reprise d'un plan interrompu : la greffe est dans `_cache/doe.py`,
+        # avec ce qu'une interruption coutait avant qu'elle existe.
         if config_is_identical:
-            _repris = _cache_doe.charger_doe_partiel(
-                _DOE_CACHE_FILE, n0, signature=_SIG_SOLVEUR, xt_attendu=xt)
-        if _repris is not None:
-            _xt_r, _yt_r, _ag_r, _n_faits = _repris
-            for i in range(_n_faits):
-                SOL[i]['g'] = float(_yt_r[i][0])
-                SOL[i]['_u'] = [float(v) for v in _xt_r[i]]
-                for j, p in enumerate(params_names):
-                    SOL[i][f'dg_{p}'] = float(_ag_r[i][j])
+            _cache_doe.greffer_reprise(
+                SOL,
+                _cache_doe.charger_doe_partiel(_DOE_CACHE_FILE, n0,
+                                               signature=_SIG_SOLVEUR,
+                                               xt_attendu=xt),
+                params_names)
 
         if n_workers_DOE and n_workers_DOE > 1:
             SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
@@ -636,24 +627,12 @@ if __name__ == '__main__':
 
         _complets = _plan.points_avec_gradient(
             SOL, params_names, U_doe, CFG.exclure_points_sans_gradient)
+        xt, yt, all_grad = _plan.assembler_plan(SOL, _complets, xt, params_names)
 
-        xt = xt[_complets]
-        yt = np.array([SOL[i]['g'] for i in _complets]).reshape(-1, 1)
-        # `or 0.0` : le gradient FABRIQUE annonce par `points_avec_gradient`
-        # quand on choisit de conserver un point sans gradient.
-        all_grad = np.array([[SOL[i].get(f'dg_{p}') or 0.0 for p in params_names]
-                             for i in _complets], dtype=float)
         for i in _complets:
             _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
         if print_DOE:
-            print("yt_doe = [")
-            for k in range(len(_complets)):
-                print(f"    {yt[k][0]:.16f},")
-            print("]", flush=True)
-            print("all_grad_doe = [")
-            for k in range(len(_complets)):
-                print("    [" + ", ".join(f"{v:.10f}" for v in all_grad[k]) + "],")
-            print("]", flush=True)
+            _plan.journaliser_plan(yt, all_grad)
         _save_doe_cache(xt, yt, all_grad)
         if do_PCK:
             xt, yt, all_grad = _plan.augmenter_par_taylor(

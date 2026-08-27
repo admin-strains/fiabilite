@@ -156,3 +156,44 @@ def tirer_points_de_depart(n_sp, bornes_min, bornes_max):
     recuit = ot.SimulatedAnnealingLHS(ot.LHSExperiment(dist_U, n_sp),
                                       ot.SpaceFillingMinDist())
     return np.array(recuit.generate())
+
+
+def assembler_plan(SOL, complets, xt, params_names):
+    """Le plan reduit aux points retenus : `(xt, yt, all_grad)`.
+
+    `complets` vient de `points_avec_gradient` : ce sont les indices des
+    points que l'etude accepte de garder. Les autres sont ecartes ICI, et
+    non plus tard -- un point sans gradient qui reste dans `xt` mais pas
+    dans `all_grad` donnerait deux tableaux de longueurs differentes.
+
+    `or 0.0` porte le gradient FABRIQUE : quand `exclure_points_sans_gradient`
+    est faux, un point sans gradient est conserve avec un gradient nul. Ce
+    zero AFFIRME que l'etat limite est plat -- `points_avec_gradient`
+    l'annonce dans le journal, et c'est un reglage d'etude, pas un defaut
+    silencieux.
+    """
+    yt = np.array([SOL[i]["g"] for i in complets]).reshape(-1, 1)
+    all_grad = np.array([[SOL[i].get("dg_%s" % p) or 0.0 for p in params_names]
+                         for i in complets], dtype=float)
+    return xt[complets], yt, all_grad
+
+
+def journaliser_plan(yt, all_grad, tracer=_ecrire):
+    """Le plan, imprime sous une forme RECOPIABLE en Python.
+
+    Ce n'est pas de la decoration : ces deux tableaux permettent de rejouer
+    une etude -- ajustement, enrichissement, FORM -- sans rappeler le
+    solveur. Sur le Moulin Blanc, un plan de 24 points represente environ
+    trois heures ; les relire d'un journal coute zero.
+
+    D'ou les 16 decimales sur `yt` : tronquer ferait de la copie une
+    approximation, et l'interet est justement de retrouver les memes nombres.
+    """
+    tracer("yt_doe = [")
+    for k in range(len(yt)):
+        tracer("    %.16f," % (yt[k][0],))
+    tracer("]")
+    tracer("all_grad_doe = [")
+    for k in range(len(all_grad)):
+        tracer("    [" + ", ".join("%.10f" % v for v in all_grad[k]) + "],")
+    tracer("]")

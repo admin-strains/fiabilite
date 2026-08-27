@@ -127,7 +127,11 @@ PROJET = {
 #: 27/08 (suite) : `_find_batch_EFF_points` (59 l.) devient un appel de 6
 #: lignes -- maximisation globale du critere et Kriging Believer sont dans
 #: `_reliability/eff_ot.py`. 1568 -> 1523.
-PLAFOND_LIGNES = 1523
+#: 27/08 (suite) : le montage du plan sort de `build_DOE` (72 -> 51 l.).
+#: Ni la greffe d'une reprise ni le plan recopiable ne sont traverses par
+#: la chaine analytique (`config_is_identical` et `print_DOE` y sont faux) :
+#: exerces a part, sur un cache tronque a la main. 1523 -> 1502.
+PLAFOND_LIGNES = 1502
 PLAFOND_FONCTIONS = 42
 
 
