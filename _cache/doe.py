@@ -105,7 +105,13 @@ def save_doe_cache_incremental(fichier, n0, params_names, SOL, n_done, signature
     try:
         _xt = [SOL[i]['_u'] for i in range(n_done)]
         _yt = [[SOL[i]['g']] for i in range(n_done)]
-        _ag = [[SOL[i].get(f'dg_{p}', 0.0) for p in params_names] for i in range(n_done)]
+        # `.get(f'dg_{p}')` SANS defaut : un gradient absent doit ressortir
+        # `null`, jamais 0.0. Un zero fabrique affirmerait que l'etat limite
+        # est plat en ce point, et le metamodele l'ajusterait. Le defaut 0.0
+        # qui figurait ici ne s'est jamais declenche -- la clef existe
+        # toujours, avec la valeur None -- mais il n'attendait qu'une clef
+        # manquante pour mentir.
+        _ag = [[SOL[i].get(f'dg_{p}') for p in params_names] for i in range(n_done)]
         json.dump({"n0": n0, "complet": False, "n_completed": n_done,
                    "signature": signature,
                    "xt": _xt, "yt": _yt, "all_grad": _ag},
@@ -113,3 +119,103 @@ def save_doe_cache_incremental(fichier, n0, params_names, SOL, n_done, signature
         print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
     except Exception as e:
         print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)
+
+
+def charger_doe_partiel(fichier, n0, signature=None, xt_attendu=None, tol=1e-9):
+    """Les points DEJA calcules d'un plan interrompu, ou None.
+
+    LE TROU QUE CETTE FONCTION BOUCHE -- 26/08/2026
+    ------------------------------------------------
+    `save_doe_cache_incremental` ecrit le plan APRES CHAQUE POINT, avec
+    `complet: False`. L'intention de l'auteur est limpide : survivre a une
+    interruption. Mais `load_doe_cache` refuse tout cache incomplet, et jetait
+    donc systematiquement ce filet.
+
+    Le prix, mesure : trois interruptions dans la meme journee, chaque fois
+    pendant le plan, chaque fois ~75 minutes de solveur perdues (5 points a
+    ~15 min sur le Moulin Blanc). Le plan est justement la phase ou la casse
+    arrive -- c'est la que les points les plus extremes sont evalues en
+    premier.
+
+    L'enrichissement, lui, EST protege (`restart_state.json` apres chaque
+    point ajoute), et la grille HF aussi (cache partiel). Le plan etait la
+    seule phase dont le filet etait ecrit puis ignore.
+
+    POURQUOI `xt_attendu` -- on VERIFIE, on ne SUPPOSE PAS
+    ------------------------------------------------------
+    Reutiliser k points suppose que le tirage LHS redonne EXACTEMENT les
+    memes. C'est vrai aujourd'hui : deux process distincts ont produit des
+    coordonnees bit-identiques. Mais cela tient a la graine par defaut
+    d'OpenTURNS, que rien ne garantit dans le temps.
+
+    Passer le tirage courant fait donc CONTROLER la coincidence point par
+    point. Si elle ne tient plus, on recalcule tout et on le DIT -- au lieu de
+    melanger deux plans differents, ce qui ne se verrait nulle part.
+    """
+    if not os.path.exists(fichier):
+        return None
+    try:
+        d = json.load(open(fichier))
+    except Exception as e:
+        print("[DOE PARTIEL] lecture echouee (%s: %s)" % (type(e).__name__, e), flush=True)
+        return None
+
+    if d.get("n0") != n0:
+        print("[DOE PARTIEL] n0 different (cache=%s, courant=%s) -> recalcul complet"
+              % (d.get("n0"), n0), flush=True)
+        return None
+
+    if signature is not None:
+        sig = d.get("signature")
+        if sig is None or sig != signature:
+            ecarts = ([] if sig is None else
+                      ["%s: cache=%r courant=%r" % (k, sig.get(k), v)
+                       for k, v in signature.items() if sig.get(k) != v])
+            print("[DOE PARTIEL] signature %s -> recalcul complet. %s"
+                  % ("absente" if sig is None else "differente",
+                     "; ".join(ecarts) or "(cache anterieur au controle)"), flush=True)
+            return None
+
+    xt = np.asarray(d.get("xt", []), dtype=float)
+    yt = np.asarray(d.get("yt", []), dtype=float)
+    ag = np.asarray(d.get("all_grad", []), dtype=float)
+    n_faits = int(d.get("n_completed", len(xt)))
+    n_faits = max(0, min(n_faits, len(xt), len(yt), len(ag)))
+    if n_faits == 0:
+        return None
+
+    # Un gradient absent est ecrit `null`, et numpy le convertit en NaN SANS
+    # RIEN DIRE (`np.asarray([[None]], dtype=float)` -> `[[nan]]`). Reprendre
+    # tel quel injecterait des NaN dans le metamodele -- exactement la
+    # corruption silencieuse qu'on cherche a eviter.
+    #
+    # On tronque donc au PREMIER point incomplet, pour garder la propriete de
+    # prefixe dont depend la reprise. Le point tronque sera re-evalue, ce qui
+    # rendra aussi son diagnostic `sain` -- et `exclure_points_sans_gradient`
+    # decidera de son sort.
+    fini = np.all(np.isfinite(ag[:n_faits]), axis=1) if n_faits else np.array([], bool)
+    if not np.all(fini):
+        premier = int(np.argmin(fini))
+        print("[DOE PARTIEL] point %d sans gradient dans le cache -> reprise "
+              "tronquee a %d point(s). Les suivants seront re-evalues."
+              % (premier, premier), flush=True)
+        n_faits = premier
+        if n_faits == 0:
+            return None
+
+    if xt_attendu is not None:
+        attendu = np.asarray(xt_attendu, dtype=float)
+        if attendu.shape[1:] != xt.shape[1:]:
+            print("[DOE PARTIEL] dimensions incompatibles -> recalcul complet", flush=True)
+            return None
+        n_faits = min(n_faits, len(attendu))
+        ecart = np.max(np.abs(xt[:n_faits] - attendu[:n_faits])) if n_faits else 0.0
+        if ecart > tol:
+            print("[DOE PARTIEL] le tirage a CHANGE (ecart max %.3e > %.0e) -> "
+                  "recalcul complet. Les points caches ne sont pas ceux qu'on "
+                  "evaluerait." % (ecart, tol), flush=True)
+            return None
+
+    print("[DOE PARTIEL] %d/%d points repris du cache -> autant de SOCP evites"
+          % (n_faits, n0), flush=True)
+    return xt[:n_faits], yt[:n_faits], ag[:n_faits], n_faits

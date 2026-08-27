@@ -25,6 +25,7 @@ import json
 import os
 import sys
 
+import numpy as np
 import pytest
 
 _ICI = os.path.dirname(os.path.abspath(__file__))
@@ -358,3 +359,100 @@ def test_run_HF_leve_et_explique_l_asymetrie(script):
     assert "exclure_points_sans_gradient`." in src or \
            "`exclure_points_sans_gradient`" in src, (
         "%s : le message de run_HF ne renvoie pas au parametre" % script)
+
+
+# --------------------------------------------------------------------- #
+# reprise d'un plan interrompu -- defaut de robustesse du 26/08/2026
+# --------------------------------------------------------------------- #
+def _ecrire_partiel(chemin, n0, xt, yt, ag, n_done, signature=None):
+    with open(chemin, "w") as fh:
+        json.dump({"n0": n0, "complet": False, "n_completed": n_done,
+                   "signature": signature, "xt": xt, "yt": yt,
+                   "all_grad": ag}, fh)
+
+
+_XT3 = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
+_YT3 = [[1.0], [2.0], [3.0]]
+_AG3 = [[0.01, 0.02], [0.03, 0.04], [0.05, 0.06]]
+
+
+def test_un_plan_interrompu_est_repris(tmp_path):
+    """LE defaut : le cache incremental etait ecrit apres chaque point et
+    JAMAIS relu. Trois interruptions dans la journee, ~75 min perdues a
+    chaque fois."""
+    f = str(tmp_path / "doe.json")
+    _ecrire_partiel(f, 5, _XT3, _YT3, _AG3, 3)
+    got = cache_doe.charger_doe_partiel(f, 5, xt_attendu=_XT3)
+    assert got is not None
+    xt, yt, ag, n = got
+    assert n == 3 and len(xt) == 3
+    assert yt[2][0] == 3.0 and ag[2][1] == 0.06
+
+
+def test_la_reprise_VERIFIE_que_le_tirage_n_a_pas_change(tmp_path):
+    """On ne SUPPOSE pas que le LHS redonne les memes points : on controle.
+    Sinon on melangerait deux plans differents, sans trace."""
+    f = str(tmp_path / "doe.json")
+    _ecrire_partiel(f, 5, _XT3, _YT3, _AG3, 3)
+    autre = [[0.1, 0.2], [9.9, 9.9], [0.5, 0.6]]     # 2e point deplace
+    assert cache_doe.charger_doe_partiel(f, 5, xt_attendu=autre) is None
+
+
+def test_la_reprise_respecte_la_signature(tmp_path):
+    f = str(tmp_path / "doe.json")
+    _ecrire_partiel(f, 5, _XT3, _YT3, _AG3, 3,
+                    signature={"solveur_lineaire": "cudss"})
+    assert cache_doe.charger_doe_partiel(
+        f, 5, signature={"solveur_lineaire": "mumps"}, xt_attendu=_XT3) is None
+    assert cache_doe.charger_doe_partiel(
+        f, 5, signature={"solveur_lineaire": "cudss"}, xt_attendu=_XT3) is not None
+
+
+def test_un_gradient_absent_tronque_la_reprise(tmp_path):
+    """`null` devient `nan` SANS RIEN DIRE (`np.asarray([[None]], float)`).
+    Reprendre tel quel injecterait des NaN dans le metamodele."""
+    f = str(tmp_path / "doe.json")
+    ag = [[0.01, 0.02], [None, None], [0.05, 0.06]]
+    _ecrire_partiel(f, 5, _XT3, _YT3, ag, 3)
+    got = cache_doe.charger_doe_partiel(f, 5, xt_attendu=_XT3)
+    assert got is not None
+    _, _, ag_lu, n = got
+    assert n == 1, "la reprise doit s'arreter AVANT le point sans gradient"
+    assert bool(np.all(np.isfinite(ag_lu))), "aucun NaN ne doit ressortir"
+
+
+def test_un_premier_point_sans_gradient_annule_la_reprise(tmp_path):
+    f = str(tmp_path / "doe.json")
+    _ecrire_partiel(f, 5, _XT3, _YT3, [[None, None]] + _AG3[1:], 3)
+    assert cache_doe.charger_doe_partiel(f, 5, xt_attendu=_XT3) is None
+
+
+def test_n0_different_annule_la_reprise(tmp_path):
+    f = str(tmp_path / "doe.json")
+    _ecrire_partiel(f, 5, _XT3, _YT3, _AG3, 3)
+    assert cache_doe.charger_doe_partiel(f, 9, xt_attendu=_XT3) is None
+
+
+def test_l_ecrivain_incremental_ne_fabrique_plus_de_zero(tmp_path):
+    """Le defaut `.get(f'dg_{p}', 0.0)` n'attendait qu'une clef manquante pour
+    ecrire un gradient nul -- qui affirme que l'etat limite est plat."""
+    f = str(tmp_path / "doe.json")
+    SOL = [{"_u": [0.1, 0.2], "g": 1.0},            # AUCUNE clef dg_*
+           {"_u": [0.3, 0.4], "g": 2.0, "dg_fc": 0.03, "dg_fy": 0.04}]
+    cache_doe.save_doe_cache_incremental(f, 5, ["fc", "fy"], SOL, 2)
+    with open(f) as fh:
+        ecrit = json.load(fh)
+    assert ecrit["all_grad"][0] == [None, None], (
+        "une clef absente doit ressortir null, jamais 0.0 : %r"
+        % (ecrit["all_grad"][0],))
+
+
+@pytest.mark.parametrize("script", ["Moulinblanc/AC3_moulinblanc.py",
+                                    "pure_flexion/AC3_pure_flexion.py"])
+def test_le_script_reprend_et_saute_les_points_connus(script):
+    with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "charger_doe_partiel" in src, "%s ne reprend pas un plan interrompu" % script
+    assert "if 'g' in SOL[i]:" in src, (
+        "%s : run_one_SOL doit SAUTER un point deja calcule, sinon la reprise "
+        "ne fait rien gagner" % script)

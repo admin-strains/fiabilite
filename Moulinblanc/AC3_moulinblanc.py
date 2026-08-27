@@ -524,7 +524,15 @@ if __name__ == '__main__':
         dist_X = dist_jointe()
         T = dist_X.getIsoProbabilisticTransformation()
         T_inv = dist_X.getInverseIsoProbabilisticTransformation()
+        _deja = sum(1 for s in SOL if 'g' in s)
+        if _deja:
+            print("  [SOLVEUR] %d/%d point(s) deja connus (cache partiel) : "
+                  "autant de SOCP evites" % (_deja, len(SOL)), flush=True)
         for i in range(len(SOL)):
+            # Un point deja calcule -- repris d'un plan interrompu -- ne doit
+            # pas etre re-evalue : c'est TOUT l'interet de la reprise.
+            if 'g' in SOL[i]:
+                continue
             p_vals = [float(SOL[i][p]) for p in params_names]
             etiquette = _etiquette_socp("SOL", p_vals) if save_history else None
             ev = solveur.evaluer({p: SOL[i][p] for p in params_names},
@@ -856,6 +864,26 @@ if __name__ == '__main__':
             for i in range(n_doe):
                 for j in range(n_var):
                     SOL[i][params_names[j]] = X_doe[i][j]
+
+            # REPRISE D'UN PLAN INTERROMPU. Le cache incremental est ecrit
+            # apres chaque point ; jusqu'au 26/08/2026 il n'etait jamais relu,
+            # et chaque interruption coutait tout le plan -- trois fois dans la
+            # meme journee, ~75 min de solveur a chaque fois.
+            #
+            # `charger_doe_partiel` VERIFIE que le tirage redonne les memes
+            # points avant d'en reprendre un seul : il ne le suppose pas.
+            _repris = None
+            if config_is_identical:
+                _repris = _cache_doe.charger_doe_partiel(
+                    _DOE_CACHE_FILE, n0, signature=_SIG_SOLVEUR, xt_attendu=xt)
+            if _repris is not None:
+                _xt_r, _yt_r, _ag_r, _n_faits = _repris
+                for i in range(_n_faits):
+                    SOL[i]['g'] = float(_yt_r[i][0])
+                    SOL[i]['_u'] = [float(v) for v in _xt_r[i]]
+                    for j, p in enumerate(params_names):
+                        SOL[i][f'dg_{p}'] = float(_ag_r[i][j])
+
             if n_workers_DOE and n_workers_DOE > 1:
                 SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
             else:
