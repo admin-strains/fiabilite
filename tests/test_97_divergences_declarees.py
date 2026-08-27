@@ -186,7 +186,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 26/08 : 1 975 lignes de fonctions communes.
     #: 27/08, apres figurer + wrappers + ajuster + projection + grille +
     #: evaluation + plan : 1 451.
-    PLAFOND = 1139
+    PLAFOND = 1068
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

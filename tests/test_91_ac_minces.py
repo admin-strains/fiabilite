@@ -99,7 +99,10 @@ PROJET = {
 #: 27/08 (suite) : la grille 3D rejoint `_etapes/grille.py`, et la garde
 #: qui evite de calculer la grille HF deux fois entre en service.
 #: 2000 -> 1982.
-PLAFOND_LIGNES = 1982
+#: 27/08 (suite) : `print_planche_EFF` (96 l.) devient un calcul de coupe
+#: de 26 lignes ; le dessin part dans `_etapes/figurer.py` avec le decor
+#: commun a toutes les figures. 1982 -> 1919.
+PLAFOND_LIGNES = 1919
 PLAFOND_FONCTIONS = 42
 
 

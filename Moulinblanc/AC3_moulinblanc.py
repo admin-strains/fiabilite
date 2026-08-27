@@ -1122,6 +1122,13 @@ if __name__ == '__main__':
         eff_bounds_min, eff_bounds_max, CFG.cadre_marge)
 
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
+
+    # Le decor commun a toutes les figures : cadre, resolution, noms, dossier.
+    # Ces sept valeurs etaient capturees par fermeture dans CHAQUE fonction de
+    # trace -- vingt a vingt-cinq variables libres par fonction.
+    _DECOR = _figurer.Decor((_CX0, _CX1, _CY0, _CY1), n_grid, params_names,
+                            modele, out_dir_eff, timestamp)
+
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
     hf_2d_grid_fixed_final = None
@@ -1258,101 +1265,31 @@ if __name__ == '__main__':
         return _get_hf_slice(_sd, _cache, var), UX_hf, UY_hf
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff, fond_hf=None):
-        """Planche 3 graphiques cote a cote : EFF, sigma, g surrogate.
-        Utilise la globale slice_def pour definir la coupe 2D.
+        """Planche 3 vues : critere EFF, ecart-type, etat limite du surrogate.
 
-        `fond_hf` est le fond de contour haute fidelite, DEJA CALCULE :
-        `(Z_true, UX_hf, UY_hf)`, ou None pour tracer sans lui.
+        Le DESSIN est dans `_etapes/figurer.py` ; ce qui reste ici, c'est
+        l'evaluation du metamodele sur la coupe -- du calcul, pas du trace.
 
-        POURQUOI IL EST RECU ET NON CALCULE ICI -- 26/08/2026
-        Cette fonction l'obtenait elle-meme, ce qui lui faisait declencher
-        jusqu'a 225 appels au solveur -- 29 heures sur le Moulin Blanc --
-        sous un nom qui dit « imprime ». C'est ce qui a fait croire que la
-        grille arrivait EN DERNIER dans le run, alors qu'elle passe AVANT
-        l'enrichissement : cet appel-ci precede `run_EFF` d'une ligne.
-        Le cout appartient a l'appelant, qui sait ce qu'il engage.
+        `fond_hf` est recu deja calcule : cette fonction l'obtenait
+        elle-meme, ce qui lui faisait declencher jusqu'a 225 appels au
+        solveur sous un nom qui dit « imprime ».
         """
-        global hf_2d_grid_fixed
         _sd = slice_def if slice_def is not None else (0, 1, {})
-        idx_x, idx_y, fixed = _sd
-        n_added = len(xt_eff)
-
-        # --- Grille commune (coupe 2D dans l'espace n_var-D) ---
-        ux = np.linspace(_CX0, _CX1, n_grid)
-        uy = np.linspace(_CY0, _CY1, n_grid)
-        UX, UY = np.meshgrid(ux, uy)
-        grid = np.zeros((n_grid * n_grid, n_var))
-        grid[:, idx_x] = UX.ravel()
-        grid[:, idx_y] = UY.ravel()
-        for idx, val in fixed.items():
-            grid[:, idx] = val
-
-        # --- Z_eff, Z_sigma, Z_g (batch vectorise via BLAS multi-thread) ---
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grid)
-        Z_eff   = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
+        grille = _DECOR.grille_de_coupe(_sd)
+        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grille)
+        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
         Z_sigma = sigma_grid.reshape(n_grid, n_grid)
-        Z_g     = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
+        Z_g = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
 
-        # --- Contour g=0 HF : RECU, jamais calcule ici ---
-        Z_true, UX_hf, UY_hf = fond_hf if fond_hf is not None else (None, None, None)
+        _theta = ('  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']'
+                  if _eff_history_theta else '')
+        _loo = f'  LOO={_gepck_loo:.3e}' if _gepck_loo is not None else ''
+        _, _, _figees = _DECOR.etiquettes(_sd)
+        _pce = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
+        return _figurer.planche_EFF(_DECOR, _sd, xt, xt_eff, Z_eff, Z_sigma, Z_g,
+                                    fond_hf=fond_hf,
+                                    sous_titre=f'{_theta}{_loo}{_figees}{_pce}')
 
-        # --- Figure ---
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(21, 6))
-        _pce_line   = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
-        _theta_str  = '  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']' if _eff_history_theta else ''
-        _loo_str    = f'  LOO={_gepck_loo:.3e}' if _gepck_loo is not None else ''
-        _fixed_str  = '  ' + '  '.join(f'{params_names[k]}={v:.1f}' for k, v in fixed.items()) if fixed else ''
-        fig.suptitle(f'{modele} - N={len(xt)} pts DOE  ({n_added} ajoutes par EFF){_theta_str}{_loo_str}{_fixed_str}{_pce_line}', fontsize=10)
-
-        _xlabel = f'u_{params_names[idx_x]}'
-        _ylabel = f'u_{params_names[idx_y]}'
-
-        def _decorate(ax):
-            if Z_g is not None:
-                ax.contour(UX, UY, Z_g, levels=[0], colors='cyan', linewidths=2, linestyles='--')
-            if Z_true is not None:
-                ax.contour(UX_hf, UY_hf, Z_true, levels=[0], colors='red', linewidths=2)
-            if xt is not None:
-                ax.scatter(xt[:, idx_x], xt[:, idx_y], c='white', s=40, zorder=5,
-                           edgecolors='black', linewidths=0.8, label='DOE')
-            if n_added > 0:
-                xt_eff_arr = np.array(xt_eff)
-                ax.scatter(xt_eff_arr[:, idx_x], xt_eff_arr[:, idx_y], c='red', s=80, zorder=6,
-                           marker='^', label=f'EFF ({n_added} pts)')
-                for i, pt in enumerate(xt_eff_arr):
-                    ax.annotate(str(i + 1), (pt[idx_x], pt[idx_y]), textcoords='offset points',
-                                xytext=(0, 8), ha='center', fontsize=8, color='red', zorder=7)
-            ax.set_xlabel(_xlabel)
-            ax.set_ylabel(_ylabel)
-            ax.set_xlim(_CX0, _CX1)
-            ax.set_ylim(_CY0, _CY1)
-            ax.legend(loc='best', fontsize=9)
-
-        # --- Ax1 : EFF ---
-        cf1 = ax1.contourf(UX, UY, Z_eff, levels=20, cmap='viridis', alpha=0.85)
-        plt.colorbar(cf1, ax=ax1, label='EFF')
-        ax1.set_title('Critere EFF')
-        _decorate(ax1)
-
-        # --- Ax2 : sigma ---
-        cf2 = ax2.contourf(UX, UY, Z_sigma, levels=20, cmap='plasma', alpha=0.85)
-        plt.colorbar(cf2, ax=ax2, label='sigma (ecart-type surrogate)')
-        ax2.set_title('Ecart-type surrogate (sigma)')
-        _decorate(ax2)
-
-        # --- Ax3 : g surrogate (isocouleurs RdYlGn) ---
-        if Z_g is not None:
-            cf3 = ax3.contourf(UX, UY, Z_g, levels=20, cmap='RdYlGn', alpha=0.6)
-            plt.colorbar(cf3, ax=ax3, label='g surrogate')
-            ax3.contour(UX, UY, Z_g, levels=[0], colors='blue', linewidths=2)
-        ax3.set_title('g surrogate - etat limite')
-        _decorate(ax3)
-
-        plt.tight_layout()
-        fname = f'EFF_{n_added}points_{timestamp}.png'
-        fig.savefig(os.path.join(out_dir_eff, fname), dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"  [EFF visu] -> {fname}", flush=True)
 
     def print_globalplanche_EFF(xt, yt, all_grad, xt_eff, fond_hf=None, fond_hf_final=None):
         """Planche globale EFF : 3 colonnes (EFF, sigma, g) x N lignes (DOE initial + chaque etape EFF).
