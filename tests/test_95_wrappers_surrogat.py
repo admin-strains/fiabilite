@@ -60,11 +60,18 @@ def test_les_enveloppes_ne_sont_plus_definies_dans_l_etude(script):
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
-def test_l_etude_importe_les_enveloppes(script):
+def test_l_etude_n_a_plus_a_connaitre_les_enveloppes(script):
+    """Elles ont d'abord ete importees par l'etude, le temps que le dispatch
+    y reste. Depuis que `construire_surrogate` choisit la famille, l'etude
+    n'a plus a savoir qu'elles existent : elle demande un modele par son nom
+    et recoit une `ot.Function`."""
     with open(os.path.join(_REPO, script), encoding="utf-8",
               errors="replace") as fh:
         src = fh.read()
-    assert "from wrappers import" in src, script
+    assert "from wrappers import" not in src, (
+        "%s connait encore les enveloppes OpenTURNS : le choix de la famille "
+        "appartient a `_surrogate.construire_surrogate`." % script)
+    assert "construire_surrogate(" in src, script
 
 
 def test_les_six_enveloppes_existent():

@@ -52,20 +52,32 @@ FONCTIONS = ("build_Y_aug", "build_metamodel_PCE", "calculate_PCE",
 # --------------------------------------------------------------------- #
 # la divergence est desormais explicite
 # --------------------------------------------------------------------- #
-@pytest.mark.parametrize("script,attendu", [
-    ("pure_flexion/AC3_pure_flexion.py", "theta_min=1.0"),
-    ("Moulinblanc/AC3_moulinblanc.py", "theta_min=0.0"),
+@pytest.mark.parametrize("etude,attendu", [
+    ("studies/pure_flexion.toml", 1.0),
+    ("studies/pure_flexion_analytique.toml", 1.0),
+    ("studies/moulin_blanc.toml", 0.0),
+    ("studies/moulin_blanc_fumee.toml", 0.0),
 ])
-def test_la_borne_de_theta_est_ecrite_a_l_appel(script, attendu):
-    """Chaque etude garde SA valeur historique, mais elle est lisible. Un
-    ecart entre les deux copies ne doit plus pouvoir se cacher dans un corps
-    de fonction duplique."""
+def test_la_borne_de_theta_est_un_reglage_declare(etude, attendu):
+    """Chaque etude garde SA valeur historique, mais c'est desormais un
+    REGLAGE du fichier d'etude, pas un litteral au fond d'une fonction
+    dupliquee -- donc visible dans le resume de configuration d'un run."""
+    sys.path.insert(0, os.path.join(_REPO, "_config"))
+    import schema
+    cfg = schema.charger(os.path.join(_REPO, etude))
+    assert cfg.theta_min_krg == attendu, (
+        "%s : borne inferieure des longueurs de correlation attendue a %s, "
+        "lue %s. A 0, le krigeage peut degenerer et interpoler le bruit ; "
+        "cet ecart entre les deux etudes a vecu cache jusqu'au 27/08/2026."
+        % (etude, attendu, cfg.theta_min_krg))
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_l_etude_ne_code_plus_la_borne_en_dur(script):
     with open(os.path.join(_REPO, script), encoding="utf-8",
               errors="replace") as fh:
         src = fh.read()
-    assert attendu in src, (
-        "%s : la borne inferieure des longueurs de correlation doit rester "
-        "visible a l'appel (%s)." % (script, attendu))
+    assert "THETA_MIN_KRG = CFG.theta_min_krg" in src, script
 
 
 def test_la_borne_n_est_appliquee_que_si_on_le_demande():

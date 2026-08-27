@@ -120,6 +120,13 @@ class Configuration:
     n0: int = 5                      #: taille du plan d'experiences initial
     max_degree: int = 2              #: degre max de la base PCE candidate
     max_of_maxdegree: int = 2        #: plafond autorise sur max_degree
+    #: Borne INFERIEURE des longueurs de correlation du krigeage.
+    #: Elle valait 1,0 dans `AC3_pure_flexion.py` et 0,0 dans
+    #: `AC3_moulinblanc.py`, au fond de deux `build_metamodel_KRG`
+    #: identiques au caractere pres, sans commentaire ni trace. A 0,
+    #: l'optimiseur peut degenerer vers une correlation quasi nulle :
+    #: le krigeage cesse de lisser et interpole le bruit.
+    theta_min_krg: float = 1.0
     q: float = 0.75                  #: tri hyperbolique de la base candidate
     seuil_pce: float = 0.90          #: seuil de validation de l'erreur PCE
     reduc_PLS: int = 0               #: composantes PLS (GEK), 0 = desactive
@@ -542,6 +549,7 @@ CATEGORIES = {
     "eff_bound_min": "etude", "eff_bound_max": "etude",
     "exclure_points_sans_gradient": "etude",
     "modele": "etude", "n0": "etude", "max_degree": "etude", "q": "etude",
+    "theta_min_krg": "etude",
     "do_EFF": "etude", "epsilon_factor": "etude", "tol_EFF": "etude",
     "tol_BB": "etude", "tol_BS": "etude", "EFF_criteria": "etude",
     "n_NLopt_EFF": "etude", "n_max_EFF_points": "etude",

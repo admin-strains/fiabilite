@@ -33,6 +33,8 @@ CE QUE L'EXTRACTION A REVELE
    variables l'etiquette produite est inchangee.
 """
 
+import warnings
+
 import numpy as np
 import openturns as ot
 
@@ -182,3 +184,171 @@ def ajuster_GEK(xt, yt, all_grad, n_comp=2, theta0=1e-2,
            % (list(sm.optimal_theta),
               float(np.sqrt(sm.optimal_par['sigma2']))))
     return sm
+
+
+# --------------------------------------------------------------------------- #
+# LE CHOIX DU METAMODELE                                                       #
+# --------------------------------------------------------------------------- #
+# Ce bloc etait `init_g_ot`, 125 lignes dans le `__main__` des DEUX scripts,
+# identiques au caractere pres. Son nom disait « initialise g_ot » ; elle
+# construisait aussi le plan d'experiences (sept fois la meme ligne cachee, une
+# par branche), ce qui rendait une figure capable de lancer n0 appels solveur.
+# Le plan en est sorti le 27/08 ; voici le reste.
+#
+# TROIS CHOSES QUE LA LECTURE A RENDUES VISIBLES
+# ------------------------------------------------
+# 1. Les branches GEPCK et PCK etaient DEUX FOIS LA MEME, a trois details
+#    pres : la fonction d'ajustement, la forme de `NumberOfPoly` (un entier
+#    d'un cote, un tableau de l'autre) et l'etiquette imprimee. 68 lignes pour
+#    ces trois differences.
+# 2. `g_ot` et `sigma_func` etaient des PARAMETRES d'entree que toutes les
+#    branches ecrasaient : jamais lus, jamais utiles.
+# 3. `xt` ressortait toujours identique a ce qui entrait, et `yt`/`all_grad`
+#    aussi -- sauf en HF pur ou elles devenaient None. Les branches PCKRG et
+#    old_GEPCK faisaient meme `y_hf = yt` puis `yt = y_hf`, un aller-retour
+#    sans effet. Le contrat reel est donc : (metamodele, ecart-type,
+#    diagnostic) en sortie, rien de plus.
+
+import wrappers
+
+
+def _npoly(fm):
+    """Nombre de polynomes retenus.
+
+    `fit_gepck` le rend comme un entier, `fit_pck` comme un tableau a un
+    element. Les deux branches d'origine ecrivaient donc `['NumberOfPoly']` ici
+    et `['NumberOfPoly'][0]` la -- une des trois seules differences entre 68
+    lignes recopiees.
+    """
+    v = fm['NumberOfPoly']
+    return int(v[0]) if np.ndim(v) > 0 else int(v)
+
+
+def _termes_du_chaos(fm):
+    """Etiquette lisible des termes retenus : « +1.2345*H2(u1)*H1(u3) ... »."""
+    idx = fm['idxranking'][0][:_npoly(fm)]
+    indices = fm['AllIndices'][0][np.array(idx), :]
+    beta = np.array(fm['Kriging'][0]['beta']).ravel()
+    return " ".join("%+.4f*%s" % (c, _etiquette_terme(mi))
+                    for mi, c in zip(indices, beta))
+
+
+def _options_pck(fm_precedent, max_degree):
+    """Options d'ajustement PCK/GEPCK.
+
+    `fm_precedent` (le « knowledge-based refit ») fige les polynomes ET le
+    theta du fit precedent : on ne re-optimise pas, on re-resout. C'est ce qui
+    rend abordable un refit a chaque point d'enrichissement.
+    """
+    if fm_precedent is None:
+        return {'Mode': 'optimal',
+                'PCE': {'Degree': list(range(1, max_degree + 1)),
+                        'Method': 'LARS'}}
+    npoly = _npoly(fm_precedent)
+    idx = fm_precedent['idxranking'][0][:npoly]
+    return {'Mode': 'sequential',
+            'PolyIndices': fm_precedent['AllIndices'][0][np.array(idx), :],
+            'PolyTypes': fm_precedent['PolyTypes'],
+            'Kriging': {'Optim': {'Method': 'none',
+                                  'InitialValue': fm_precedent['Kriging'][0]['theta']}}}
+
+
+def _ajuster_pck_ou_gepck(nom, ajusteur, xt, cible, n_var, max_degree,
+                          fixed_fm, tracer):
+    """Le tronc commun de PCK et GEPCK : mise en forme, ajustement silencieux,
+    puis compte rendu.
+
+    Les avertissements sont etouffes pendant l'ajustement seulement : le clone
+    UQLab en emet a chaque essai de degre, et ils noient le journal d'un run
+    d'enrichissement.
+    """
+    marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
+    copula = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
+    opts = _options_pck(fixed_fm, max_degree)
+    tracer("=== %s fit N=%d%s ===" % (nom, len(xt), ' [KB]' if fixed_fm else ''))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fm = ajusteur(xt, cible, opts, marginals, copula)
+    tracer("  LOO=%.4e  n_poly=%d  theta=%s"
+           % (fm['Error'][0]['LOO'], _npoly(fm), fm['Kriging'][0]['theta']))
+    etiquette = _termes_du_chaos(fm)
+    tracer("  %s PCE termes : %s" % (nom, etiquette))
+    return fm, {'pce_label': etiquette,
+                'loo': fm['Error'][0]['LOO'],
+                'theta': list(fm['Kriging'][0]['theta'])}
+
+
+#: Ce qu'un ajustement rapporte quand il n'a rien a raconter.
+_SANS_DIAGNOSTIC = {'pce_label': None, 'loo': None, 'theta': None}
+
+
+def construire_surrogate(modele, xt, yt, all_grad, dist_X, q, max_degree,
+                         fixed_fm=None, borner_theta=False, theta_min=1.0,
+                         evaluer_hf=None, tracer_appels=False, tracer=_ecrire):
+    """Le metamodele demande, et de quoi le juger.
+
+    Retourne `(g_ot, sigma_func, diagnostic)` :
+
+    * `g_ot` -- une `ot.Function` que FORM et le tirage d'importance peuvent
+      propager ;
+    * `sigma_func` -- l'ecart-type de prediction en un point, ou None quand la
+      famille n'en fournit pas ;
+    * `diagnostic` -- `pce_label`, `loo` et `theta`, renseignes par les seules
+      familles qui ajustent un chaos polynomial. C'est ce que l'etude
+      journalise pour suivre la convergence de l'enrichissement.
+
+    `modele` est la chaine de `schema.MODELES`. L'original portait sept
+    booleens dont un seul pouvait etre vrai.
+    """
+    n_var = xt.shape[1]
+
+    if modele == "KRG":
+        g_ot, result = ajuster_KRG(xt, yt, borner_theta=True,
+                                   theta_min=theta_min, tracer=tracer)
+        sigma_func = lambda u: float(np.sqrt(
+            result.getConditionalMarginalVariance(ot.Point(list(u)))))
+        return g_ot, sigma_func, dict(_SANS_DIAGNOSTIC)
+
+    if modele == "GEK":
+        sm = ajuster_GEK(xt, yt, all_grad, tracer=tracer)
+        impl = wrappers.GEKPLSFunction(n_var, sm)
+        return ot.Function(impl), impl._exec_sigma, dict(_SANS_DIAGNOSTIC)
+
+    if modele in ("PCKRG", "old_GEPCK"):
+        # chaos polynomial, puis un second modele sur le RESIDU
+        g_ot_PCE = ajuster_PCE(xt, yt, dist_X, q, max_degree, tracer=tracer)
+        y_PCE, grad_PCE = composante_PCE(xt, g_ot_PCE)
+        yr, grad_r = yt - y_PCE, all_grad - grad_PCE
+        if modele == "PCKRG":
+            gr_ot, result_r = ajuster_KRG(xt, yr, borner_theta=borner_theta,
+                                          theta_min=theta_min, tracer=tracer)
+            sigma_func = lambda u: float(np.sqrt(
+                result_r.getConditionalMarginalVariance(ot.Point(list(u)))))
+            return (ot.Function(wrappers.PCKRGFunction(n_var, g_ot_PCE, gr_ot)),
+                    sigma_func, dict(_SANS_DIAGNOSTIC))
+        smr = ajuster_GEK(xt, yr, grad_r, tracer=tracer)
+        impl = wrappers.oldGEPCKFunction(n_var, g_ot_PCE, smr)
+        return ot.Function(impl), impl._exec_sigma, dict(_SANS_DIAGNOSTIC)
+
+    if modele in ("GEPCK", "PCK"):
+        from api import fit_gepck, fit_pck
+        if modele == "GEPCK":
+            fm, diag = _ajuster_pck_ou_gepck(
+                "GEPCK", fit_gepck, xt, y_augmente(yt, all_grad),
+                n_var, max_degree, fixed_fm, tracer)
+            impl = wrappers.GEPCKFunction(n_var, fm, tracer_appels)
+        else:
+            fm, diag = _ajuster_pck_ou_gepck(
+                "PCK", fit_pck, xt, yt.ravel(),
+                n_var, max_degree, fixed_fm, tracer)
+            impl = wrappers.PCKFunction(n_var, fm, tracer_appels)
+        return ot.Function(impl), impl._exec_sigma, diag
+
+    if modele == "HF":
+        if evaluer_hf is None:
+            raise ValueError("modele='HF' exige un evaluateur d'etat limite "
+                             "(`evaluer_hf`) : c'est LUI qui coute les appels.")
+        return (ot.Function(wrappers.HFFunction(n_var, evaluer_hf)), None,
+                dict(_SANS_DIAGNOSTIC))
+
+    raise ValueError("modele inconnu : %r" % (modele,))

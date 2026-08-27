@@ -29,6 +29,10 @@ storage = 'C:\workspace\storage\admin\Moulin_Blanc'
 # --- metamodele
 modele = "GEPCK"
 max_degree = 2
+# 0,0 -- valeur historique de cette etude, retrouvee le 27/08/2026 au
+# fond de `build_metamodel_KRG`. Elle differait de la flexion pure
+# (1,0) sans que rien ne le signale. Conservee telle quelle.
+theta_min_krg = 0.0
 max_of_maxdegree = 2
 seuil_pce = 0.90
 

@@ -23,16 +23,15 @@ _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_L
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from smt.surrogate_models import GEKPLS
 import re
 from scipy.stats import norm
-import warnings
 from datetime import datetime
-from api import fit_gepck, predict_gepck, fit_pck, predict_pck
-from lois import (
-    loi_fc, loi_fy, loi_F_permanente, loi_F_exploitation,
-    loi_F_intermittente, loi_uni_approx,
-)
+# fit_gepck/fit_pck sont partis avec le dispatch dans
+# `_surrogate/ajuster.py` ; l'etude ne fait plus que PREDIRE.
+from api import predict_gepck, predict_pck
+# Seule `loi_fy` est utilisee ici : les trois autres ne survivaient que
+# par des lignes de PARAM_CONFIG mises en commentaire.
+from lois import loi_fy
 import lois as _lois
 import doe as _cache_doe
 import hf as _cache_hf
@@ -44,8 +43,6 @@ import figurer as _figurer
 # NOM : `ajuster`, pas `fit` -- `_lib/fit.py` (le clone UQLab) porte
 # deja ce nom sur le chemin d'import, et l'aurait eclipse.
 import ajuster as _fit
-from wrappers import (HFFunction, PCKRGFunction, oldGEPCKFunction,
-                      GEPCKFunction, PCKFunction, GEKPLSFunction)
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
 from _parallel_is import adaptive_is
@@ -145,6 +142,10 @@ if __name__ == '__main__':
     do_old_GEPCK = CFG.do_old_GEPCK
     do_GEPCK     = CFG.do_GEPCK
     do_PCK       = CFG.do_PCK
+    #: Borne inferieure des longueurs de correlation du krigeage :
+    #: elle divergeait entre les deux etudes, elle est maintenant
+    #: dans le fichier d'etude (cf. schema.theta_min_krg).
+    THETA_MIN_KRG = CFG.theta_min_krg
 
     # Un worker de DOE parallele travaille sur une copie isolee du modele : son
     # nom lui est impose par le processus pere, pas par le fichier d'etude.
@@ -1012,11 +1013,16 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTIONS POUR FORM                                                         #
     def init_g_ot(g_ot, sigma_func, xt, yt, all_grad, fixed_fm=None):
-        """
-        Cette fonction génère xt, yt, all_grad si xt n'est pas vide puis
-        contruit un metamodele à partir de ces points. Dans le cas HF, elle
-        créé uniquement une fonction OT. Retourne g_ot, sigma_func, xt, yt, all_grad.
-        Si fixed_fm est fourni (refit KB) : theta et polynomes fixes du fit precedent.
+        """Ajuste le metamodele sur le plan courant.
+
+        125 lignes de dispatch sont parties dans `_surrogate/ajuster.py`. Ne
+        reste ici que ce qui appartient a CETTE etude : le journal de
+        convergence de l'enrichissement.
+
+        La signature garde ses cinq entrees et ses cinq sorties parce que cinq
+        appels en dependent, mais trois d'entre elles sont du transport :
+        `xt` ressort toujours identique, `g_ot` et `sigma_func` en entree
+        n'ont jamais ete lus, et `yt`/`all_grad` ne changent qu'en HF pur.
         """
         global _gepck_pce_label, _gepck_loo, _eff_history_theta
         if xt is None:
@@ -1025,117 +1031,22 @@ if __name__ == '__main__':
                 "d'experiences. Appeler build_DOE() chez l'appelant et passer "
                 "xt/yt/all_grad. (Sept branches portaient la meme ligne cachee, "
                 "ce qui rendait une figure capable de lancer n0 appels solveur.)")
-        if do_KRG:
-            g_ot, result = _fit.ajuster_KRG(xt, yt, borner_theta=do_KRG, theta_min=0.0)
-            sigma_func = lambda u: float(np.sqrt(result.getConditionalMarginalVariance(ot.Point(list(u)))))
-
-        elif do_GEK:
-            sm_GEK   = _fit.ajuster_GEK(xt, yt, all_grad)
-            gek_impl = GEKPLSFunction(n_var, sm_GEK)          
-            g_ot     = ot.Function(gek_impl)
-            sigma_func = gek_impl._exec_sigma
-
-        elif do_PCKRG:
-            y_hf, all_grad_hf = yt, all_grad
-            g_ot_PCE = _fit.ajuster_PCE(xt, y_hf, dist_jointe(), q, max_degree)                                                      # on déduit le métamodèle PCE
-            y_PCE, all_grad_PCE = _fit.composante_PCE(xt, g_ot_PCE)                              # on calcule la composante PCE à partir des valeurs hf
-            yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE                                         # on construit le residu
-            gr_ot, result_r = _fit.ajuster_KRG(xt, yr, borner_theta=do_KRG, theta_min=0.0)                                                 # on construit le surrogate sur le residu
-            sigma_func = lambda u: float(np.sqrt(result_r.getConditionalMarginalVariance(ot.Point(list(u)))))  # on calcule sigma_func (locale donc sur surrogate)
-            g_ot = ot.Function(PCKRGFunction(n_var, g_ot_PCE, gr_ot))
-            yt, all_grad = y_hf, all_grad_hf                                                              # on stocke les valeurs hf pour si warmstart
-
-        elif do_old_GEPCK:
-            y_hf, all_grad_hf = yt, all_grad
-            g_ot_PCE = _fit.ajuster_PCE(xt, y_hf, dist_jointe(), q, max_degree)
-            y_PCE, all_grad_PCE = _fit.composante_PCE(xt, g_ot_PCE) 
-            yr, all_grad_r = y_hf-y_PCE, all_grad_hf-all_grad_PCE 
-            smr_GEK = _fit.ajuster_GEK(xt, yr, all_grad_r)
-            gepck_impl = oldGEPCKFunction(n_var, g_ot_PCE, smr_GEK)
-            g_ot  = ot.Function(gepck_impl)
-            sigma_func = gepck_impl._exec_sigma
-            yt, all_grad = y_hf, all_grad_hf
-
-        elif do_GEPCK:
-            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
-            _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-            if fixed_fm is not None:
-                _prev_theta = fixed_fm['Kriging'][0]['theta']
-                _prev_npoly = fixed_fm['NumberOfPoly']
-                _prev_idx   = fixed_fm['idxranking'][0][:_prev_npoly]
-                _prev_poly  = fixed_fm['AllIndices'][0][np.array(_prev_idx), :]
-                _prev_types = fixed_fm['PolyTypes']
-                _opts = {'Mode': 'sequential',
-                         'PolyIndices': _prev_poly,
-                         'PolyTypes': _prev_types,
-                         'Kriging': {'Optim': {'Method': 'none',
-                                               'InitialValue': _prev_theta}}}
-            else:
-                _opts = {'Mode': 'optimal',
-                         'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-            _Y_aug = _fit.y_augmente(yt, all_grad)
-            print(f"=== GEPCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                _fm = fit_gepck(xt, _Y_aug, _opts, _marginals, _copula)
-            print(f"  LOO={_fm['Error'][0]['LOO']:.4e}  n_poly={_fm['NumberOfPoly']}  theta={_fm['Kriging'][0]['theta']}", flush=True)
-            _final_idx   = _fm['idxranking'][0][:_fm['NumberOfPoly']]
-            _sel_indices = _fm['AllIndices'][0][np.array(_final_idx), :]
-            _beta_pce    = np.array(_fm['Kriging'][0]['beta']).ravel()
-            _terms = []
-            for _mi, _coef in zip(_sel_indices, _beta_pce):
-                _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
-                _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
-            print(f"  GEPCK PCE termes : {' '.join(_terms)}", flush=True)
-            _gepck_pce_label = ' '.join(_terms)
-            _gepck_loo       = _fm['Error'][0]['LOO']
-            _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
-            gepck_impl = GEPCKFunction(n_var, _fm, print_gepck_calls)
-            g_ot       = ot.Function(gepck_impl)
-            sigma_func = gepck_impl._exec_sigma
-
-        elif do_PCK:
-            _marginals = [{'Type': 'Gaussian', 'Parameters': [0.0, 1.0]}] * n_var
-            _copula    = {'Type': 'Independent', 'Parameters': np.eye(n_var)}
-            if fixed_fm is not None:
-                _prev_theta = fixed_fm['Kriging'][0]['theta']
-                _prev_npoly = int(fixed_fm['NumberOfPoly'][0])
-                _prev_idx   = fixed_fm['idxranking'][0][:_prev_npoly]
-                _prev_poly  = fixed_fm['AllIndices'][0][np.array(_prev_idx), :]
-                _prev_types = fixed_fm['PolyTypes']
-                _opts = {'Mode': 'sequential',
-                         'PolyIndices': _prev_poly,
-                         'PolyTypes': _prev_types,
-                         'Kriging': {'Optim': {'Method': 'none',
-                                               'InitialValue': _prev_theta}}}
-            else:
-                _opts = {'Mode': 'optimal',
-                         'PCE': {'Degree': list(range(1, max_degree + 1)), 'Method': 'LARS'}}
-            print(f"=== PCK fit N={len(xt)}{' [KB]' if fixed_fm else ''} ===", flush=True)
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                _fm = fit_pck(xt, yt.ravel(), _opts, _marginals, _copula)
-            print(f"  LOO={_fm['Error'][0]['LOO']:.4e}  n_poly={_fm['NumberOfPoly'][0]}  theta={_fm['Kriging'][0]['theta']}", flush=True)
-            _final_idx   = _fm['idxranking'][0][:_fm['NumberOfPoly'][0]]
-            _sel_indices = _fm['AllIndices'][0][np.array(_final_idx), :]
-            _beta_pce    = np.array(_fm['Kriging'][0]['beta']).ravel()
-            _terms = []
-            for _mi, _coef in zip(_sel_indices, _beta_pce):
-                _parts = [f"H{int(_mi[k])}(u{k+1})" for k in range(len(_mi)) if int(_mi[k]) > 0]
-                _terms.append(f"{_coef:+.4f}*{'*'.join(_parts) if _parts else '1'}")
-            print(f"  PCK PCE termes : {' '.join(_terms)}", flush=True)
-            _gepck_pce_label = ' '.join(_terms)
-            _gepck_loo       = _fm['Error'][0]['LOO']
-            _eff_history_theta.append(list(_fm['Kriging'][0]['theta']))
-            pck_impl = PCKFunction(n_var, _fm, print_gepck_calls)
-            g_ot       = ot.Function(pck_impl)
-            sigma_func = pck_impl._exec_sigma
-
-        elif do_HF:
-            g_ot = ot.Function(HFFunction(n_var, run_HF))
+        g_ot, sigma_func, diag = _fit.construire_surrogate(
+            modele, xt, yt, all_grad,
+            dist_X=dist_jointe(), q=q, max_degree=max_degree,
+            fixed_fm=fixed_fm,
+            # borne inferieure des longueurs de correlation : elle DIFFERAIT
+            # entre les deux etudes sans que rien ne le dise.
+            theta_min=THETA_MIN_KRG,
+            evaluer_hf=run_HF, tracer_appels=print_gepck_calls)
+        if diag['pce_label'] is not None:
+            _gepck_pce_label = diag['pce_label']
+            _gepck_loo       = diag['loo']
+            _eff_history_theta.append(diag['theta'])
+        if do_HF:
             yt, all_grad = None, None
-        
         return g_ot, sigma_func, xt, yt, all_grad
+
 
     def init_FORM(g_ot, sigma_func, xt, yt, all_grad):
         """

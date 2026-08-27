@@ -72,7 +72,10 @@ PROJET = {
 #: `_surrogate/wrappers.py`. 2974 -> 2783.
 #: 27/08 (suite) : les cinq ajustements de metamodeles partent dans
 #: `_surrogate/ajuster.py`. 2783 -> 2682, 55 -> 50 fonctions.
-PLAFOND_LIGNES = 2682
+#: 27/08 (suite) : `init_g_ot` (125 l.) devient un appel a
+#: `_surrogate.construire_surrogate`, et le detecteur d'imports morts,
+#: corrige, en trouve six de plus. 2682 -> 2593.
+PLAFOND_LIGNES = 2593
 PLAFOND_FONCTIONS = 50
 
 
@@ -130,10 +133,20 @@ def test_aucun_import_mort(script):
     noms = {}
     for n in ast.walk(arbre):
         if isinstance(n, (ast.Import, ast.ImportFrom)):
-            lignes_import.add(n.lineno)
+            # TOUTE l'etendue, pas seulement la premiere ligne : un
+            # `from x import (a, b, c)` etale sur deux lignes laissait
+            # `b` et `c` se valider
+            # eux-memes, et trois imports morts sont passes au travers
+            # le 27/08/2026.
+            lignes_import.update(range(n.lineno, (n.end_lineno or n.lineno) + 1))
             for a in n.names:
                 noms[(a.asname or a.name).split(".")[0]] = n.lineno
-    corps = [l for i, l in enumerate(src.splitlines(), 1) if i not in lignes_import]
+    # hors lignes d'import ET hors commentaires : une mention dans un
+    # bloc commente n'est pas un usage. `loi_F_permanente` et
+    # `loi_uni_approx` ne survivaient que par un PARAM_CONFIG mis en
+    # commentaire.
+    corps = [l.split("#")[0] for i, l in enumerate(src.splitlines(), 1)
+             if i not in lignes_import]
     texte = "\n".join(corps)
     morts = sorted(nom for nom in noms
                    if not any(nom in ligne for ligne in corps)

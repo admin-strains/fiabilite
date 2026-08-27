@@ -105,8 +105,8 @@ _reliability/graphiques.py  (existe)   16 fonctions    780 l.
 _cache/                     (existe)   10 fonctions     96 l.
 _etapes/figurer.py          (existe)    2 fonctions     74 l.
 _surrogate/wrappers.py      (existe)    6 classes      193 l.
-_surrogate/ajuster.py       (existe)    5 fonctions    104 l.
-_surrogate/ (init_g_ot...)  A CREER     4 fonctions    166 l.
+_surrogate/ajuster.py       (existe)    9 fonctions    270 l.
+_surrogate/wrappers.py      (existe)    6 classes      193 l.
 _doe/                       A CREER     6 fonctions    332 l.
 ---------------------------------------------------------------
 RESTE dans l'AC                         7 fonctions    108 l.
@@ -136,8 +136,8 @@ Le travail s'est arrete a mi-chemin. La phase 0 le termine.
 
 | mesure | 26/08 matin | 27/08 | cible |
 |---|---:|---:|---:|
-| `AC3_pure_flexion.py` | 2 976 l. | **2 682 l.** | <= 250 |
-| `AC3_moulinblanc.py` | 2 998 l. | **2 589 l.** | <= 250 |
+| `AC3_pure_flexion.py` | 2 976 l. | **2 593 l.** | <= 250 |
+| `AC3_moulinblanc.py` | 2 998 l. | **2 500 l.** | <= 250 |
 | fonctions imbriquees | 58 / 60 | **50 / 50** | <= 8 |
 | fonctions `print_*` pouvant appeler le solveur | 7 / 4 | **0 / 0** | 0 |
 | machinerie importee par l'AC | 9 | 4 | 0 |
@@ -201,6 +201,26 @@ exacts.
 Le renommage `fit.py` -> `ajuster.py` n'est pas cosmetique : `_lib/fit.py`
 (le clone UQLab) est sur le meme chemin d'import et se faisait eclipser. Seul
 l'echec de collecte de la suite l'a signale.
+
+Enfin `init_g_ot` elle-meme -- 125 lignes de dispatch -- est devenue
+`construire_surrogate`. Trois choses que la relecture a rendues visibles :
+
+* les branches **GEPCK et PCK etaient deux fois la meme**, a trois details
+  pres (la fonction d'ajustement, la forme de `NumberOfPoly` -- un entier
+  d'un cote, un tableau de l'autre -- et l'etiquette imprimee) : 68 lignes
+  pour trois differences ;
+* `g_ot` et `sigma_func` etaient des **parametres d'entree que toutes les
+  branches ecrasaient** : jamais lus ;
+* `xt` ressortait toujours identique a ce qui entrait, et les branches PCKRG
+  et old_GEPCK faisaient `y_hf = yt` puis `yt = y_hf` -- un aller-retour sans
+  effet. Le contrat reel est `(metamodele, ecart-type, diagnostic)`.
+
+Le detecteur d'imports morts de `test_91` a ete corrige au passage : il ne
+regardait que la PREMIERE ligne d'un import, si bien qu'un
+`from x import (a,` / ` b, c)` laissait `b` et `c` **se valider eux-memes** ;
+et il comptait une mention en commentaire comme un usage. Corrige, il a
+trouve **six imports morts de plus** -- dont trois lois qui ne survivaient
+que par des lignes de `PARAM_CONFIG` mises en commentaire.
 
 ### Ordre d'extraction (du moins risque au plus risque)
 
