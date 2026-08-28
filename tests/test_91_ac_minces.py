@@ -150,8 +150,16 @@ PROJET = {
 #: s'il est du, les compteurs -- rejoint `ControleurFORM.mesurer_iteration`.
 #: La decision de payer l'encadrement s'ecrivait en deux `if` qui se
 #: recouvraient ; c'est un `or`. 1477 -> 1460.
-PLAFOND_LIGNES = 1460
-PLAFOND_FONCTIONS = 39
+#: 28/08 (suite) : la preparation de l'enrichissement -- vider les
+#: historiques EN PLACE, construire l'objet d'arret dessus, reprendre les
+#: compteurs -- devient `ArretEFF.pour_un_run` ; l'amorce du plan initial
+#: rejoint `ControleurFORM`. 1460 -> 1445.
+#: 28/08 (suite) : le journal des points -- une ligne JSON par appel
+#: solveur -- etait tenu en HUIT endroits : une fonction recopiee, deux
+#: etats globaux en listes d'un element, deux ecritures directes. Il
+#: devient `_cache/journal_points.JournalDesPoints`. 1445 -> 1428.
+PLAFOND_LIGNES = 1428
+PLAFOND_FONCTIONS = 38
 
 
 def _imports_tiers(chemin):

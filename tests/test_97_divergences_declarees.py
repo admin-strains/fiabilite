@@ -216,7 +216,8 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: l'encadrement -- rejoint `ControleurFORM`. 615 -> 598.
     #: 28/08 (suite) : preparation des historiques et amorce du plan
     #: initial. 598 -> 583.
-    PLAFOND = 583
+    #: 28/08 (suite) : le journal des points devient un objet. 583 -> 569.
+    PLAFOND = 569
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

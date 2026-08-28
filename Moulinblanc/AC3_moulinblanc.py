@@ -32,6 +32,7 @@ from api import predict_gepck, predict_pck
 from lois import loi_fy
 import lois as _lois
 import doe as _cache_doe
+import journal_points as _journal_points
 import reprise as _reprise
 import eff as _eff
 import eff_ot as _eff_ot
@@ -320,8 +321,6 @@ if __name__ == '__main__':
     _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
     _fosm = [None]     # l'objet ErreurFOSM, construit au premier usage
-    _point_log_phase   = ["?"]  # phase courante pour le log incremental (HF/EFF/USTAR ; DOE logue a part)
-    _point_log_round   = [0]    # round de re-enrichissement (0 = run initial)
     _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
     _enrich_round     = 0       # 0 = run initial, k = k-ieme reprise
     _round_sizes_prev = []      # taille de chaque round precedent (charge du dump)
@@ -455,8 +454,7 @@ if __name__ == '__main__':
                 params_names=params_names,
                 exclure_non_converges=CFG.exclure_points_non_converges,
                 archiver=save_history,
-                journaliser=lambda u, x, g: _append_point_log(
-                    _point_log_phase[0], u, x, g),
+                journaliser=_JOURNAL.enregistrer,
                 sauver_partiel=_save_doe_cache_incremental)
         return _evaluateur[0]
 
@@ -569,21 +567,9 @@ if __name__ == '__main__':
             result_IS=result_IS)
 
     # --- LOG INCREMENTAL PAR POINT ---
-    _POINT_LOG_FILE = os.path.join(_path_ds, "points_log.jsonl")
-    def _append_point_log(phase, u, x, g):
-        try:
-            _u = list(u) if u is not None else []
-            _x = list(x) if x is not None else []
-            rec = {"phase": phase, "round": _point_log_round[0],
-                   "g": None if g is None else float(g),
-                   "lambda": None if g is None else float(g) + 1.0}
-            for i, p in enumerate(params_names):
-                rec[f"u_{p}"] = float(_u[i]) if i < len(_u) else None
-                rec[f"x_{p}"] = float(_x[i]) if i < len(_x) else None
-            with open(_POINT_LOG_FILE, "a") as _pf:
-                _pf.write(json.dumps(rec) + "\n")
-        except Exception as e:
-            print(f"[POINT LOG] append echoue ({type(e).__name__}: {e})", flush=True)
+    # Une ligne JSON par appel solveur : `_cache/journal_points.py`.
+    _JOURNAL = _journal_points.JournalDesPoints(
+        _journal_points.fichier_de(_path_ds), params_names)
 
     # --- DOE ---
     def build_DOE(n_doe=n0, eval_hf=True):
@@ -629,7 +615,8 @@ if __name__ == '__main__':
         xt, yt, all_grad = _plan.assembler_plan(SOL, _complets, xt, params_names)
 
         for i in _complets:
-            _append_point_log("DOE", list(U_doe[i]), list(X_doe[i]), SOL[i]['g'])
+            _JOURNAL.enregistrer(list(U_doe[i]), list(X_doe[i]),
+                                 SOL[i]['g'], phase="DOE")
         if print_DOE:
             _plan.journaliser_plan(yt, all_grad)
         _save_doe_cache(xt, yt, all_grad)
@@ -780,7 +767,7 @@ if __name__ == '__main__':
         # --- Si aucune branche ne tourne, on ne fait rien ---
         if g_ot is None or do_HF:
             return g_ot, sigma_func, xt, yt, all_grad, []
-        _point_log_phase[0] = "EFF"
+        _JOURNAL.marquer("EFF")
 
         xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
 
@@ -954,7 +941,7 @@ if __name__ == '__main__':
                     if n_workers_DOE and n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
         config_identique=config_is_identical,
-        marquer_phase=lambda p: _point_log_phase.__setitem__(0, p))
+        marquer_phase=_JOURNAL.marquer)
 
 
 
@@ -1075,7 +1062,7 @@ if __name__ == '__main__':
         """
         if g_ot is None:
             return None
-        _point_log_phase[0] = "USTAR"
+        _JOURNAL.marquer("USTAR")
         if _fosm[0] is None:
             _fosm[0] = _controle.ErreurFOSM(run_HF, params_names)
         return _fosm[0].mesurer(best_result)
@@ -1185,10 +1172,7 @@ if __name__ == '__main__':
         _eff_history_beta_IS = _h["beta_IS"]
         _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
         _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
-        _point_log_round[0] = _enrich_round
-        with open(_POINT_LOG_FILE, "a") as _pf:
-            _pf.write(json.dumps({"phase": "_RESTART", "round": _enrich_round,
-                                  "n_total": int(len(xt)), "n_eff": len(_restart_xt_eff)}) + "\n")
+        _JOURNAL.marquer_reprise(_enrich_round, len(xt), len(_restart_xt_eff))
         print(f"[RESTART] charge {len(xt)} pts (dont {len(_restart_xt_eff)} EFF) "
               f"depuis {_RESTART_STATE_FILE} (round {_enrich_round})", flush=True)
 
@@ -1197,8 +1181,7 @@ if __name__ == '__main__':
         xt_eff = list(_restart_xt_eff)   # survit sans enrichissement : test_111
     else:
         # --- Reset log incremental ---
-        open(_POINT_LOG_FILE, "w").close()
-        print(f"[POINT LOG] reset -> {_POINT_LOG_FILE}", flush=True)
+        _JOURNAL.reinitialiser()
 
         # max_degree fixe (LARS gere P > N)
         event, g_ot, sigma_func, xt, yt, all_grad = [None] * 6
@@ -1281,12 +1264,12 @@ if __name__ == '__main__':
         sys.exit(1)
     if len(modes)>1:
         print('On a trouvé plus de 1 mode! Les résultats du mode 2 sont:')
-        _point_log_phase[0] = "USTAR"
+        _JOURNAL.marquer("USTAR")
         _figurer.resume_FORM(modes[1], dist_jointe(), params_names)
         if CFG.erreur_fosm:
             erreur_FOSM(modes[1], g_ot)
         print('Les résultats du mode 1 sont : ')
-    _point_log_phase[0] = "USTAR"
+    _JOURNAL.marquer("USTAR")
     _figurer.resume_FORM(best_result, dist_jointe(), params_names)
     if CFG.erreur_fosm:
         erreur_FOSM(best_result, g_ot)
