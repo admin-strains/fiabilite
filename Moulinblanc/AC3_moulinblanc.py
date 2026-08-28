@@ -846,13 +846,14 @@ if __name__ == '__main__':
             _arret.reprendre_depuis_historique()
         # La condition de boucle, une fois pour les quatre criteres.
         _cond = lambda: _arret.continuer(len(xt_eff), f(u_opt)[0])
+        # Lu APRES la boucle, meme si elle ne tourne jamais : `test_113`.
+        _ratio_bb = None
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
         # --- Ratio BB initial (avant tout enrichissement) ---
         if print_Pf:
             _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
             list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
-        if print_Pf:
             # Le ratio BB du plan INITIAL compte deja pour une iteration
             # valide : un plan qui part convergent ne paie pas trois
             # iterations pour le prouver.
@@ -926,12 +927,11 @@ if __name__ == '__main__':
         _arret.bilan(f(u_opt)[0], len(xt_eff))
 
         # --- BB informatif final (1 appel _three_form_is apres la boucle) ---
-        if print_Pf:
-            # _ratio_bb deja calcule par le dernier _three_form_is dans la boucle
-            print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
-        else:
+        # Avec `print_Pf`, le ratio vient du dernier `_three_form_is` de la
+        # boucle ; sans lui, il faut le payer une fois de plus.
+        if not print_Pf:
             _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, "BB final", b_mid_precalc=(_b_mid, _pf_mid_conv))
-            print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
+        print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
 
         _eff_history_beta_IS = list(list_beta_IS)
         return g_ot, sigma_func, xt, yt, all_grad, xt_eff
