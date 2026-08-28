@@ -382,3 +382,146 @@ def test_la_grille_d_interpolation_n_est_construite_qu_une_fois():
     assert len(appels) == 1, (
         "la grille d'interpolation doit etre construite en UN endroit "
         "(%d appels a `_interpoler`)" % len(appels))
+
+
+# --------------------------------------------------------------------- #
+# LE CACHE DES POINTS CHOISIS VERIFIE SES POINTS (28/08/2026)
+#
+# Meme defaut que celui ferme le 26/08 sur le cache du plan d'experiences,
+# et meme remede -- il n'avait pas ete porte ici. `hf_custom_points` existe
+# pour placer les points a la main la ou l'on sait que l'etat limite passe :
+# les DEPLACER est l'usage normal. Le cache validait sa signature et le
+# NOMBRE de points, jamais les points eux-memes, alors qu'il les stockait.
+#
+# Mesure faite le 28/08 sur l'etude analytique, avant correctif : six points
+# remplaces par six autres, entierement differents. Journal :
+#     [HF CUSTOM] cache complet charge (6 pts) -> 0 SOCP
+# Les anciennes valeurs etaient alors appariees aux NOUVELLES coordonnees
+# par `_interpoler` -- la surface de reference « g = 0 HF » construite de
+# couples faux, en silence, sous un message qui annonce une economie.
+# --------------------------------------------------------------------- #
+def _grille_pts_libres(tmp_path, evaluer=None, tracer=None):
+    appels = []
+
+    def _defaut(u):
+        appels.append(tuple(u))
+        return float(u[0] + u[1]), [0.0, 0.0], [0.0, 0.0]
+
+    g = _grille.Grille(
+        evaluer=evaluer or _defaut, n_var=2, cote=4,
+        bornes=(-1.0, 1.0, -1.0, 1.0),
+        fichier_cache=str(tmp_path / "c.json"),
+        fichier_cache_complet=str(tmp_path / "f.json"),
+        fichier_cache_points=str(tmp_path / "pts.json"),
+        config_identique=True, signature={"solveur": "analytique"},
+        tracer=tracer or (lambda _m: None))
+    return g, appels
+
+
+#: QUATRE points NON ALIGNES : trois points colineaires ne se
+#: triangulent pas, et `_interpoler` s'appuie sur Qhull.
+PTS_A = [[-3.0, -3.0], [-2.0, -3.5], [-1.0, -4.0], [-2.5, -1.0]]
+PTS_B = [[3.0, 3.0], [2.0, 3.5], [1.0, 4.0], [2.5, 1.0]]
+
+
+def test_des_points_INCHANGES_reutilisent_le_cache(tmp_path):
+    """Une garde qui jette un cache legitime ne vaut rien : trois points, ce
+    sont trois appels solveur -- 23 minutes sur le Moulin Blanc."""
+    g, appels = _grille_pts_libres(tmp_path)
+    g.depuis_points_libres(PTS_A)
+    n = len(appels)
+    g2, appels2 = _grille_pts_libres(tmp_path)
+    g2.depuis_points_libres(PTS_A)
+    assert n == 4
+    assert appels2 == [], "le cache legitime n'a pas ete reutilise"
+
+
+def test_des_points_DEPLACES_sont_recalcules(tmp_path):
+    """LE defaut. Sans ce controle, les valeurs de PTS_A etaient rendues pour
+    PTS_B -- meme nombre, meme signature, coordonnees sans rapport."""
+    g, _ = _grille_pts_libres(tmp_path)
+    g.depuis_points_libres(PTS_A)
+    g2, appels2 = _grille_pts_libres(tmp_path)
+    g2.depuis_points_libres(PTS_B)
+    assert [list(u) for u in appels2] == PTS_B, (
+        "les points deplaces n'ont pas ete recalcules : la surface serait "
+        "faite des anciennes valeurs aux nouvelles coordonnees")
+
+
+def test_le_refus_est_ANNONCE_avec_l_ecart(tmp_path):
+    """Un cache refuse en silence se lit comme un cache absent. Le journal
+    doit dire ce qui a change."""
+    g, _ = _grille_pts_libres(tmp_path)
+    g.depuis_points_libres(PTS_A)
+    j = []
+    g2, _ = _grille_pts_libres(tmp_path, tracer=j.append)
+    g2.depuis_points_libres(PTS_B)
+    ligne = [m for m in j if "les points ont CHANGE" in m]
+    assert ligne, j
+    assert "ecart max" in ligne[0] and "8.000e+00" in ligne[0], (
+        "le journal doit porter l ecart REEL : max sur les quatre paires, "
+        "soit |-1 - 1| et |-4 - 4| -> 8.0")
+
+
+def test_un_nombre_de_points_different_est_deja_refuse(tmp_path):
+    """Ce controle-la existait ; il ne doit pas disparaitre."""
+    g, _ = _grille_pts_libres(tmp_path)
+    g.depuis_points_libres(PTS_A)
+    g2, appels2 = _grille_pts_libres(tmp_path)
+    g2.depuis_points_libres(PTS_A + [[0.0, 0.0]])
+    assert len(appels2) == 5
+
+
+def test_un_cache_sans_coordonnees_est_refuse(tmp_path):
+    """Les caches ecrits AVANT ce controle n'ont pas de `pts`. On ne peut pas
+    les valider, donc on ne les reprend pas -- en le disant."""
+    import json as _json
+    fichier = str(tmp_path / "pts.json")
+    _json.dump({"n_total": 4, "complet": True, "g_vals": [1.0, 2.0, 3.0, 4.0],
+                "signature": {"solveur": "analytique"}},
+               open(fichier, "w"))
+    j = []
+    g, appels = _grille_pts_libres(tmp_path, tracer=j.append)
+    g.depuis_points_libres(PTS_A)
+    assert len(appels) == 4
+    assert any("sans coordonnees" in m for m in j), j
+
+
+def test_le_cache_PARTIEL_verifie_aussi_ses_points(tmp_path):
+    """Il etait plus expose encore que le complet : il reprenait des valeurs
+    PAR INDICE, et n'ecrivait meme pas ses coordonnees."""
+    import json as _json
+    partiel = str(tmp_path / "pts.json.partial")
+    _json.dump({"n_total": 4, "g_vals": [1.0, None, None, None],
+                "pts": PTS_A, "signature": {"solveur": "analytique"}},
+               open(partiel, "w"))
+    g, appels = _grille_pts_libres(tmp_path)
+    g.depuis_points_libres(PTS_A)
+    assert len(appels) == 3, "le point deja calcule devait etre repris"
+
+    _json.dump({"n_total": 4, "g_vals": [1.0, None, None, None],
+                "pts": PTS_A, "signature": {"solveur": "analytique"}},
+               open(partiel, "w"))
+    g2, appels2 = _grille_pts_libres(tmp_path)
+    g2.depuis_points_libres(PTS_B)
+    assert len(appels2) == 4, (
+        "le cache partiel a rendu une valeur de PTS_A pour un point de PTS_B")
+
+
+def test_le_cache_partiel_ecrit_ses_coordonnees(tmp_path):
+    """Sans elles, la verification precedente n'aurait rien a comparer."""
+    import json as _json
+
+    def evaluer_qui_meurt(u):
+        if tuple(u) == tuple(PTS_A[2]):
+            raise RuntimeError("interruption simulee")
+        return float(u[0]), [0.0, 0.0], [0.0, 0.0]
+
+    g, _ = _grille_pts_libres(tmp_path, evaluer=evaluer_qui_meurt)
+    try:
+        g.depuis_points_libres(PTS_A)
+    except RuntimeError:
+        pass
+    d = _json.load(open(str(tmp_path / "pts.json.partial")))
+    assert d["pts"] == PTS_A
+    assert d["g_vals"][0] is not None and d["g_vals"][2] is None

@@ -595,12 +595,31 @@ def test_aucune_lecture_de_cache_de_grille_n_echappe_a_la_signature():
         "les deux ecritures du cache de points choisis (complet et partiel) "
         "doivent porter la signature (%d trouvees)"
         % src.count("'signature': self.signature"))
-    assert src.count("d.get('signature') == self.signature") == 2, (
-        "les deux lectures du cache de points choisis doivent VERIFIER la "
-        "signature (%d trouvees)"
-        % src.count("d.get('signature') == self.signature"))
 
+    # Les deux LECTURES, examinees par fonction et non par compte de texte :
+    # ecrire la meme verification en garde inversee (`!=` puis retour) faisait
+    # perdre le controle a un simple `src.count(...)`.
+    fonctions = {n.name: n for n in _ast.walk(arbre)
+                 if isinstance(n, _ast.FunctionDef)}
+    for nom in ("_lire_cache_points_complet", "_lire_cache_points_partiel"):
+        assert nom in fonctions, "%s a disparu" % nom
+        corps = _ast.dump(fonctions[nom])
+        assert "signature" in corps, (
+            "%s ne compare plus la signature : un cache calcule sous un autre "
+            "solveur, un autre maillage ou d'autres bornes serait relu tel "
+            "quel." % nom)
+        assert "_memes_points" in corps, (
+            "%s ne verifie plus QUELS points le cache porte. `hf_custom_points` "
+            "existe pour placer les points a la main : les deplacer est "
+            "l'usage normal, et sans ce controle les anciennes valeurs sont "
+            "appariees aux nouvelles coordonnees -- la surface de reference "
+            "est alors faite de couples faux, en silence." % nom)
 
+    # ...et le cache partiel doit ECRIRE ses coordonnees, sans quoi la
+    # verification ci-dessus n'aurait rien a comparer.
+    assert "'pts': np.asarray(pts).tolist()" in src, (
+        "le cache partiel des points choisis n'ecrit plus ses coordonnees : "
+        "il reprendrait des valeurs PAR INDICE, sans controle possible.")
 # --------------------------------------------------------------------- #
 # recensement exhaustif des points de reprise -- 26/08/2026
 # --------------------------------------------------------------------- #

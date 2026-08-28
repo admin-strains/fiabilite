@@ -320,10 +320,10 @@ class Grille:
         pts = np.array(points)
         n_total = len(pts)
 
-        g_vals = self._lire_cache_points_complet(n_total)
+        g_vals = self._lire_cache_points_complet(pts, n_total)
         if g_vals is None:
             g_vals = self._calculer_points_manquants(
-                pts, self._lire_cache_points_partiel(n_total))
+                pts, self._lire_cache_points_partiel(pts, n_total))
             self._ecrire_cache_points(pts, g_vals, n_total)
 
         self._resultat_points = self._interpoler(pts, np.array(g_vals, float),
@@ -332,7 +332,7 @@ class Grille:
 
     # -- les quatre morceaux, separes : la version d'origine les melait, et
     # -- construisait DEUX FOIS la meme grille d'interpolation.
-    def _lire_cache_points_complet(self, n_total):
+    def _lire_cache_points_complet(self, pts, n_total):
         if not self.config_identique or not self.fichier_cache_points:
             return None
         if not os.path.exists(self.fichier_cache_points):
@@ -346,10 +346,49 @@ class Grille:
         if not (d.get('complet') and d.get('n_total') == n_total
                 and d.get('signature') == self.signature):
             return None
+        if not self._memes_points(d.get('pts'), pts, "cache complet"):
+            return None
         self.tracer("[HF CUSTOM] cache complet charge (%d pts) -> 0 SOCP" % n_total)
         return d['g_vals']
 
-    def _lire_cache_points_partiel(self, n_total):
+    #: Deux points sont « les memes » en dessous de cet ecart. Meme valeur que
+    #: pour le cache du plan d'experiences (`charger_doe_partiel`).
+    TOL_POINTS = 1e-9
+
+    def _memes_points(self, caches, courants, quoi):
+        """Les points caches sont-ils CEUX QU'ON EVALUERAIT ?
+
+        ON VERIFIE, ON NE SUPPOSE PAS -- le controle ferme le 26/08/2026 sur
+        le cache du plan d'experiences, et qui manquait ici.
+
+        `hf_custom_points` existe justement pour placer les points a la main,
+        la ou l'on sait que l'etat limite passe : les DEPLACER est l'usage
+        normal. Sans ce controle, un fichier modifie a nombre de points
+        constant rendait les anciennes valeurs, et `_interpoler` les appariait
+        aux NOUVELLES coordonnees. La surface de reference « g = 0 HF » etait
+        alors construite de couples faux, en silence, sous un journal qui
+        annonce « 0 SOCP ».
+        """
+        if caches is None:
+            self.tracer("[HF CUSTOM] %s sans coordonnees (anterieur au "
+                        "controle) -> recalcul" % quoi)
+            return False
+        a = np.asarray(caches, dtype=float)
+        b = np.asarray(courants, dtype=float)
+        if a.shape != b.shape:
+            self.tracer("[HF CUSTOM] %s : %s points caches contre %s "
+                        "demandes -> recalcul" % (quoi, a.shape, b.shape))
+            return False
+        ecart = float(np.max(np.abs(a - b))) if a.size else 0.0
+        if ecart > self.TOL_POINTS:
+            self.tracer("[HF CUSTOM] %s : les points ont CHANGE (ecart max "
+                        "%.3e > %.0e) -> recalcul. Les valeurs cachees ne sont "
+                        "pas celles de ces points-la."
+                        % (quoi, ecart, self.TOL_POINTS))
+            return False
+        return True
+
+    def _lire_cache_points_partiel(self, pts, n_total):
         vide = [None] * n_total
         if not self.config_identique or not self.fichier_cache_points:
             return vide
@@ -360,9 +399,14 @@ class Grille:
             d = json.load(open(partiel))
         except Exception:
             return vide
-        if d.get('n_total') == n_total and d.get('signature') == self.signature:
-            return d['g_vals']
-        return vide
+        if d.get('n_total') != n_total or d.get('signature') != self.signature:
+            return vide
+        # Le cache PARTIEL etait encore plus expose que le complet : il
+        # reprenait des valeurs PAR INDICE sans que ses coordonnees soient
+        # meme ecrites. Elles le sont desormais, et comparees.
+        if not self._memes_points(d.get('pts'), pts, "cache partiel"):
+            return vide
+        return d['g_vals']
 
     def _ecrire_cache_points(self, pts, g_vals, n_total):
         if not self.fichier_cache_points:
@@ -378,12 +422,12 @@ class Grille:
         except Exception:
             pass
 
-    def _sauver_partiel_points(self, g_vals, n_total):
+    def _sauver_partiel_points(self, pts, g_vals, n_total):
         if not self.fichier_cache_points:
             return
         try:
-            json.dump({'n_total': n_total, 'g_vals': g_vals,
-                       'signature': self.signature},
+            json.dump({'n_total': n_total, 'pts': np.asarray(pts).tolist(),
+                       'g_vals': g_vals, 'signature': self.signature},
                       open(self.fichier_cache_points + '.partial', 'w'), indent=1)
         except Exception:
             pass
@@ -407,7 +451,7 @@ class Grille:
             for k, pt in enumerate(liste):
                 g_val = self.evaluer(pt)[0]
                 g_vals[a_faire[k]] = g_val
-                self._sauver_partiel_points(g_vals, n_total)
+                self._sauver_partiel_points(pts, g_vals, n_total)
                 t_ecoule = time.perf_counter() - t_debut
                 t_eta = (t_ecoule / (k + 1)) * (len(liste) - k - 1)
                 self.tracer("  [HF CUSTOM %d/%d]  u=[%s]  g=%+.4f  ETA=%.1fmin"
