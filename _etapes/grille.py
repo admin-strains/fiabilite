@@ -339,7 +339,9 @@ class Grille:
             return None
         try:
             d = json.load(open(self.fichier_cache_points))
-        except Exception:
+        except Exception as e:
+            self.tracer("[HF CUSTOM] cache complet illisible (%s: %s) -> "
+                        "recalcul" % (type(e).__name__, e))
             return None
         # La signature manquait : une grille calculee sous un autre solveur,
         # un autre maillage ou d'autres bornes etait relue telle quelle.
@@ -397,7 +399,9 @@ class Grille:
             return vide
         try:
             d = json.load(open(partiel))
-        except Exception:
+        except Exception as e:
+            self.tracer("[HF CUSTOM] cache partiel illisible (%s: %s) -> "
+                        "les points deja payes sont perdus" % (type(e).__name__, e))
             return vide
         if d.get('n_total') != n_total or d.get('signature') != self.signature:
             return vide
@@ -419,8 +423,14 @@ class Grille:
             partiel = self.fichier_cache_points + '.partial'
             if os.path.exists(partiel):
                 os.remove(partiel)
-        except Exception:
-            pass
+        except Exception as e:
+            # ECHOUER EN SILENCE ICI COUTE A CHAQUE RUN SUIVANT : sans ce
+            # fichier, la grille entiere est repayee, indefiniment, sans
+            # qu'une ligne ne dise pourquoi. Sur le Moulin Blanc, vingt
+            # points choisis valent deux heures et demie.
+            self.tracer("[HF CUSTOM] sauvegarde du cache echouee (%s: %s) -- "
+                        "les points calcules ne seront pas reutilises"
+                        % (type(e).__name__, e))
 
     def _sauver_partiel_points(self, pts, g_vals, n_total):
         if not self.fichier_cache_points:
@@ -429,8 +439,14 @@ class Grille:
             json.dump({'n_total': n_total, 'pts': np.asarray(pts).tolist(),
                        'g_vals': g_vals, 'signature': self.signature},
                       open(self.fichier_cache_points + '.partial', 'w'), indent=1)
-        except Exception:
-            pass
+        except Exception as e:
+            # Le filet de la reprise. S'il ne s'ecrit pas, une interruption
+            # perd TOUT ce qui precede -- et c'est justement la situation ou
+            # personne ne regarde le journal ensuite. Il faut donc que la
+            # ligne existe.
+            self.tracer("[HF CUSTOM] sauvegarde partielle echouee (%s: %s) -- "
+                        "une interruption perdra les points deja payes"
+                        % (type(e).__name__, e))
 
     def _calculer_points_manquants(self, pts, g_vals):
         n_total = len(pts)

@@ -622,3 +622,65 @@ def test_le_cache_PARTIEL_compare_lui_aussi_la_coupe_entiere(tmp_path):
                                     signature=SIG) is None
     assert hf.load_hf_cache_partial(f, (0, 2, {1: 7.5}), 3,
                                     signature=SIG) is not None
+
+
+# --------------------------------------------------------------------- #
+# UN ECHEC DE CACHE NE DOIT PAS ETRE MUET (28/08/2026)
+#
+# Quatre `except Exception: pass` avalaient les echecs du cache de points.
+# Les deux pires portaient l'ECRITURE : sans le fichier, la grille entiere
+# est repayee a chaque run, indefiniment, sans qu'une ligne ne dise
+# pourquoi. Sur le Moulin Blanc, vingt points choisis valent deux heures et
+# demie. Le module voisin (`_cache/hf.py`) annonce ses echecs depuis
+# toujours ; celui-ci ne le faisait pas.
+# --------------------------------------------------------------------- #
+def test_un_cache_de_points_illisible_est_annonce(tmp_path):
+    """Un cache corrompu se lit comme un cache absent : le run recalcule.
+    C'est le bon comportement, mais il doit se voir."""
+    fichier = tmp_path / "pts.json"
+    fichier.write_text("{ceci n'est pas du JSON", encoding="utf-8")
+    j = []
+    g, appels = _grille_pts_libres(tmp_path, tracer=j.append)
+    g.depuis_points_libres(PTS_A)
+    assert len(appels) == 4, "le run doit recalculer"
+    assert any("cache complet illisible" in m for m in j), j
+
+
+def test_un_partiel_illisible_est_annonce(tmp_path):
+    fichier = tmp_path / "pts.json.partial"
+    fichier.write_text("tronque", encoding="utf-8")
+    j = []
+    g, _ = _grille_pts_libres(tmp_path, tracer=j.append)
+    g.depuis_points_libres(PTS_A)
+    assert any("cache partiel illisible" in m for m in j), j
+
+
+def test_un_echec_d_ECRITURE_du_cache_est_annonce(tmp_path):
+    """Le plus couteux des quatre : sans ce message, la grille est repayee a
+    chaque run et rien ne dit pourquoi."""
+    j = []
+    g, _ = _grille_pts_libres(tmp_path, tracer=j.append)
+    # un dossier la ou le fichier devrait aller : l'ecriture echouera
+    (tmp_path / "pts.json").mkdir()
+    g.depuis_points_libres(PTS_A)
+    assert any("sauvegarde du cache echouee" in m for m in j), j
+    assert any("ne seront pas reutilises" in m for m in j), j
+
+
+def test_aucun_gestionnaire_muet_dans_la_grille():
+    """Le garde : un `except` sans le moindre appel avale l'information.
+
+    Ce module tient le calcul le plus cher du programme -- 225 appels
+    solveur pour une grille 15x15. Un echec qui n'ecrit rien s'y paie en
+    heures.
+    """
+    import ast as _ast
+    src = open(os.path.join(_REPO, "_etapes", "grille.py"),
+               encoding="utf-8").read()
+    muets = [n.lineno for n in _ast.walk(_ast.parse(src))
+             if isinstance(n, _ast.ExceptHandler)
+             and not any(isinstance(x, (_ast.Call, _ast.Raise))
+                         for b in n.body for x in _ast.walk(b))]
+    assert not muets, (
+        "gestionnaire(s) d'exception muet(s) aux lignes %s : ils avalent un "
+        "echec sans laisser de trace." % muets)
