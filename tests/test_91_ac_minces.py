@@ -158,7 +158,11 @@ PROJET = {
 #: solveur -- etait tenu en HUIT endroits : une fonction recopiee, deux
 #: etats globaux en listes d'un element, deux ecritures directes. Il
 #: devient `_cache/journal_points.JournalDesPoints`. 1445 -> 1428.
-PLAFOND_LIGNES = 1428
+#: 28/08 (suite) : rejouer l'enrichissement etape par etape part dans
+#: `_surrogate/ajuster.py`, et les TROIS globales de diagnostic du
+#: metamodele (chaos, LOO, longueurs de correlation) deviennent un
+#: objet `Diagnostics`. 1428 -> 1413.
+PLAFOND_LIGNES = 1413
 PLAFOND_FONCTIONS = 38
 
 

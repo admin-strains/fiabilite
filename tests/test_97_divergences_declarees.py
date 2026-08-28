@@ -217,7 +217,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 28/08 (suite) : preparation des historiques et amorce du plan
     #: initial. 598 -> 583.
     #: 28/08 (suite) : le journal des points devient un objet. 583 -> 569.
-    PLAFOND = 569
+    #: 28/08 (suite) : rejouer l'enrichissement, et les diagnostics du
+    #: metamodele. 569 -> 555.
+    PLAFOND = 555
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

@@ -311,14 +311,13 @@ if __name__ == '__main__':
         traj_runs_fixed = None
 
     # --- Label PCE GEPCK et LOO (mis a jour par init_g_ot, lus par print_planche_EFF) ---
-    _gepck_pce_label = ""
-    _gepck_loo       = None
+    # Ce que le dernier ajustement dit de lui-meme : `_surrogate/ajuster.py`.
+    _DIAG = _fit.Diagnostics()
 
     # --- Historiques EFF (mis a jour par run_EFF et init_g_ot, lus par print_EFF_graphs) ---
     _eff_history_EFF   = []   # EFF(u_opt) avant ajout de chaque point (incl. initial)
     _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
-    _eff_history_theta = []   # theta Kriging [theta_0,...,theta_{M-1}] apres chaque fit
     _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
     _fosm = [None]     # l'objet ErreurFOSM, construit au premier usage
     _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
@@ -560,7 +559,7 @@ if __name__ == '__main__':
             xt=xt, yt=yt, all_grad=all_grad, xt_eff=xt_eff,
             enrich_round=_enrich_round, round_sizes_prev=_round_sizes_prev,
             historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
-                         "BS": _eff_history_BS, "theta": _eff_history_theta,
+                         "BS": _eff_history_BS, "theta": _DIAG.theta,
                          "beta_IS": _eff_history_beta_IS},
             coupe_hf=_GRILLE.coupes.get("courante"),
             best_result=best_result, best_sp=best_sp, modes=modes,
@@ -672,7 +671,6 @@ if __name__ == '__main__':
         `xt` ressort toujours identique, `g_ot` et `sigma_func` en entree
         n'ont jamais ete lus, et `yt`/`all_grad` ne changent qu'en HF pur.
         """
-        global _gepck_pce_label, _gepck_loo, _eff_history_theta
         if xt is None:
             raise ValueError(
                 "init_g_ot ajuste un surrogate ; elle ne CONSTRUIT plus le plan "
@@ -687,10 +685,7 @@ if __name__ == '__main__':
             # entre les deux etudes sans que rien ne le dise.
             theta_min=THETA_MIN_KRG,
             evaluer_hf=run_HF, tracer_appels=print_gepck_calls)
-        if diag['pce_label'] is not None:
-            _gepck_pce_label = diag['pce_label']
-            _gepck_loo       = diag['loo']
-            _eff_history_theta.append(diag['theta'])
+        _DIAG.enregistrer(diag)
         if do_HF:
             yt, all_grad = None, None
         return g_ot, sigma_func, xt, yt, all_grad
@@ -1011,14 +1006,10 @@ if __name__ == '__main__':
         Z_eff, Z_sigma, Z_g = _eff_ot.champs_sur_coupe(
             g_ot, sigma_func, grille, n_grid, epsilon_factor, _PREDICT)
 
-        _theta = ('  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']'
-                  if _eff_history_theta else '')
-        _loo = f'  LOO={_gepck_loo:.3e}' if _gepck_loo is not None else ''
         _, _, _figees = _DECOR.etiquettes(_sd)
-        _pce = f'\n{_gepck_pce_label}' if _gepck_pce_label else ''
         return _figurer.planche_EFF(_DECOR, _sd, xt, xt_eff, Z_eff, Z_sigma, Z_g,
                                     fond_hf=fond_hf,
-                                    sous_titre=f'{_theta}{_loo}{_figees}{_pce}')
+                                    sous_titre=_DIAG.sous_titre(_figees))
 
 
     def print_globalplanche_EFF(xt, yt, all_grad, xt_eff, fond_hf=None, fond_hf_final=None):
@@ -1035,17 +1026,11 @@ if __name__ == '__main__':
             print("[GLOBAL PLANCHE] slice_def_final est None, skip", flush=True)
             return
         grille = _DECOR.grille_de_coupe(slice_def_final)
-        n_eff = len(xt_eff)
-        etapes = []
-        for step in range(n_eff + 1):
-            n_pts = n0 + step
-            g_ot_k, sigma_k, _, _, _ = init_g_ot(None, None, xt[:n_pts],
-                                                 yt[:n_pts], all_grad[:n_pts])
-            Z_eff, Z_sigma, Z_g = _eff_ot.champs_sur_coupe(
-                g_ot_k, sigma_k, grille, n_grid, epsilon_factor, _PREDICT)
-            etapes.append(dict(n_pts=n_pts, xt=xt[:n_pts], xt_eff=xt_eff[:step],
-                               Z_eff=Z_eff, Z_sigma=Z_sigma, Z_g=Z_g))
-            print(f"  [GLOBAL PLANCHE] step {step}/{n_eff} (N={n_pts}) OK", flush=True)
+        etapes = _fit.rejouer_l_enrichissement(
+            xt, yt, all_grad, xt_eff, n0,
+            reajuster=lambda x, y, g: init_g_ot(None, None, x, y, g)[:2],
+            champs=lambda g_ot_k, sigma_k: _eff_ot.champs_sur_coupe(
+                g_ot_k, sigma_k, grille, n_grid, epsilon_factor, _PREDICT))
 
         _, _, _figees = _DECOR.etiquettes(slice_def_final)
         return _figurer.planche_globale(_DECOR, slice_def_final, etapes,
@@ -1168,7 +1153,7 @@ if __name__ == '__main__':
         _GRILLE.coupes['courante'] = _rs.get('hf_2d_grid')
         _h = _reprise.historiques_de(_rs)
         _eff_history_EFF, _eff_history_BB    = _h["EFF"], _h["BB"]
-        _eff_history_BS,  _eff_history_theta = _h["BS"],  _h["theta"]
+        _eff_history_BS, _DIAG.theta = _h["BS"], _h["theta"]
         _eff_history_beta_IS = _h["beta_IS"]
         _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
         _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
@@ -1228,7 +1213,7 @@ if __name__ == '__main__':
                               fond_hf=fond_hf_pour_figures())
         _graphiques.tracer_convergence_eff(
             _eff_history_EFF, _eff_history_BB, _eff_history_BS,
-            _eff_history_theta, params_names, tol_EFF, tol_BB, tol_BS,
+            _DIAG.theta, params_names, tol_EFF, tol_BB, tol_BS,
             out_dir_eff, timestamp)
         if print_Pf:
             _graphiques.tracer_pf_evolution(

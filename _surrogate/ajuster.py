@@ -352,3 +352,92 @@ def construire_surrogate(modele, xt, yt, all_grad, dist_X, q, max_degree,
                 dict(_SANS_DIAGNOSTIC))
 
     raise ValueError("modele inconnu : %r" % (modele,))
+
+
+def rejouer_l_enrichissement(xt, yt, all_grad, xt_eff, n0, *, reajuster,
+                             champs, tracer=_ecrire):
+    """Le metamodele tel qu'il etait a chaque etape de l'enrichissement.
+
+    Une etape par point ajoute, plus l'etat initial : a l'etape `k`, le
+    metamodele est REAJUSTE sur les `n0 + k` premiers points -- le plan tel
+    qu'il etait alors. C'est ce qui permet de voir OU l'enrichissement a
+    place ses points, et ce que chacun a change.
+
+    ZERO APPEL SOLVEUR : les points sont deja calcules, seul l'ajustement est
+    refait. Cher en secondes -- un ajustement de krigeage par etape -- jamais
+    en heures.
+
+    `reajuster(xt, yt, all_grad)` rend `(g_ot, sigma_func)` ; `champs(g_ot,
+    sigma_func)` rend les trois champs a tracer. Les deux appartiennent a
+    l'etude : l'une sait ajuster son metamodele, l'autre sait sur quelle
+    coupe le regarder.
+
+    L'ORDRE DES POINTS FAIT LE SENS. `xt` doit porter le plan initial EN
+    TETE, puis les points d'enrichissement dans l'ordre ou ils ont ete
+    ajoutes -- c'est ce que garantit `evaluer_batch_EFF`, qui empile. Un plan
+    reordonne donnerait des etapes qui n'ont jamais existe.
+    """
+    etapes = []
+    n_eff = len(xt_eff)
+    for etape in range(n_eff + 1):
+        n_pts = n0 + etape
+        g_ot, sigma_func = reajuster(xt[:n_pts], yt[:n_pts], all_grad[:n_pts])
+        Z_eff, Z_sigma, Z_g = champs(g_ot, sigma_func)
+        etapes.append(dict(n_pts=n_pts, xt=xt[:n_pts], xt_eff=xt_eff[:etape],
+                           Z_eff=Z_eff, Z_sigma=Z_sigma, Z_g=Z_g))
+        tracer("  [GLOBAL PLANCHE] step %d/%d (N=%d) OK" % (etape, n_eff, n_pts))
+    return etapes
+
+
+class Diagnostics:
+    """Ce que le dernier ajustement du metamodele dit de lui-meme.
+
+    Trois choses, qui etaient trois variables GLOBALES de chaque etude,
+    ecrites par l'ajustement et relues par les figures, le dump de reprise
+    et la courbe de convergence :
+
+      * `pce_label` -- les termes retenus du chaos polynomial, quand il y en
+        a un. Il dit QUELLE forme le metamodele a choisie ;
+      * `loo` -- l'erreur de validation croisee « leave-one-out ». C'est la
+        seule mesure de qualite disponible sans payer un point de plus ;
+      * `theta` -- un jeu de longueurs de correlation PAR AJUSTEMENT, donc un
+        historique. Les voir bouger d'une iteration a l'autre dit si le
+        krigeage se stabilise ou s'il court apres le dernier point ajoute.
+
+    `pce_label` et `loo` sont des INSTANTANES -- l'etat courant -- tandis que
+    `theta` est cumulatif. L'asymetrie est celle d'origine : on ne trace que
+    le dernier chaos, mais toute la trajectoire des longueurs.
+    """
+
+    def __init__(self):
+        self.pce_label = ""
+        self.loo = None
+        self.theta = []
+
+    def enregistrer(self, diag):
+        """Ce qu'un ajustement vient de rendre.
+
+        `pce_label is None` signale un modele SANS chaos polynomial -- un
+        krigeage pur. On ne touche alors a rien : ecraser `loo` et empiler un
+        `theta` absent effacerait le diagnostic du dernier ajustement qui en
+        avait un.
+        """
+        if diag.get("pce_label") is None:
+            return
+        self.pce_label = diag["pce_label"]
+        self.loo = diag["loo"]
+        self.theta.append(diag["theta"])
+
+    def sous_titre(self, figees=""):
+        """Le fragment de titre que portent les planches d'enrichissement.
+
+        `figees` vient du decor -- les variables que la coupe immobilise --
+        et s'insere entre la qualite et la forme du metamodele. L'ordre est
+        celui d'origine : longueurs, erreur, coupe, puis le chaos sur sa
+        propre ligne.
+        """
+        theta = ("  theta=[" + ", ".join("%.3f" % v for v in self.theta[-1]) + "]"
+                 if self.theta else "")
+        loo = "  LOO=%.3e" % self.loo if self.loo is not None else ""
+        pce = "\n" + self.pce_label if self.pce_label else ""
+        return "%s%s%s%s" % (theta, loo, figees, pce)
