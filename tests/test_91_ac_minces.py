@@ -165,8 +165,11 @@ PROJET = {
 #: 28/08 (suite) : `fond_hf_pour_figures` rejoint `Grille` -- avec la
 #: garde des 29 heures, desormais EXERCEE par un test qui compte les
 #: appels solveur au lieu de lire du texte. 1413 -> 1380.
-PLAFOND_LIGNES = 1380
-PLAFOND_FONCTIONS = 37
+#: 28/08 (suite) : la couche d'acces au solveur -- un solveur par modele,
+#: memoise parce qu'il porte un compteur d'appels, et les deux
+#: adaptateurs paralleles (plan et points). 1380 -> 1346.
+PLAFOND_LIGNES = 1346
+PLAFOND_FONCTIONS = 36
 
 
 def _imports_tiers(chemin):

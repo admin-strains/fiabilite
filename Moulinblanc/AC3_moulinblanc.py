@@ -415,30 +415,17 @@ if __name__ == '__main__':
     # `geometric_approximation_min = "4"` la ou `run_one_SOL` lisait la
     # configuration -- alors que les deux alimentent le meme metamodele.
     # `tests/golden/options_ds.json` en garde la trace.
-    _solveurs = {}
-
-    def _solveur(nom=None):
-        """Le solveur de cette etude, un par modele.
-
-        Un worker de DOE parallele travaille sur SA copie du `.ds` : le nom du
-        modele lui est impose par le processus pere. Le solveur est mis en
-        cache pour que son compteur d'appels reste continu.
-        """
-        nom = nom or modelname
-        if nom not in _solveurs:
-            _solveurs[nom] = _fabriquer_solveur(
-                CFG.solveur,
-                chemin_ds=os.path.join(storage, nom + ".ds"),
-                dossier_etude=path_dir,
-                params_names=params_names,
-                regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
-                global_size=global_size,
-                geo_min_approx=geo_min_approx,
-                max_size=CFG.max_size,
-                solveur_lineaire=CFG.solveur_lineaire,
-                archiver=save_history,
-            )
-        return _solveurs[nom]
+    #
+    # Un solveur par modele, memoise -- il porte un compteur d'appels que
+    # reconstruire remettrait a zero. Le cache vit dans `_doe/parallele.py`.
+    _solveur = _parallele.fabrique_memoisee(
+        lambda **kw: _fabriquer_solveur(CFG.solveur, **kw),
+        modelname, lambda nom: os.path.join(storage, nom + ".ds"),
+        dossier_etude=path_dir, params_names=params_names,
+        regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
+        global_size=global_size, geo_min_approx=geo_min_approx,
+        max_size=CFG.max_size, solveur_lineaire=CFG.solveur_lineaire,
+        archiver=save_history)
 
     # L'unique passage vers le solveur est dans `_doe/evaluation.py`. Il est
     # construit PARESSEUSEMENT : il a besoin du journal de points et du cache
@@ -476,37 +463,16 @@ if __name__ == '__main__':
 
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
-        """Le plan d'experiences reparti sur plusieurs solveurs.
-
-        Le mecanisme -- copies isolees du `.ds`, repartition en tourniquet,
-        collecte -- est dans `_doe/parallele.py`, en un exemplaire au lieu de
-        quatre.
-        """
-        resultats = _parallele.evaluer_en_parallele(
+        """Le plan d'experiences reparti. Tout est dans `_doe/parallele.py`."""
+        return _parallele.evaluer_plan_en_parallele(
             SOL, params_names, storage, base_modelname, n_workers,
             script_etude=__file__, repo=_REPO)
-        for i, d in resultats.items():
-            SOL[i]['g'] = d['g']
-            for q in params_names:
-                SOL[i][f'dg_{q}'] = d.get(f'dg_{q}')
-        return SOL
 
     def run_HF_grid_parallel(u_points, n_workers=3):
-        """Les points d'une grille, repartis sur plusieurs solveurs.
-
-        Retourne la liste des g, dans l'ordre de `u_points`.
-        """
-        T_inv = dist_jointe().getInverseIsoProbabilisticTransformation()
-        points = []
-        for u in u_points:
-            x = T_inv(ot.Point(list(u)))
-            points.append({p: float(x[j]) for j, p in enumerate(params_names)})
-        resultats = _parallele.evaluer_en_parallele(
-            points, params_names, storage, modelname, n_workers,
-            script_etude=__file__, repo=_REPO,
-            sous_dossier="_hf_workers", prefixe="hfw",
-            nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE")
-        return [resultats[i]['g'] for i in range(len(points))]
+        """Les points d'une grille, repartis. Dans `_doe/parallele.py`."""
+        return _parallele.evaluer_points_en_parallele(
+            u_points, dist_jointe(), params_names, storage, modelname,
+            n_workers, script_etude=__file__, repo=_REPO)
 
 
     # --- DOE cache ---

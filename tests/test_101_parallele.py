@@ -277,9 +277,122 @@ def test_le_journal_dit_combien_de_workers_et_de_points(tmp_path):
 def test_les_scripts_ne_recopient_plus_le_mecanisme(script):
     src = open(os.path.join(_REPO, script), encoding="utf-8",
                errors="replace").read()
-    assert "_parallele.evaluer_en_parallele(" in src
+    # Les etudes passent desormais par les ADAPTATEURS -- le plan et la
+    # grille -- qui portent chacun leur mise en forme. Le mecanisme, lui,
+    # reste unique dans `_doe/parallele.py`.
+    assert ("_parallele.evaluer_plan_en_parallele(" in src
+            and "_parallele.evaluer_points_en_parallele(" in src), (
+        "%s : le parallele ne passe plus par `_doe/parallele.py`" % script)
     for parti in ("_DOE_WORKER=", "MKL_NUM_THREADS", "shutil.copy2",
                   "_sp.Popen"):
         assert parti not in src, (
             "%s porte encore `%s` : le mecanisme appartient a "
             "`_doe/parallele.py`." % (script, parti))
+
+
+# --------------------------------------------------------------------- #
+# LES DEUX ADAPTATEURS ET LA FABRIQUE (28/08/2026)
+# --------------------------------------------------------------------- #
+def test_un_plan_reparti_est_RECOPIE_dans_la_liste_de_l_appelant():
+    """Les workers rendent un dictionnaire indexe ; l'appelant travaille sur
+    la liste qu'il a construite. L'adaptateur fait le pont, en place."""
+    SOL = [{"fc": 1.0, "fy": 2.0}, {"fc": 3.0, "fy": 4.0}]
+    rendu = {0: {"g": 0.5, "dg_fc": 1.0, "dg_fy": 2.0},
+             1: {"g": 1.5, "dg_fc": 3.0, "dg_fy": 4.0}}
+    vu = {}
+
+    def faux_pool(SOL_, params, storage, base, n, script_etude=None, repo=None):
+        vu["n"] = n
+        return rendu
+
+    reel = _parallele.evaluer_en_parallele
+    _parallele.evaluer_en_parallele = faux_pool
+    try:
+        out = _parallele.evaluer_plan_en_parallele(
+            SOL, ["fc", "fy"], "sto", "modele", 3,
+            script_etude="etude.py", repo="repo")
+    finally:
+        _parallele.evaluer_en_parallele = reel
+    assert out is SOL, "la liste doit etre remplie EN PLACE"
+    assert SOL[0]["g"] == 0.5 and SOL[1]["dg_fy"] == 4.0
+    assert vu["n"] == 3
+
+
+def test_un_gradient_absent_reste_None_et_ne_devient_pas_zero():
+    """C'est ce que le solveur a dit. Un zero affirmerait un etat limite
+    plat -- `_doe/plan.assembler_plan` decide ensuite quoi en faire."""
+    SOL = [{"fc": 1.0, "fy": 2.0}]
+
+    def faux_pool(*a, **k):
+        return {0: {"g": 0.5}}          # aucun gradient
+
+    reel = _parallele.evaluer_en_parallele
+    _parallele.evaluer_en_parallele = faux_pool
+    try:
+        _parallele.evaluer_plan_en_parallele(SOL, ["fc", "fy"], "s", "m", 2,
+                                             script_etude="e", repo="r")
+    finally:
+        _parallele.evaluer_en_parallele = reel
+    assert SOL[0]["dg_fc"] is None and SOL[0]["dg_fy"] is None
+
+
+def test_des_points_STANDARD_passent_par_la_transformation_avant_le_pool():
+    """Le solveur ne connait que les variables physiques."""
+    ot = pytest.importorskip("openturns")
+    dist = ot.JointDistribution([ot.Normal(235.0, 30.0), ot.Normal(30.0, 4.5)])
+    recu = {}
+
+    def faux_pool(points, params, storage, modelname, n, **k):
+        recu["points"] = [dict(p) for p in points]
+        return {i: {"g": float(i)} for i in range(len(points))}
+
+    reel = _parallele.evaluer_en_parallele
+    _parallele.evaluer_en_parallele = faux_pool
+    try:
+        g = _parallele.evaluer_points_en_parallele(
+            [[0.0, 0.0], [1.0, -1.0]], dist, ["fy", "fc"], "s", "m", 2,
+            script_etude="e", repo="r")
+    finally:
+        _parallele.evaluer_en_parallele = reel
+    assert recu["points"][0] == {"fy": 235.0, "fc": 30.0}
+    assert recu["points"][1]["fy"] == pytest.approx(265.0)
+    assert recu["points"][1]["fc"] == pytest.approx(25.5)
+    assert g == [0.0, 1.0], "les g doivent revenir DANS L'ORDRE demande"
+
+
+def test_ce_module_n_a_aucune_dependance_a_OpenTURNS():
+    """Il ne fait que du sous-processus et du fichier. La transformation
+    isoprobabiliste lui arrive DEJA construite, et `T_inv(list(u))` suffit --
+    inutile de lui imposer OpenTURNS pour un `ot.Point`."""
+    import io as _io
+    src = _io.open(_parallele.__file__, encoding="utf-8").read()
+    assert "import openturns" not in src
+
+
+def test_la_fabrique_memoise_pour_garder_le_compteur_d_appels():
+    """La memoisation n'est pas une optimisation : le solveur porte un
+    compteur d'appels, et en reconstruire un le remettrait a zero."""
+    construits = []
+
+    def fabriquer(chemin_ds=None, **reglages):
+        construits.append((chemin_ds, reglages))
+        return "solveur-%s" % chemin_ds
+
+    solveur = _parallele.fabrique_memoisee(
+        fabriquer, "principal", lambda nom: nom + ".ds", taille=0.05)
+    assert solveur() == "solveur-principal.ds"
+    assert solveur() is solveur()
+    assert len(construits) == 1, "le solveur a ete reconstruit"
+    assert construits[0][1] == {"taille": 0.05}
+
+
+def test_chaque_worker_a_SON_solveur():
+    """Un worker travaille sur SA copie du `.ds` : le nom lui est impose par
+    le processus pere."""
+    solveur = _parallele.fabrique_memoisee(
+        lambda chemin_ds=None, **k: chemin_ds, "principal",
+        lambda nom: nom + ".ds")
+    assert solveur("w0") == "w0.ds"
+    assert solveur("w1") == "w1.ds"
+    assert solveur() == "principal.ds"
+    assert set(solveur.cache) == {"w0", "w1", "principal"}

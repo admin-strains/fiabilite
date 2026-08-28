@@ -47,7 +47,12 @@ IMPLEMENTATIONS = [
 ]
 
 #: la fabrique est appelee sous ce nom dans les AC
-NOMS_FABRIQUE = {"_fabriquer_solveur", "solveur"}
+#: Les fonctions par lesquelles un script atteint la fabrique de solveur.
+#: `fabrique_memoisee` en fait partie depuis le 28/08/2026 : le script lui
+#: confie ses reglages, et elle y ajoute `chemin_ds`. Le contrat verifie
+#: ci-dessous porte sur la REUNION des deux -- c'est ce que l'implementation
+#: recevra reellement.
+NOMS_FABRIQUE = {"_fabriquer_solveur", "solveur", "fabrique_memoisee"}
 
 
 def _arbre(chemin):
@@ -77,9 +82,32 @@ def _parametres_acceptes(fonction):
     return noms, a.kwarg is not None
 
 
+#: Ce que `fabrique_memoisee` ajoute elle-meme aux reglages du script.
+#: Lu dans le module plutot que recopie ici : une liste figee vieillirait.
+def _ajouts_de_la_fabrique():
+    import ast as _ast
+    chemin = os.path.join(_REPO, "_doe", "parallele.py")
+    with open(chemin, encoding="utf-8") as fh:
+        arbre = _ast.parse(fh.read(), filename=chemin)
+    for n in _ast.walk(arbre):
+        if isinstance(n, _ast.FunctionDef) and n.name == "fabrique_memoisee":
+            for c in _ast.walk(n):
+                if (isinstance(c, _ast.Call) and isinstance(c.func, _ast.Name)
+                        and c.func.id == "fabriquer"):
+                    return {mc.arg for mc in c.keywords if mc.arg is not None}
+    raise AssertionError(
+        "`fabrique_memoisee` introuvable, ou elle n'appelle plus `fabriquer` : "
+        "ce fichier ne verifie plus le contrat complet.")
+
+
 def _kwargs_passes_a_la_fabrique(arbre):
-    """Les mots-clefs que le script passe a la fabrique de solveur."""
-    trouves = set()
+    """Les mots-clefs que le script passe a la fabrique de solveur.
+
+    REUNION de deux sources depuis le 28/08/2026 : ceux que le script confie
+    a `fabrique_memoisee`, et ceux que celle-ci ajoute (`chemin_ds`). C'est
+    l'ensemble que l'implementation recevra.
+    """
+    trouves = set(_ajouts_de_la_fabrique())
     for noeud in ast.walk(arbre):
         if not isinstance(noeud, ast.Call):
             continue

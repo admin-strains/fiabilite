@@ -178,3 +178,75 @@ class _ProcessusJournalise:
 
 def _lancer_sous_processus(argv, env, cwd, chemin_journal):
     return _ProcessusJournalise(argv, env, cwd, chemin_journal)
+
+
+def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
+                              n_workers, script_etude, repo):
+    """Un plan d'experiences reparti, puis RECOPIE dans `SOL`.
+
+    Les workers rendent un dictionnaire indexe ; l'appelant, lui, travaille
+    sur `SOL`, la liste qu'il a construite. Cette fonction fait le pont, en
+    place -- `SOL` est modifiee et rendue.
+
+    Un gradient ABSENT est recopie tel quel, a `None` : c'est ce que le
+    solveur a dit. Le remplacer par zero affirmerait un etat limite plat.
+    `_doe/plan.assembler_plan` decide ensuite quoi en faire, selon
+    `exclure_points_sans_gradient`.
+    """
+    resultats = evaluer_en_parallele(SOL, params_names, storage,
+                                     base_modelname, n_workers,
+                                     script_etude=script_etude, repo=repo)
+    for i, rendu in resultats.items():
+        SOL[i]["g"] = rendu["g"]
+        for nom in params_names:
+            SOL[i]["dg_%s" % nom] = rendu.get("dg_%s" % nom)
+    return SOL
+
+
+def evaluer_points_en_parallele(u_points, dist, params_names, storage,
+                                modelname, n_workers, script_etude, repo):
+    """Des points de l'espace STANDARD, repartis sur plusieurs solveurs.
+
+    Le solveur ne connait que les variables physiques : les points passent
+    par la transformation isoprobabiliste avant d'etre confies au pool.
+
+    Retourne la liste des `g`, DANS L'ORDRE de `u_points` -- les workers
+    rendent un dictionnaire indexe, et l'appelant attend une grille.
+    """
+    # `T_inv(list(u))` et non `T_inv(ot.Point(list(u)))` : OpenTURNS accepte
+    # une sequence, et ce module n'a alors AUCUNE dependance a OpenTURNS --
+    # il ne fait que du sous-processus et du fichier. Verifie egal.
+    T_inv = dist.getInverseIsoProbabilisticTransformation()
+    points = []
+    for u in u_points:
+        x = T_inv(list(u))
+        points.append({p: float(x[j]) for j, p in enumerate(params_names)})
+    resultats = evaluer_en_parallele(
+        points, params_names, storage, modelname, n_workers,
+        script_etude=script_etude, repo=repo,
+        sous_dossier="_hf_workers", prefixe="hfw",
+        nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE")
+    return [resultats[i]["g"] for i in range(len(points))]
+
+
+def fabrique_memoisee(fabriquer, modelname_defaut, chemin_pour, **reglages):
+    """Un solveur PAR MODELE, construit une fois puis reutilise.
+
+    Un worker de plan d'experiences parallele travaille sur SA copie du
+    `.ds` : le nom du modele lui est impose par le processus pere, d'ou le
+    parametre.
+
+    La memoisation n'est pas une optimisation : le solveur porte un COMPTEUR
+    D'APPELS, et en reconstruire un remettrait ce compteur a zero. C'est lui
+    qui dit, en fin de run, combien d'appels ont reellement ete payes.
+    """
+    cache = {}
+
+    def solveur(nom=None):
+        nom = nom or modelname_defaut
+        if nom not in cache:
+            cache[nom] = fabriquer(chemin_ds=chemin_pour(nom), **reglages)
+        return cache[nom]
+
+    solveur.cache = cache
+    return solveur
