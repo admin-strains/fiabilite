@@ -201,8 +201,10 @@ def test_le_script_delegue_le_dessin(script):
                errors="replace").read()
     assert "_figurer.Decor(" in src, "%s ne construit pas de decor" % script
     assert "_figurer.planche_EFF(" in src
-    # ce qui reste dans l'etude, c'est le CALCUL sur la coupe, pas le trace
-    assert "_batch_mu_sigma(" in src
+    # ce qui reste dans l'etude, c'est le CALCUL sur la coupe, pas le trace.
+    # Les trois champs eux-memes sont dans `_reliability/eff_ot` depuis le
+    # 27/08 -- ils etaient ecrits deux fois par etude, a l'identique.
+    assert "_eff_ot.champs_sur_coupe(" in src
     assert "_figurer.planche_globale(" in src
     for reste in ("plt.subplots(1, 3", "plt.subplots(n_steps"):
         assert reste not in src, (

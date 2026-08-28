@@ -57,6 +57,31 @@ def batch_mu_sigma(g_ot, sigma_func, grid, predict):
     return mu, sigma
 
 
+
+def champs_sur_coupe(g_ot, sigma_func, grille, cote, epsilon_factor, predict):
+    """Les trois champs qu'une planche d'enrichissement montre.
+
+    `(Z_eff, Z_sigma, Z_g)` : le critere, l'ecart-type du metamodele, et son
+    etat limite. Ils viennent d'UNE SEULE evaluation en lot -- `mu` et
+    `sigma` sur toute la coupe -- puis de trois mises en forme. Les calculer
+    separement couterait trois passes de BLAS pour les memes nombres.
+
+    ZERO appel solveur : tout est du metamodele. C'est ce qui permet a
+    `planche_globale` de refaire l'ajustement a chaque etape de
+    l'enrichissement sans rien repayer.
+
+    `Z_g` vaut None quand `g_ot` est None -- la planche trace alors sans
+    etat limite approche. Garde DEFENSIVE, reprise verbatim des deux
+    etudes : elle n'est atteignable que par la voie `fm` de
+    `batch_mu_sigma` (celle de PCK et GEPCK, qui n'appelle pas `g_ot`), et
+    seulement si `sigma_func` porte un `fm` alors que `g_ot` est None. Par
+    la voie generique, `batch_mu_sigma` lit `g_ot` avant, et leve.
+    """
+    mu, sigma = batch_mu_sigma(g_ot, sigma_func, grille, predict)
+    return (eff(mu, sigma, epsilon_factor).reshape(cote, cote),
+            sigma.reshape(cote, cote),
+            None if g_ot is None else mu.reshape(cote, cote))
+
 def _ecrire(message):
     print(message, flush=True)
 

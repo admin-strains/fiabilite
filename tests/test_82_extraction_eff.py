@@ -232,3 +232,112 @@ def test_un_metamodele_interpolant_le_dit_en_une_ligne():
     e.journaliser_decomposition(1.0, 0.0, 2.0, [0.0, 0.0], tracer=j)
     assert j == ["  EFF converge debug : sigmaG=0 (modele interpolant exact "
                  "au point u_opt)"]
+
+
+# --------------------------------------------------------------------------- #
+# LES TROIS CHAMPS D'UNE COUPE (extraits des deux etudes le 27/08/2026)        #
+# --------------------------------------------------------------------------- #
+# `batch_mu_sigma` a DEUX voies, et les deux sont exercees ici :
+#   - la voie `fm` (PCK, GEPCK) : un seul appel `predict(..., return_var=True)`
+#     rend mu ET la variance ; `g_ot` n'est jamais appele ;
+#   - la voie generique (krigeage) : `g_ot` en lot, puis `sigma_func` point
+#     par point.
+
+
+class _AvecFM:
+    """Un `sigma_func` methode liee dont le porteur a un `fm` : c'est ce que
+    `batch_mu_sigma` cherche pour choisir la voie rapide."""
+
+    def __init__(self):
+        self.fm = "modele-ajuste"
+
+    def sigma(self, u):
+        raise AssertionError("la voie `fm` ne doit pas appeler sigma_func")
+
+
+def _predict_lot(sigma):
+    """Le predicteur de la voie `fm` : mu = u0 + u1, variance constante."""
+    def predict(fm, grid, return_var=False):
+        assert fm == "modele-ajuste" and return_var
+        mu = (grid[:, 0] + grid[:, 1]).reshape(-1, 1)
+        return mu, np.full((len(grid), 1), sigma ** 2)
+    return predict
+
+
+class _EnLot:
+    """Un `g_ot` de la voie generique : appele UNE fois sur tout le lot."""
+
+    def __init__(self):
+        self.appels = 0
+
+    def __call__(self, echantillon):
+        self.appels += 1
+        pts = np.array(echantillon)
+        return (pts[:, 0] + pts[:, 1]).reshape(-1, 1)
+
+
+def _quadrillage(cote):
+    g = np.zeros((cote * cote, 2))
+    g[:, 0] = np.tile(np.linspace(-1.0, 1.0, cote), cote)
+    g[:, 1] = np.repeat(np.linspace(-1.0, 1.0, cote), cote)
+    return g
+
+
+def _par_fm(cote=3, sigma=0.5):
+    e = _eff_ot()
+    porteur = _AvecFM()
+    return e.champs_sur_coupe(None, porteur.sigma, _quadrillage(cote), cote,
+                              2.0, _predict_lot(sigma))
+
+
+def test_les_trois_champs_ont_la_forme_de_la_coupe():
+    Z_eff, Z_sigma, Z_g = _par_fm(cote=4)
+    assert Z_eff.shape == Z_sigma.shape == (4, 4)
+
+
+def test_le_champ_d_ecart_type_est_la_racine_de_la_variance():
+    """`batch_mu_sigma` rend `sigma`, pas `sigma^2` -- le critere EFF attend
+    un ecart-type."""
+    _, Z_sigma, _ = _par_fm(cote=3, sigma=0.25)
+    assert np.allclose(Z_sigma, 0.25)
+
+
+def test_le_champ_du_critere_vaut_eff_point_par_point():
+    """Le critere TRACE doit etre celui qui est MAXIMISE. C'est le defaut du
+    26/08 sous une autre forme : une copie de la formule qui derive."""
+    e = _eff()
+    Z_eff, Z_sigma, _ = _par_fm(cote=3, sigma=0.5)
+    mu = (_quadrillage(3)[:, 0] + _quadrillage(3)[:, 1]).reshape(3, 3)
+    attendu = e.eff(mu.ravel(), Z_sigma.ravel(), 2.0).reshape(3, 3)
+    assert np.allclose(Z_eff, attendu)
+
+
+def test_la_voie_fm_n_appelle_jamais_le_metamodele_point_par_point():
+    """Un seul appel BLAS pour toute la coupe. Point par point, une planche
+    de 100x100 ferait 10 000 allers-retours Python/OpenTURNS -- c'est
+    pourquoi `_AvecFM.sigma` leve si on l'appelle."""
+    Z_eff, _, Z_g = _par_fm(cote=5)
+    assert Z_eff.shape == (5, 5)
+    assert Z_g is None, "g_ot etait None : rien a tracer comme etat limite"
+
+
+def test_la_voie_generique_evalue_le_metamodele_en_UN_lot():
+    e = _eff_ot()
+    g = _EnLot()
+    Z_eff, Z_sigma, Z_g = e.champs_sur_coupe(
+        g, lambda u: 0.5, _quadrillage(3), 3, 2.0, None)
+    assert g.appels == 1, "le metamodele a ete appele point par point"
+    assert Z_g[1, 1] == pytest.approx(0.0)
+    assert Z_g[0, 0] == pytest.approx(-2.0)
+    assert np.allclose(Z_sigma, 0.5)
+
+
+def test_les_deux_voies_donnent_les_MEMES_champs():
+    """Elles servent la meme planche : un ecart entre elles se lirait comme
+    une difference de modele."""
+    e = _eff_ot()
+    a = _par_fm(cote=4, sigma=0.5)
+    b = e.champs_sur_coupe(_EnLot(), lambda u: 0.5, _quadrillage(4), 4, 2.0,
+                           None)
+    for Za, Zb in zip(a[:2], b[:2]):
+        assert np.allclose(Za, Zb)

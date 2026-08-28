@@ -940,16 +940,9 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #
 
-    # =========================================================================
-    # HELPERS VECTORISES (batch eval surrogate sur grille - BLAS multi-thread)
-    # =========================================================================
-    def _batch_mu_sigma(g_ot, sigma_func, grid):
-        return _eff_ot.batch_mu_sigma(g_ot, sigma_func, grid,
-                                   predict_pck if do_PCK else predict_gepck)
-
-    def _eff_vectorized(mu, sigma, eps_factor):
-        return _eff.eff(mu, sigma, eps_factor)
-    # =========================================================================
+    # Le predicteur en lot du metamodele courant. Les trois champs d'une
+    # coupe sont dans `_reliability/eff_ot.champs_sur_coupe`.
+    _PREDICT = predict_pck if do_PCK else predict_gepck
 
     # --- Graphiques de suivi : _reliability/graphiques.py. Les courbes Pf
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.
@@ -1061,10 +1054,8 @@ if __name__ == '__main__':
         """
         _sd = slice_def if slice_def is not None else (0, 1, {})
         grille = _DECOR.grille_de_coupe(_sd)
-        mu_grid, sigma_grid = _batch_mu_sigma(g_ot, sigma_func, grille)
-        Z_eff = _eff_vectorized(mu_grid, sigma_grid, epsilon_factor).reshape(n_grid, n_grid)
-        Z_sigma = sigma_grid.reshape(n_grid, n_grid)
-        Z_g = mu_grid.reshape(n_grid, n_grid) if g_ot is not None else None
+        Z_eff, Z_sigma, Z_g = _eff_ot.champs_sur_coupe(
+            g_ot, sigma_func, grille, n_grid, epsilon_factor, _PREDICT)
 
         _theta = ('  theta=[' + ', '.join(f'{v:.3f}' for v in _eff_history_theta[-1]) + ']'
                   if _eff_history_theta else '')
@@ -1096,12 +1087,10 @@ if __name__ == '__main__':
             n_pts = n0 + step
             g_ot_k, sigma_k, _, _, _ = init_g_ot(None, None, xt[:n_pts],
                                                  yt[:n_pts], all_grad[:n_pts])
-            mu, sig = _batch_mu_sigma(g_ot_k, sigma_k, grille)
-            etapes.append(dict(
-                n_pts=n_pts, xt=xt[:n_pts], xt_eff=xt_eff[:step],
-                Z_eff=_eff_vectorized(mu, sig, epsilon_factor).reshape(n_grid, n_grid),
-                Z_sigma=sig.reshape(n_grid, n_grid),
-                Z_g=mu.reshape(n_grid, n_grid)))
+            Z_eff, Z_sigma, Z_g = _eff_ot.champs_sur_coupe(
+                g_ot_k, sigma_k, grille, n_grid, epsilon_factor, _PREDICT)
+            etapes.append(dict(n_pts=n_pts, xt=xt[:n_pts], xt_eff=xt_eff[:step],
+                               Z_eff=Z_eff, Z_sigma=Z_sigma, Z_g=Z_g))
             print(f"  [GLOBAL PLANCHE] step {step}/{n_eff} (N={n_pts}) OK", flush=True)
 
         _, _, _figees = _DECOR.etiquettes(slice_def_final)

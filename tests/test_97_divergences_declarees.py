@@ -208,7 +208,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 643 -> 631.
     #: 27/08 (suite) : les historiques sont vides en place, plus rebindes.
     #: 631 -> 630.
-    PLAFOND = 630
+    #: 27/08 (suite) : les trois champs d'une coupe -- ecrits DEUX FOIS par
+    #: etude -- rejoignent `_reliability/eff_ot`. 630 -> 621.
+    PLAFOND = 621
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

@@ -138,7 +138,10 @@ PROJET = {
 #: 27/08 (suite) : les historiques d'enrichissement sont vides EN PLACE au
 #: lieu d'etre rebindes -- le contrat de partage part dans `ArretEFF`, et
 #: l'etude n'en garde que deux lignes. 1489 -> 1488.
-PLAFOND_LIGNES = 1488
+#: 27/08 (suite) : les trois champs d'une coupe (critere, ecart-type, etat
+#: limite) etaient calcules DEUX FOIS par etude, a l'identique ; ils sont
+#: dans `_reliability/eff_ot.champs_sur_coupe`. 1488 -> 1477.
+PLAFOND_LIGNES = 1477
 PLAFOND_FONCTIONS = 42
 
 
