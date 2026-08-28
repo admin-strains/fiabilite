@@ -334,7 +334,7 @@ if __name__ == '__main__':
 
     # --- Sortie PNG EFF ---
     timestamp   = datetime.now().strftime('%d%m_%H%M')
-    out_dir_eff = os.path.join(path_dir, 'output', 'png EFF', f'png_EFF_{timestamp}')
+    out_dir_eff = CFG.dossier_png_eff(timestamp, os.path.join(path_dir, 'output'))
     os.makedirs(out_dir_eff, exist_ok=True)
     _schema.ecrire_trace(CFG, out_dir_eff)   # configuration effective, a cote des figures
 

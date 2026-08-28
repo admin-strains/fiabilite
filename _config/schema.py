@@ -375,8 +375,21 @@ class Configuration:
     def bornes_u(self) -> Tuple[float, float, float, float]:
         return (self.u1_min, self.u1_max, self.u2_min, self.u2_max)
 
-    def dossier_png_eff(self, timestamp: str) -> str:
-        base = self.dossier_sortie or os.path.join(os.getcwd(), "output")
+    def dossier_png_eff(self, timestamp: str, defaut: str = None) -> str:
+        """Ou vont les figures de ce run.
+
+        `dossier_sortie` NE FAISAIT RIEN jusqu'au 28/08/2026 : cette methode
+        n'etait appelee nulle part, et les deux etudes calculaient leur
+        dossier elles-memes a partir de leur propre emplacement. Le resume de
+        configuration, lui, affichait fidelement le reglage -- qui le posait
+        le voyait confirme, et croyait donc qu'il agissait.
+
+        `defaut` est ce que l'appelant utilisait jusqu'ici : le dossier de
+        l'etude. Le repli sur `os.getcwd()` etait FAUX -- le lanceur se place
+        dans le `.ds` du modele avant d'executer le script, donc les figures
+        seraient parties s'y ranger.
+        """
+        base = self.dossier_sortie or defaut or os.path.join(os.getcwd(), "output")
         return os.path.join(base, "png EFF", "png_EFF_%s" % timestamp)
 
     # =================================================================== #

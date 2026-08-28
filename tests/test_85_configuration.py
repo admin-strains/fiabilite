@@ -331,7 +331,13 @@ def test_aucun_autre_parametre_n_est_mort_en_silence():
     rejoindre `SANS_EFFET`, pas rester un reglage sans effet."""
     from schema import SANS_EFFET                            # noqa: PLC0415
     champs = set(Configuration(modelname="x").en_dict())
-    # champs consommes par l'outillage et non par les scripts AC
+    # Champs que les scripts ne nomment pas -- soit ils passent par une
+    # METHODE de la configuration, soit ils sont consommes par l'outillage.
+    # `dossier_sortie` est du premier genre depuis le 28/08/2026 : les etudes
+    # appellent `CFG.dossier_png_eff(...)`. Avant, il ne servait a RIEN --
+    # cette methode n'etait appelee nulle part, et l'exemption le couvrait
+    # sous un motif faux (« consomme par l'outillage »). Son effet reel est
+    # verifie par `test_le_dossier_de_sortie_agit_vraiment`.
     HORS_SCRIPTS = {"modelname", "storage", "dossier_sortie",
                     "hf_2d_grid_fixed", "hf_3d_grid_fixed"}
     corps = "\n".join(_noms_lus(c) for c in ETUDES.values())
@@ -620,3 +626,47 @@ def test_le_resume_separe_l_etude_de_la_session(etude):
     assert "ETUDE" in texte and "SESSION" in texte
     assert texte.index("ETUDE") < texte.index("SESSION"), \
         "l'etude se lit avant la session : c'est elle qui definit le resultat"
+
+
+# --------------------------------------------------------------------- #
+# UN REGLAGE QUI N'AGIT PAS EST UN REGLAGE QUI MENT (28/08/2026)
+# --------------------------------------------------------------------- #
+def test_le_dossier_de_sortie_agit_vraiment():
+    """`dossier_sortie` ne faisait RIEN : `dossier_png_eff` n'etait appelee
+    nulle part, les deux etudes calculaient leur dossier a partir de leur
+    propre emplacement, et le resume de configuration affichait pourtant le
+    reglage -- qui le posait le voyait confirme."""
+    cfg = Configuration(modelname="x", dossier_sortie=os.path.join("C:", "ailleurs"))
+    out = cfg.dossier_png_eff("2808_1200", defaut=os.path.join("C:", "etude", "output"))
+    assert out.startswith(os.path.join("C:", "ailleurs"))
+    assert out.endswith(os.path.join("png EFF", "png_EFF_2808_1200"))
+
+
+def test_sans_reglage_les_figures_ne_bougent_pas():
+    """Le repli est le dossier de l'ETUDE, celui que les scripts utilisaient.
+    Un repli sur `os.getcwd()` -- ce qu'il y avait -- aurait envoye les
+    figures dans le `.ds` du modele : le lanceur s'y place avant d'executer
+    le script."""
+    cfg = Configuration(modelname="x")
+    defaut = os.path.join("C:", "etude", "output")
+    assert cfg.dossier_png_eff("2808_1200", defaut=defaut) == os.path.join(
+        defaut, "png EFF", "png_EFF_2808_1200")
+
+
+@pytest.mark.parametrize("script", sorted(ETUDES))
+def test_les_etudes_passent_par_la_configuration(script):
+    src = open(ETUDES[script], encoding="utf-8", errors="replace").read()
+    assert "CFG.dossier_png_eff(" in src, (
+        "%s : le dossier des figures est de nouveau calcule dans l'etude, "
+        "donc `dossier_sortie` ne fait plus rien." % script)
+
+
+def test_l_outil_comparatif_ne_reecrit_plus_la_ligne_source():
+    """Il patchait `out_dir_eff = ...` par expression reguliere -- un
+    contournement du fait que le reglage ne servait a rien."""
+    src = open(os.path.join(REPO, "tools", "run_comparatif.py"),
+               encoding="utf-8").read()
+    assert "out_dir_eff" not in src.split("def patcher")[1].split("def ")[0]         or "re.subn" not in src, (
+        "l'outil reecrit de nouveau la ligne du script au lieu de poser le "
+        "reglage")
+    assert "dossier_sortie=repr(dossier_sortie)" in src

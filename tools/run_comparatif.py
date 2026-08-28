@@ -70,7 +70,10 @@ def patcher(chemin, n_max_eff, dossier_sortie, cible=None):
     nl = "\r\n" if "\r\n" in src else "\n"
     texte = src.replace("\r\n", "\n")
 
-    surcharges = dict(SURCHARGES, n_max_EFF_points=str(n_max_eff))
+    # `dossier_sortie` passe par la MEME voie que les autres surcharges
+    # depuis que le reglage agit (28/08/2026).
+    surcharges = dict(SURCHARGES, n_max_EFF_points=str(n_max_eff),
+                      dossier_sortie=repr(dossier_sortie))
     m = ANCRE.search(texte)
     if not m:
         raise SystemExit(
@@ -91,16 +94,11 @@ def patcher(chemin, n_max_eff, dossier_sortie, cible=None):
 
     # Sortie dediee, pour ne pas melanger les figures de deux versions.
     #
-    # `path_dir` n'est plus reecrit : depuis la phase 4b, les scripts le
-    # deduisent de leur propre emplacement. Il portait jusque-la le chemin
-    # absolu du poste de l'auteur, et cette reecriture etait la seule raison
-    # pour laquelle un run etait possible ailleurs.
-    texte, n = re.subn(r"(?m)^(\s+)out_dir_eff\s*=\s*.*",
-                       lambda m: "%sout_dir_eff = r\"%s\"" % (m.group(1), dossier_sortie),
-                       texte, count=1)
-    if not n:
-        print("  [patch] out_dir_eff : introuvable, les figures iront ailleurs",
-              file=sys.stderr)
+    # Cet outil REECRIVAIT la ligne `out_dir_eff = ...` du script, parce
+    # que `dossier_sortie` ne servait a rien. Depuis le 28/08/2026 le
+    # reglage agit : il suffit de le poser comme les autres, par
+    # `CFG.remplace`. Une surcharge de moins qui passe par une expression
+    # reguliere sur du code source.
     os.makedirs(dossier_sortie, exist_ok=True)
 
     cible = cible or os.path.join(os.path.dirname(chemin), "_run_comparatif.py")
