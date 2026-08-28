@@ -44,7 +44,11 @@ SIG_FAIBLE = {"n0": 24, "params": ["fc", "fy"], "n_var": 2, "modelname": "flexio
 SIG_SOLVEUR = {"solveur": "DS", "solveur_lineaire": "MUMPS", "taille_maille": 0.05}
 
 HIST = {"EFF": [1.0, 0.5], "BB": [None, 0.02], "BS": [0.3, None],
-        "theta": [[1.0, 2.0], [1.1, 2.1]], "beta_IS": [None, 4.7]}
+        "theta": [[1.0, 2.0], [1.1, 2.1]], "beta_IS": [None, 4.7],
+        # Le sixieme depuis le 28/08/2026 : il etait tenu pendant le run et
+        # jamais dumpe. Voir `tests/test_118_historiques_reprise.py`, qui
+        # ferme la REGLE dont il n'etait qu'un cas.
+        "Pf": [None, {"mid": 1e-6, "sup": 2e-7, "inf": 4e-6}]}
 
 
 def _champs(**surcharge):
@@ -247,11 +251,11 @@ def test_aller_retour_les_points_reviennent_a_l_identique(tmp_path):
     assert rs["hf_2d_grid"]["cote"] == 2
 
 
-def test_les_cinq_historiques_reviennent_sous_leurs_clefs(tmp_path):
+def test_les_six_historiques_reviennent_sous_leurs_clefs(tmp_path):
     f = str(tmp_path / "restart_state.json")
     _reprise.enregistrer(f, **_champs())
     h = _reprise.historiques_de(_reprise.charger(f, dict(SIG_SOLVEUR)))
-    assert set(h) == {"EFF", "BB", "BS", "theta", "beta_IS"}
+    assert set(h) == {"EFF", "BB", "BS", "theta", "beta_IS", "Pf"}
     assert h == HIST
 
 
@@ -260,7 +264,7 @@ def test_un_historique_absent_du_dump_revient_vide():
     h = _reprise.historiques_de({"hist_EFF": [1.0]})
     assert h["EFF"] == [1.0]
     assert h["BB"] == [] and h["BS"] == [] and h["theta"] == []
-    assert h["beta_IS"] == []
+    assert h["beta_IS"] == [] and h["Pf"] == []
 
 
 def test_le_dump_vit_dans_le_ds_du_modele():

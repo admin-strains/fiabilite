@@ -59,6 +59,29 @@ def _flottants(valeurs):
     return [None if v is None else float(v) for v in valeurs]
 
 
+def _triplets_pf(valeurs):
+    """L'historique des Pf encadrees : un dict `mid/sup/inf` par iteration.
+
+    Il ne passait PAS dans le dump jusqu'au 28/08/2026, alors que les quatre
+    autres y passaient. Mesure sur la flexion pure : apres une reprise,
+    `hist_BB` portait 8 entrees -- tout le run -- et l'historique des Pf 3,
+    celles d'apres l'interruption. Les deux figures produites cote a cote
+    par le meme run, `convergence_EFF` et `Pf_evolution`, ne couvraient donc
+    pas la meme periode, et rien ne le disait.
+
+    Ce triple est PAYE : deux FORM+IS de plus par iteration, trois pour le
+    plan initial. Le jeter a la reprise, c'est jeter du calcul deja fait.
+    """
+    triplets = []
+    for v in valeurs or ():
+        if v is None:
+            triplets.append(None)
+            continue
+        triplets.append({c: (None if v.get(c) is None else float(v[c]))
+                         for c in ("mid", "sup", "inf")})
+    return triplets
+
+
 def construire_etat(*, signature, signature_solveur, modele, timestamp,
                     max_degree, n0, xt, yt, all_grad, xt_eff,
                     enrich_round, round_sizes_prev, historiques, coupe_hf,
@@ -98,6 +121,9 @@ def construire_etat(*, signature, signature_solveur, modele, timestamp,
     st["hist_BS"]      = _flottants(historiques["BS"])
     st["hist_theta"]   = [[float(x) for x in t] for t in historiques["theta"]]
     st["hist_beta_IS"] = _flottants(historiques["beta_IS"])
+    # `.get` et non `[...]` : un appelant ecrit avant le 28/08/2026 ne
+    # fournit pas cette clef, et un dump sans Pf reste un dump valide.
+    st["hist_Pf"]      = _triplets_pf(historiques.get("Pf"))
     st["hf_2d_grid"]   = coupe_hf
     st["best_sp"]     = [float(v) for v in np.array(best_sp)] if best_sp is not None else None
     st["best_result"] = _u_beta(best_result) if best_result is not None else None
@@ -179,7 +205,7 @@ def charger(fichier, signature_attendue):
 
 
 def historiques_de(rs):
-    """Les cinq historiques du dump, sous les clefs de `construire_etat`.
+    """Les six historiques du dump, sous les clefs de `construire_etat`.
 
     Chaque `get` porte son defaut : un dump anterieur a l'ajout d'un
     historique se relit sans lever.
@@ -188,4 +214,7 @@ def historiques_de(rs):
             "BB":      list(rs.get("hist_BB", [])),
             "BS":      list(rs.get("hist_BS", [])),
             "theta":   list(rs.get("hist_theta", [])),
-            "beta_IS": list(rs.get("hist_beta_IS", []))}
+            "beta_IS": list(rs.get("hist_beta_IS", [])),
+            # Absent des dumps anterieurs au 28/08/2026 : la reprise repart
+            # alors d'un historique vide, ce qu'elle faisait TOUJOURS avant.
+            "Pf":      list(rs.get("hist_Pf", []))}

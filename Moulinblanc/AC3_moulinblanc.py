@@ -526,7 +526,7 @@ if __name__ == '__main__':
             enrich_round=_enrich_round, round_sizes_prev=_round_sizes_prev,
             historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
                          "BS": _eff_history_BS, "theta": _DIAG.theta,
-                         "beta_IS": _eff_history_beta_IS},
+                         "beta_IS": _eff_history_beta_IS, "Pf": _eff_history_Pf},
             coupe_hf=_GRILLE.coupes.get("courante"),
             best_result=best_result, best_sp=best_sp, modes=modes,
             result_IS=result_IS)
@@ -1087,7 +1087,7 @@ if __name__ == '__main__':
         _h = _reprise.historiques_de(_rs)
         _eff_history_EFF, _eff_history_BB    = _h["EFF"], _h["BB"]
         _eff_history_BS, _DIAG.theta = _h["BS"], _h["theta"]
-        _eff_history_beta_IS = _h["beta_IS"]
+        _eff_history_beta_IS, _eff_history_Pf = _h["beta_IS"], _h["Pf"]
         _enrich_round     = int(_rs.get('enrich_round', 0)) + 1
         _round_sizes_prev = list(_rs.get('round_sizes', [int(len(xt))]))
         _JOURNAL.marquer_reprise(_enrich_round, len(xt), len(_restart_xt_eff))
