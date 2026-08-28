@@ -210,7 +210,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 631 -> 630.
     #: 27/08 (suite) : les trois champs d'une coupe -- ecrits DEUX FOIS par
     #: etude -- rejoignent `_reliability/eff_ot`. 630 -> 621.
-    PLAFOND = 621
+    #: 27/08 (suite) : la coupe finale se decide dans le flux, et l'enveloppe
+    #: locale `_coupe_la_plus_parlante` disparait. 621 -> 615.
+    PLAFOND = 615
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

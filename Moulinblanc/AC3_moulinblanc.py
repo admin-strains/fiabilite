@@ -1114,18 +1114,18 @@ if __name__ == '__main__':
         return _fosm[0].mesurer(best_result)
 
 
-    def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, fond_hf=None, fond_hf_final=None):
+    def print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff, coupe,
+                   fond_hf=None, fond_hf_final=None):
         """La figure de synthese : ou passe l'etat limite, ou FORM a cherche.
 
-        Le DESSIN est dans `_etapes/figurer.py`. Restent ici deux choses qui
-        appartiennent a l'etude : le choix de la coupe finale -- une decision,
-        prise sur les facteurs d'importance -- et l'evaluation du metamodele
-        sur cette coupe.
+        Le DESSIN est dans `_etapes/figurer.py`. Ne reste ici que l'evaluation
+        du metamodele sur la coupe -- du calcul.
+
+        La coupe est RECUE, plus choisie ici : elle l'etait par effet de bord
+        sur une globale, alors que les fonds de contour passes en argument
+        sont evalues AVANT l'appel.
         """
-        global slice_def_final
-        if slice_def_final is None:
-            slice_def_final = _coupe_la_plus_parlante(best_result)
-        grille = _DECOR.grille_de_coupe(slice_def_final)
+        grille = _DECOR.grille_de_coupe(coupe)
 
         Z_sur = None
         if g_ot is not None and not do_HF:
@@ -1141,19 +1141,13 @@ if __name__ == '__main__':
         # pas de solution analytique de reference pour cette etude
 
         return _figurer.visu_FORM(
-            _DECOR, slice_def_final, Z_surrogate=Z_sur, fond_hf=fond_hf_final,
+            _DECOR, coupe, Z_surrogate=Z_sur, fond_hf=fond_hf_final,
             xt=xt, xt_eff=xt_eff, points_de_depart=best_sps,
             modes=modes if modes else ([best_result] if best_result is not None else []),
             modes_figes=best_sol_modes_fixed, gradients_figes=grad_sp_fixed,
             trajectoires=traj_runs_fixed, surcouche=None,
             legende=legende)
 
-    def _coupe_la_plus_parlante(best_result):
-        """La coupe que les facteurs d'importance designent.
-
-        Dans `_reliability/form.py`.
-        """
-        return _form.coupe_la_plus_parlante(best_result, n_var, slice_def)
 
 
 
@@ -1297,7 +1291,8 @@ if __name__ == '__main__':
 
     if event is None:
         if best_sol_modes_fixed is not None:
-            print_visu(None, [], None, None, [], None)
+            print_visu(None, [], None, None, [], None,
+                       slice_def_final or slice_def)
             sys.exit(0)
         print('Aucune branche active', flush=True)
         sys.exit(1)
@@ -1344,7 +1339,12 @@ if __name__ == '__main__':
         print("=== IS sur surrogate projete (enveloppe position) ===", flush=True)
         result_IS_proj = run_IS_proj(modes, event_proj)
         print_results_IS(result_IS_proj)
+    # La coupe finale se decide AVANT les figures, pas pendant : leurs fonds
+    # de contour sont evalues a l'appel. Le detail est dans `test_112`.
+    if slice_def_final is None:
+        slice_def_final = _form.coupe_la_plus_parlante(best_result, n_var, slice_def)
     print_visu(best_result, best_sps, xt, g_ot, modes, xt_eff,
+               slice_def_final,
                fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
                fond_hf_final=fond_hf_pour_figures(
                    slice_def_final, _HF_CACHE_FILE_FINAL, finale=True))

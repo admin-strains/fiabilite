@@ -141,8 +141,13 @@ PROJET = {
 #: 27/08 (suite) : les trois champs d'une coupe (critere, ecart-type, etat
 #: limite) etaient calcules DEUX FOIS par etude, a l'identique ; ils sont
 #: dans `_reliability/eff_ot.champs_sur_coupe`. 1488 -> 1477.
+#: 27/08 (suite) : la coupe finale se decide dans le flux AVANT les figures
+#: (piege d'ordre, `test_112`) ; `print_visu` la recoit au lieu de la publier
+#: par effet de bord, et son enveloppe locale disparait. Le nombre de lignes
+#: ne bouge pas -- la correction coute deux lignes, les suppressions les
+#: rendent. Fonctions : 42 -> 39.
 PLAFOND_LIGNES = 1477
-PLAFOND_FONCTIONS = 42
+PLAFOND_FONCTIONS = 39
 
 
 def _imports_tiers(chemin):
