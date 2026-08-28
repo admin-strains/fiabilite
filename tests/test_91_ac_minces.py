@@ -162,8 +162,11 @@ PROJET = {
 #: `_surrogate/ajuster.py`, et les TROIS globales de diagnostic du
 #: metamodele (chaos, LOO, longueurs de correlation) deviennent un
 #: objet `Diagnostics`. 1428 -> 1413.
-PLAFOND_LIGNES = 1413
-PLAFOND_FONCTIONS = 38
+#: 28/08 (suite) : `fond_hf_pour_figures` rejoint `Grille` -- avec la
+#: garde des 29 heures, desormais EXERCEE par un test qui compte les
+#: appels solveur au lieu de lire du texte. 1413 -> 1380.
+PLAFOND_LIGNES = 1380
+PLAFOND_FONCTIONS = 37
 
 
 def _imports_tiers(chemin):

@@ -1015,6 +1015,8 @@ if __name__ == '__main__':
         fichier_cache_complet=_HF_FULL_CACHE_FILE,
         fichier_cache_points=_HF_CUSTOM_CACHE_FILE,
         coupe_initiale=hf_2d_grid_fixed,
+        coupe_courante=slice_def, points_libres=hf_custom_points,
+        active=print_HF,
         evaluer_lot=(lambda pts: run_HF_grid_parallel(pts, n_workers=n_workers_DOE))
                     if n_workers_DOE and n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
@@ -1030,49 +1032,14 @@ if __name__ == '__main__':
 
 
 
-    def _hf_from_custom_points(sd):
-        """La surface a partir des points CHOISIS de l'etude.
-
-        Les 102 lignes de cache, reprise et interpolation sont dans
-        `_etapes/grille.py`. `sd` n'a jamais ete lu : la coupe ne joue aucun
-        role, les points portent deja leurs coordonnees.
-        """
-        return _GRILLE.depuis_points_libres(hf_custom_points)
 
 
 
 
     def fond_hf_pour_figures(sd=None, cache=None, finale=False):
-        """Le fond de contour haute fidelite, et CE QU'IL COUTE.
-
-        Fonction separee et nommee parce que c'est une ACTION, pas un detail
-        de trace : jusqu'a `n_grid_hf ** 2` appels au solveur. Sur le Moulin
-        Blanc regle a 15, cela fait 225 appels, soit 29 heures -- pour un fond
-        de figure. Appelee explicitement, elle se voit ; obtenue au fond d'un
-        `print_*`, elle ne se voyait pas.
-
-        Rendre None revient a tracer sans fond : les figures sortent quand
-        meme, et sans un seul appel au solveur.
-        """
-        _sd = sd if sd is not None else (slice_def if slice_def is not None else (0, 1, {}))
-        # UNE COUPE IDENTIQUE A LA COUPE COURANTE N'A AUCUNE RAISON D'ETRE
-        # RECALCULEE dans un second cache : c'est la meme grille. Elle l'etait,
-        # parce que `slice_def_final` est servi par `hf_grid_cache_final.json`
-        # alors que `slice_def` l'est par `hf_grid_cache.json` -- et les deux
-        # coupes valent (0, 1, {}) des qu'il y a deux variables.
-        # Cout : n_grid_hf^2 appels solveur EN DOUBLE. Sur le Moulin Blanc
-        # regle a 15, cela fait 225 appels de plus, soit 29 heures.
-        if _sd == slice_def:
-            cache, finale = _HF_CACHE_FILE, False
-        _cache = cache if cache is not None else _HF_CACHE_FILE
-        if hf_custom_points is not None:
-            return _hf_from_custom_points(_sd)
-        if not print_HF:
-            return None
-        # Le maillage vient de la GRILLE QUI A CALCULE Z, et non du cadre
-        # des figures -- defaut corrige : `test_110_fond_hf_coordonnees`.
-        UX_hf, UY_hf = _GRILLE.maillage_2d()
-        return _GRILLE.coupe(_sd, fichier=_cache, finale=finale), UX_hf, UY_hf
+        """Le fond de contour haute fidelite. Tout est dans `_etapes/grille.py`,
+        avec ce qu'il coute et la garde qui evite de le payer deux fois."""
+        return _GRILLE.fond_de_figure(sd, fichier=cache, finale=finale)
 
     def print_planche_EFF(g_ot, sigma_func, xt, xt_eff, fond_hf=None):
         """Planche 3 vues : critere EFF, ecart-type, etat limite du surrogate.

@@ -137,7 +137,16 @@ def test_aucun_fond_de_figure_ne_prend_son_maillage_dans_le_cadre(script):
             "%s : un maillage de figure est de nouveau construit sur le "
             "cadre (%r), alors que les valeurs viennent de la grille."
             % (script, interdit))
-    assert "_GRILLE.maillage_2d()" in s
+    # Le fond vient desormais de la grille elle-meme : c'est LA qu'il faut
+    # verifier que le maillage et les valeurs sortent du meme objet.
+    assert "_GRILLE.fond_de_figure(" in s
+    src_mod = io.open(os.path.join(_REPO, "_etapes", "grille.py"),
+                      encoding="utf-8").read()
+    i = src_mod.index("def fond_de_figure")
+    corps = src_mod[i:i + 2500]
+    assert "UX, UY = self.maillage_2d()" in corps, (
+        "`fond_de_figure` ne prend plus son maillage dans la grille qui "
+        "calcule Z.")
 
 
 @pytest.mark.parametrize("script", ["pure_flexion/AC3_pure_flexion.py",

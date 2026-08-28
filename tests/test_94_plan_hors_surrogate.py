@@ -368,12 +368,81 @@ def test_une_coupe_identique_a_la_courante_ne_paie_pas_un_second_cache(script):
     with open(os.path.join(_REPO, script), encoding="utf-8",
               errors="replace") as fh:
         src = fh.read()
-    assert "if _sd == slice_def:" in src, (
-        "%s : la garde a disparu -- la grille haute fidelite sera calculee "
-        "deux fois, une par fichier de cache." % script)
-    assert "cache, finale = _HF_CACHE_FILE, False" in src, (
-        "%s : la garde doit rediriger vers le cache COURANT, sinon elle ne "
-        "sert a rien." % script)
+    assert "_GRILLE.fond_de_figure(" in src, (
+        "%s : le fond de figure ne passe plus par la grille, donc plus par "
+        "la garde qui evite de le calculer deux fois." % script)
+    assert "coupe_courante=slice_def" in src, (
+        "%s : la grille ne connait plus la coupe COURANTE. Sans cette "
+        "reference, elle ne peut pas reconnaitre qu'une coupe lui est egale, "
+        "et la garde ne sert plus a rien." % script)
+
+    # la garde elle-meme, un cran plus bas
+    with open(os.path.join(_REPO, "_etapes", "grille.py"),
+              encoding="utf-8") as fh:
+        src_mod = fh.read()
+    assert "if sd == self.coupe_courante:" in src_mod, (
+        "la garde a disparu de `Grille.fond_de_figure` -- la grille haute "
+        "fidelite sera calculee deux fois, une par fichier de cache.")
+    assert "fichier, finale = self.fichier_cache, False" in src_mod, (
+        "la garde doit rediriger vers le cache COURANT, sinon elle ne sert "
+        "a rien.")
+
+
+def test_la_garde_des_29_heures_est_EXERCEE_pas_seulement_lue(tmp_path):
+    """Le garde ci-dessus lit du texte ; celui-ci COMPTE LES APPELS.
+
+    Deux demandes de fond -- la coupe courante, puis une coupe qui lui est
+    egale mais adressee a un second fichier de cache -- ne doivent couter
+    qu'UNE grille. Sans la garde, c'est `cote^2` appels solveur en double :
+    225 sur le Moulin Blanc, soit 29 heures.
+    """
+    import sys
+    chemin = os.path.join(_REPO, "_etapes")
+    if chemin not in sys.path:
+        sys.path.insert(0, chemin)
+    import grille as _grille
+
+    appels = []
+
+    def evaluer(u):
+        appels.append(tuple(u))
+        return 1.0, [0.0, 0.0], [0.0, 0.0]
+
+    g = _grille.Grille(evaluer=evaluer, n_var=2, cote=4,
+                       bornes=(-1.0, 1.0, -1.0, 1.0),
+                       fichier_cache=str(tmp_path / "courant.json"),
+                       fichier_cache_complet=str(tmp_path / "complet.json"),
+                       coupe_courante=(0, 1, {}), tracer=lambda _m: None)
+    g.fond_de_figure()                                     # la coupe courante
+    n_apres_la_premiere = len(appels)
+    g.fond_de_figure((0, 1, {}), fichier=str(tmp_path / "final.json"),
+                     finale=True)
+    assert n_apres_la_premiere == 16, n_apres_la_premiere
+    assert len(appels) == 16, (
+        "la meme coupe a ete recalculee : %d appels au lieu de 16. C'est le "
+        "doublon qui coutait 29 heures sur le Moulin Blanc."
+        % len(appels))
+
+
+def test_une_coupe_VRAIMENT_differente_est_bien_calculee(tmp_path):
+    """La garde ne doit pas confondre economie et perte : une autre coupe
+    est une autre grille, et elle se paie."""
+    import sys
+    chemin = os.path.join(_REPO, "_etapes")
+    if chemin not in sys.path:
+        sys.path.insert(0, chemin)
+    import grille as _grille
+
+    appels = []
+    g = _grille.Grille(
+        evaluer=lambda u: (appels.append(tuple(u)), (1.0, [0.0] * 3, [0.0] * 3))[1],
+        n_var=3, cote=4, bornes=(-1.0, 1.0, -1.0, 1.0),
+        fichier_cache=str(tmp_path / "c.json"),
+        fichier_cache_complet=str(tmp_path / "f.json"),
+        coupe_courante=(0, 1, {2: 0.0}), tracer=lambda _m: None)
+    g.fond_de_figure()
+    g.fond_de_figure((0, 2, {1: 1.5}), fichier=None, finale=True)
+    assert len(appels) == 32, len(appels)
 
 
 @pytest.mark.parametrize("script", SCRIPTS)

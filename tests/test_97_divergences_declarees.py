@@ -219,7 +219,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: 28/08 (suite) : le journal des points devient un objet. 583 -> 569.
     #: 28/08 (suite) : rejouer l'enrichissement, et les diagnostics du
     #: metamodele. 569 -> 555.
-    PLAFOND = 555
+    #: 28/08 (suite) : le fond de contour haute fidelite rejoint la
+    #: grille qui le calcule. 555 -> 520.
+    PLAFOND = 520
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

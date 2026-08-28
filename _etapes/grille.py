@@ -57,7 +57,8 @@ class Grille:
     def __init__(self, evaluer, n_var, cote, bornes,
                  fichier_cache, fichier_cache_complet,
                  fichier_cache_points=None, evaluer_lot=None,
-                 coupe_initiale=None,
+                 coupe_initiale=None, coupe_courante=None,
+                 points_libres=None, active=True,
                  signature=None, config_identique=None,
                  marquer_phase=None, tracer=_ecrire):
         self.evaluer = evaluer
@@ -70,6 +71,16 @@ class Grille:
         #: `evaluer_lot(points) -> [g]` -- l'evaluation en parallele, quand
         #: elle est disponible. None = un point apres l'autre.
         self.evaluer_lot = evaluer_lot
+        #: La coupe que l'etude regarde par defaut. Elle sert de REFERENCE :
+        #: une coupe qui lui est egale n'a aucune raison d'etre recalculee
+        #: dans un second cache -- c'est la garde des 29 heures.
+        self.coupe_courante = coupe_courante
+        #: Des points CHOISIS a la main plutot qu'un quadrillage regulier.
+        #: Quand ils existent, ils remplacent la grille : voir
+        #: `depuis_points_libres`.
+        self.points_libres = points_libres
+        #: Une grille eteinte ne coute rien : les figures sortent sans fond.
+        self.active = active
         self.signature = signature
         self.config_identique = config_identique
         self.marquer_phase = marquer_phase or (lambda _p: None)
@@ -463,6 +474,46 @@ class Grille:
                                           fichier=fichier, coupe=sd)
         self.coupes[cle] = description
         return Z
+
+
+    # ------------------------------------------------------------------ #
+    def fond_de_figure(self, coupe=None, fichier=None, finale=False):
+        """Le fond de contour haute fidelite d'une figure, et CE QU'IL COUTE.
+
+        Methode SEPAREE ET NOMMEE parce que c'est une ACTION, pas un detail
+        de trace : jusqu'a `cote ** 2` appels au solveur. Sur le Moulin Blanc
+        regle a 15, cela fait 225 appels, soit 29 heures -- pour un fond de
+        figure. Appelee explicitement, elle se voit ; obtenue au fond d'un
+        `print_*`, elle ne se voyait pas.
+
+        Rendre None revient a tracer sans fond : les figures sortent quand
+        meme, et sans un seul appel au solveur.
+
+        LA GARDE DES 29 HEURES. Une coupe egale a `coupe_courante` n'a aucune
+        raison d'etre recalculee dans un SECOND cache : c'est la meme grille.
+        Elle l'etait, parce que la coupe finale etait servie par
+        `hf_grid_cache_final.json` alors que la courante l'est par
+        `hf_grid_cache.json` -- et les deux coupes valent `(0, 1, {})` des
+        qu'il y a deux variables. Cout mesure : `cote^2` appels solveur en
+        double.
+
+        Retourne `(Z, UX, UY)`, ou None. Le maillage vient de la grille QUI A
+        CALCULE Z, jamais d'ailleurs -- voir `test_110`.
+        """
+        sd = coupe if coupe is not None else (
+            self.coupe_courante if self.coupe_courante is not None else (0, 1, {}))
+        if sd == self.coupe_courante:
+            fichier, finale = self.fichier_cache, False
+        if self.points_libres is not None:
+            return self.depuis_points_libres(self.points_libres)
+        if not self.active:
+            return None
+        UX, UY = self.maillage_2d()
+        return (self.coupe(sd,
+                           fichier=fichier if fichier is not None
+                           else self.fichier_cache,
+                           finale=finale),
+                UX, UY)
 
     def points_de_coupe(self, sd):
         """Les points du quadrillage 2D, en coordonnees COMPLETES.
