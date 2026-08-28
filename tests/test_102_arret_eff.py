@@ -328,12 +328,15 @@ def test_seuls_les_criteres_qui_l_utilisent_paient_l_encadrement(critere, attend
 def test_les_scripts_ne_tiennent_plus_les_compteurs(script):
     src = open(os.path.join(_REPO, script), encoding="utf-8",
                errors="replace").read()
-    assert "_arret_eff.ArretEFF(" in src
+    assert "_arret_eff.ArretEFF.pour_un_run(" in src
     assert "count_valid_BB +=" not in src, (
         "%s tient encore ses propres compteurs" % script)
-    assert "_arret.reprendre_depuis_historique()" in src, (
-        "%s : la reprise des compteurs n'existait que d'un cote ; elle doit "
-        "etre des deux." % script)
+    # La reprise des compteurs n'existait que d'un cote ; elle est desormais
+    # DANS la fabrique, donc des deux par construction -- une etude ne peut
+    # plus l'oublier. Le controle porte sur la fabrique elle-meme.
+    assert "reprendre_depuis_historique" not in src, (
+        "%s : la reprise des compteurs est ressortie dans l'etude ; elle "
+        "appartient a `ArretEFF.pour_un_run`." % script)
 
 
 # --------------------------------------------------------------------------- #
@@ -526,3 +529,60 @@ def test_la_reprise_annonce_les_trois_compteurs():
                         tracer=j)
     a.reprendre_depuis_historique()
     assert any("count_valid_both=2" in m for m in j), list(j)
+
+
+# --------------------------------------------------------------------- #
+# LA FABRIQUE : les trois gestes de preparation, dans le bon ordre
+# --------------------------------------------------------------------- #
+def test_un_run_neuf_repart_d_historiques_vides():
+    bb, bs, pf = [0.9], [0.8], [{"mid": 1.0}]
+    a = _arret.ArretEFF.pour_un_run("BB", TOL_BB, TOL_BS, 15, 0.001,
+                                    hist_BB=bb, hist_BS=bs, hist_Pf=pf,
+                                    reprise=False, tracer=lambda _m: None)
+    assert bb == [] and bs == [] and pf == []
+    assert a.n_BB == 0 and a.n_BS == 0 and a.n_both == 0
+
+
+def test_le_vidage_se_fait_EN_PLACE():
+    """Les listes de l'appelant sont celles que l'objet remplira et que le
+    dump de reprise relira. Les remplacer par des neuves romprait le
+    partage -- le defaut du 27/08."""
+    bb, bs, pf = [0.9], [0.8], [{"mid": 1.0}]
+    a = _arret.ArretEFF.pour_un_run("BB", TOL_BB, TOL_BS, 15, 0.001,
+                                    hist_BB=bb, hist_BS=bs, hist_Pf=pf,
+                                    reprise=False, tracer=lambda _m: None)
+    assert a.hist_BB is bb and a.hist_BS is bs
+    a.enregistrer(0.001, 4.0, 4.0)
+    assert bb == [0.001], "les ratios n'arrivent pas chez l'appelant"
+
+
+def test_une_reprise_garde_ses_historiques_et_recompte():
+    """Elle ne vide rien -- ce serait jeter ce que le dump a rendu -- et
+    elle recompte ses iterations valides consecutives."""
+    bb, bs, pf = [0.9, 0.001, 0.002], [0.9, 0.001, 0.002], [{"mid": 1.0}]
+    a = _arret.ArretEFF.pour_un_run("at_least_one", TOL_BB, TOL_BS, 15, 0.001,
+                                    hist_BB=bb, hist_BS=bs, hist_Pf=pf,
+                                    reprise=True, tracer=lambda _m: None)
+    assert len(bb) == 3 and len(pf) == 1, "une reprise ne vide pas"
+    assert a.n_BB == 2 and a.n_BS == 2 and a.n_both == 2
+
+
+def test_la_reprise_est_dans_la_fabrique_donc_jamais_oubliee():
+    """Elle n'existait que dans une des deux etudes. La mettre ici, c'est la
+    rendre impossible a oublier."""
+    bb = [0.001, 0.001, 0.001]
+    a = _arret.ArretEFF.pour_un_run("BB", TOL_BB, TOL_BS, 15, 0.001,
+                                    hist_BB=bb, hist_BS=[], hist_Pf=[],
+                                    reprise=True, tracer=lambda _m: None)
+    assert a.n_BB == 3, "les compteurs n'ont pas ete repris"
+
+
+def test_un_run_neuf_ne_recompte_rien():
+    """Il n'y a rien a reprendre, et les historiques viennent d'etre vides."""
+    j = _Journal()
+    bb = [0.001, 0.001, 0.001]
+    a = _arret.ArretEFF.pour_un_run("BB", TOL_BB, TOL_BS, 15, 0.001,
+                                    hist_BB=bb, hist_BS=[], hist_Pf=[],
+                                    reprise=False, tracer=j)
+    assert a.n_BB == 0
+    assert not any("RESTART" in m for m in j)

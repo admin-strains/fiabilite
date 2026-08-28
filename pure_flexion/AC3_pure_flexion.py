@@ -908,39 +908,24 @@ if __name__ == '__main__':
             list_beta_IS = list(_eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
         else:
             list_beta_IS = [_b_mid] if _b_mid is not None else []
-        if not restart_enrich_only:
-            # VIDES EN PLACE, jamais rebindes -- voir `ArretEFF` : un
-            # rebinding abandonnerait les listes que d'autres detiennent.
-            del _eff_history_BB[:]
-            del _eff_history_BS[:]
-            del _eff_history_Pf[:]
-        list_ratio_BB, list_ratio_BS = _eff_history_BB, _eff_history_BS
-        list_Pf = _eff_history_Pf
-        # --- Les criteres d'arret : quatre branches de 68 lignes sont dans
-        # --- `_reliability/arret.py`, avec les deux asymetries qu'elles
-        # --- portaient et que personne n'avait ecrites.
-        _arret = _arret_eff.ArretEFF(
+        # Les historiques remis dans le bon etat, l'objet d'arret construit
+        # dessus, les compteurs repris s'il y a lieu : `_reliability/arret.py`.
+        _arret = _arret_eff.ArretEFF.pour_un_run(
             EFF_criteria, tol_BB, tol_BS, n_max_EFF_points, tol_EFF,
-            hist_BB=list_ratio_BB, hist_BS=list_ratio_BS)
-        if restart_enrich_only:
-            # N'existait QUE sur le Moulin Blanc : sans elle, une reprise
-            # repartait de zero compteur et repayait jusqu'a deux appels
-            # solveur pour reprouver ce qui l'etait deja.
-            _arret.reprendre_depuis_historique()
+            hist_BB=_eff_history_BB, hist_BS=_eff_history_BS,
+            hist_Pf=_eff_history_Pf, reprise=restart_enrich_only)
+        list_Pf = _eff_history_Pf
         # La condition de boucle, une fois pour les quatre criteres.
         _cond = lambda: _arret.continuer(len(xt_eff), f(u_opt)[0])
         # Lu APRES la boucle, meme si elle ne tourne jamais : `test_113`.
         _ratio_bb = None
         _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
 
-        # --- Ratio BB initial (avant tout enrichissement) ---
+        # --- Ratio BB du plan initial : `_reliability/controle.py` ---
         if print_Pf:
-            _ratio_init_bb, _pf_mid_0, _pf_sup_0, _pf_inf_0 = _three_form_is(g_ot, sigma_func, f"N={len(xt)} initial BB")
-            list_Pf.append({'mid': _pf_mid_0, 'sup': _pf_sup_0, 'inf': _pf_inf_0})
-            # Le ratio BB du plan INITIAL compte deja pour une iteration
-            # valide : un plan qui part convergent ne paie pas trois
-            # iterations pour le prouver.
-            _arret.amorcer(_ratio_init_bb)
+            _controleur.amorcer_iteration(
+                g_ot, sigma_func, BoundSurrogateFunction, _arret,
+                n_points=len(xt), historique_Pf=list_Pf, etat=_etat_courant())
 
         while _cond():
             _sigG = sigma_func(u_opt)

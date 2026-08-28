@@ -214,7 +214,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: locale `_coupe_la_plus_parlante` disparait. 621 -> 615.
     #: 28/08 : « juger une iteration » -- et la decision de payer ou non
     #: l'encadrement -- rejoint `ControleurFORM`. 615 -> 598.
-    PLAFOND = 598
+    #: 28/08 (suite) : preparation des historiques et amorce du plan
+    #: initial. 598 -> 583.
+    PLAFOND = 583
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

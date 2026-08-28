@@ -177,6 +177,35 @@ class ControleurFORM:
         return ratio, pf_mid, pf_sup, pf_inf
 
 
+
+    def amorcer_iteration(self, g_ot, sigma_func, borner, arret, *,
+                          n_points, historique_Pf=None, etat=None):
+        """L'encadrement du plan INITIAL, avant tout enrichissement.
+
+        Son ratio compte deja pour une iteration valide : un plan qui part
+        convergent ne doit pas payer trois iterations pour le prouver.
+
+        UNE REDONDANCE CONSTATEE, NON CORRIGEE. L'appelant vient de mesurer
+        le FORM+IS central (`beta_et_pf`, etiquette « initial mu conv ») et
+        cette methode ne le lui passe PAS en `beta_central` -- contrairement
+        a `mesurer_iteration`. Le central est donc recalcule : trois FORM+IS
+        au lieu de deux. Ce n'est pas du solveur, c'est du metamodele --
+        des secondes, pas des heures.
+
+        Le corriger n'est pas gratuit pour autant : le tirage d'importance
+        est stochastique, et les deux mesures du central ne rendent pas
+        exactement le meme beta. Reutiliser la premiere DEPLACERAIT le ratio
+        BB initial. C'est donc un arbitrage, pas un nettoyage -- et les deux
+        appels n'emploient meme pas le meme `fm` : l'appelant passe None,
+        `encadrement` le tire de `sigma_func`.
+        """
+        ratio, pf_mid, pf_sup, pf_inf = self.encadrement(
+            g_ot, sigma_func, "N=%d initial BB" % n_points, borner, etat=etat)
+        if historique_Pf is not None:
+            historique_Pf.append({'mid': pf_mid, 'sup': pf_sup, 'inf': pf_inf})
+        arret.amorcer(ratio)
+        return ratio
+
     def mesurer_iteration(self, g_ot, sigma_func, borner, arret, *,
                           n_points, iteration, avec_Pf,
                           historique_Pf=None, historique_beta=None, etat=None):

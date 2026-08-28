@@ -105,6 +105,37 @@ class ArretEFF:
         """L'encadrement `g +/- 2 sigma` coute deux FORM+IS par iteration."""
         return self.critere in UTILISE_BB
 
+    @classmethod
+    def pour_un_run(cls, critere, tol_BB, tol_BS, n_max_points, tol_EFF,
+                    hist_BB, hist_BS, hist_Pf, reprise, tracer=_ecrire):
+        """L'objet d'arret d'un run, ses historiques dans le bon etat.
+
+        Trois gestes qui doivent se faire DANS CET ORDRE, et qui etaient
+        ecrits a la main dans les deux etudes :
+
+          1. un run neuf VIDE les historiques -- en place, jamais par
+             rebinding (voir le contrat dans `__init__`) ;
+          2. l'objet est construit APRES, sur ces memes listes ;
+          3. une reprise recompte ses iterations valides depuis ce qui a ete
+             recharge.
+
+        L'ordre 1-2 n'est pas cosmetique : construire avant de vider, quand
+        le vidage se faisait par rebinding, laissait l'objet ecrire dans une
+        liste que plus personne ne lisait. C'est arrive le 27/08/2026, et
+        623 tests verts ne l'ont pas vu. Le vidage en place a supprime le
+        cas ; cette fabrique supprime la question.
+        """
+        if not reprise:
+            for historique in (hist_BB, hist_BS, hist_Pf):
+                del historique[:]
+        arret = cls(critere, tol_BB, tol_BS, n_max_points, tol_EFF,
+                    hist_BB=hist_BB, hist_BS=hist_BS, tracer=tracer)
+        if reprise:
+            # Sans elle, une reprise repartait de zero compteur et repayait
+            # jusqu'a deux appels solveur pour reprouver ce qui l'etait deja.
+            arret.reprendre_depuis_historique()
+        return arret
+
     def amorcer(self, ratio_bb):
         """Le ratio BB mesure sur le plan INITIAL, avant tout enrichissement.
 
