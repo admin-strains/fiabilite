@@ -141,36 +141,65 @@ def test_un_beta_nul_ne_fait_pas_diviser_par_zero():
 # --------------------------------------------------------------------- #
 # les asymetries, mises par ecrit
 # --------------------------------------------------------------------- #
-def test_en_mode_BB_l_historique_BS_reste_vide():
-    """ASYMETRIE TRANSCRITE, pas corrigee : la courbe de convergence de fin de
-    run ne montre pas la meme chose selon le critere choisi."""
-    a = _a("BB")
+# --------------------------------------------------------------------- #
+# MESURER N'EST PAS DECIDER -- decision d'Agnes, 28/08/2026
+#
+# Les deux asymetries que ces tests figeaient ont ete tranchees :
+#   1. tout ce qui est PAYE est ENREGISTRE ;
+#   2. les trois compteurs sont tenus dans TOUS les modes.
+# Ce qui reste commande par le critere, et lui seul : l'ARRET.
+# --------------------------------------------------------------------- #
+@pytest.mark.parametrize("critere", ["BB", "BS", "both", "at_least_one"])
+def test_les_deux_historiques_sont_remplis_quel_que_soit_le_critere(critere):
+    """Avant, chaque mode ne remplissait que le sien : la courbe de
+    convergence de fin de run montrait des choses differentes selon le
+    critere choisi."""
+    a = _a(critere)
     a.enregistrer(0.02, 4.0, 4.1)
     assert a.hist_BB == [0.02]
-    assert a.hist_BS == []
+    assert len(a.hist_BS) == 1 and a.hist_BS[0] is not None
 
 
-def test_en_mode_BS_l_historique_BB_reste_vide():
-    a = _a("BS")
-    a.enregistrer(0.02, 4.0, 4.1)
-    assert a.hist_BB == []
-    assert len(a.hist_BS) == 1
-
-
-def test_en_mode_both_les_compteurs_BB_et_BS_ne_bougent_jamais():
-    """ASYMETRIE TRANSCRITE : le bilan de fin de run affiche pourtant les
-    trois compteurs."""
-    a = _a("both")
+@pytest.mark.parametrize("critere", ["BB", "BS", "both", "at_least_one"])
+def test_les_trois_compteurs_sont_tenus_quel_que_soit_le_critere(critere):
+    """Un run en mode `both` affichait `count_valid_BB=0 count_valid_BS=0`
+    alors que les deux criteres etaient satisfaits a chaque iteration."""
+    a = _a(critere)
     for _ in range(3):
         a.enregistrer(0.001, 4.0, 4.0)
-    assert a.n_both == 3
-    assert a.n_BB == 0 and a.n_BS == 0
+    assert a.n_BB == 3 and a.n_BS == 3 and a.n_both == 3
 
 
-def test_en_mode_at_least_one_les_trois_compteurs_sont_tenus():
-    a = _a("at_least_one")
-    a.enregistrer(0.001, 4.0, 4.0)
-    assert a.n_BB == 1 and a.n_BS == 1 and a.n_both == 1
+def test_un_ratio_BB_non_paye_reste_None_et_ne_compte_pas():
+    """Le ratio BB demande un encadrement `g +/- 2 sigma` -- trois FORM+IS
+    de plus par iteration. Quand il n'est pas paye il vaut None : on
+    l'enregistre tel quel, on ne le fabrique pas."""
+    a = _a("BS")
+    a.enregistrer(None, 4.0, 4.02)      # ratio BS = 0.005, sous TOL_BS
+    assert a.hist_BB == [None]
+    assert a.n_BB == 0
+    assert a.n_both == 0, "un ratio absent ne peut pas satisfaire `both`"
+    assert a.n_BS == 1, "le ratio BS, lui, ne coute rien de plus que beta"
+
+
+def test_le_ratio_BS_est_mesure_meme_en_mode_BB():
+    """Il ne coute rien de plus que `beta`, calcule a chaque iteration de
+    toute facon. Ne pas l'enregistrer, c'etait jeter une mesure gratuite."""
+    a = _a("BB")
+    a.enregistrer(0.5, 4.0, 4.02)
+    assert a.hist_BS[0] == pytest.approx(abs(4.0 - 4.02) / 4.0)
+
+
+def test_le_journal_dit_quel_critere_est_en_vigueur():
+    """Les libelles sont ceux d'origine, pour que deux journaux restent
+    comparables."""
+    for critere, attendu in (("BS", "[N=10]"), ("both", "[N=10 both]"),
+                             ("at_least_one", "[N=10 alo]"),
+                             ("BB", "[N=10 bb]")):
+        j = _Journal()
+        a = _arret.ArretEFF(critere, 0.05, 0.05, 10, 0.001, tracer=j)
+        a.enregistrer(0.02, 4.0, 4.1, prefixe="N=10")
+        assert any(attendu in m for m in j), (critere, list(j))
 
 
 # --------------------------------------------------------------------- #
@@ -188,16 +217,23 @@ def test_un_plan_qui_part_loin_ne_compte_pas():
     assert a.n_BB == 0 and a.hist_BB == [0.9]
 
 
-def test_l_amorce_ne_fait_rien_en_mode_BS():
-    a = _a("BS")
+@pytest.mark.parametrize("critere", ["BB", "BS", "both", "at_least_one"])
+def test_l_amorce_est_rangee_quel_que_soit_le_critere(critere):
+    """Elle n'est appelee que si l'encadrement initial a ete calcule -- donc
+    si ce ratio a ete PAYE. En mode `BS` il etait jete."""
+    a = _a(critere)
     a.amorcer(0.01)
-    assert a.n_BB == 0 and a.hist_BB == []
+    assert a.hist_BB == [0.01] and a.n_BB == 1
 
 
-def test_en_mode_both_l_amorce_remplit_l_historique_sans_compter():
-    a = _a("both")
+def test_l_amorce_n_a_pas_de_contrepartie_BS():
+    """A la premiere mesure il n'existe pas d'iteration precedente, donc pas
+    de ratio BS. `hist_BB` porte alors UNE entree de plus -- c'est pourquoi
+    les deux courbes de convergence sont alignees a DROITE."""
+    a = _a("at_least_one")
     a.amorcer(0.01)
-    assert a.hist_BB == [0.01] and a.n_BB == 0
+    a.enregistrer(0.02, 4.0, 4.1)
+    assert len(a.hist_BB) == len(a.hist_BS) + 1
 
 
 # --------------------------------------------------------------------- #
@@ -346,22 +382,25 @@ def test_un_budget_epuise_ne_se_fait_pas_passer_pour_une_convergence():
     assert "EFF converge [?]" in j[0]
 
 
-def test_le_bilan_affiche_TROIS_compteurs_dont_deux_restent_a_zero():
-    """ASYMETRIE MISE PAR ECRIT, PAS CORRIGEE. En mode `both`, seul `n_both`
-    est tenu ; `n_BB` et `n_BS` ne bougent jamais. Le bilan les affiche
-    quand meme, et un lecteur presse y lira que BB et BS n'ont jamais
-    converge. Agnes, 27/08/2026 : « on n'est pas au clair sur nos criteres
-    de convergence » -- l'arbitrage lui revient."""
-    a, j = _arret_avec("both", n_both=2)
+def test_le_bilan_dit_ce_qui_s_est_passe_pas_seulement_ce_qui_a_decide():
+    """En mode `both`, le bilan affichait `count_valid_BB=0
+    count_valid_BS=0` alors que les deux criteres pouvaient etre satisfaits
+    a chaque iteration -- un lecteur presse y lisait le contraire de la
+    verite. Les trois compteurs sont desormais tenus."""
+    a = _a("both")
+    for _ in range(2):
+        a.enregistrer(0.001, 4.0, 4.0)
+    j = _Journal()
+    a.tracer = j
     assert a.bilan(0.5, 5) == "both (2 iter valides)"
-    assert "count_valid_BB=0" in j[0] and "count_valid_BS=0" in j[0]
+    assert "count_valid_BB=2" in j[0] and "count_valid_BS=2" in j[0]
     assert "count_valid_both=2" in j[0]
 
 
 def test_un_historique_vide_ne_s_imprime_pas():
-    """L'autre face de la meme asymetrie : en mode `BB`, `hist_BS` reste
-    vide, donc la ligne BS n'apparait pas. La courbe de convergence de fin
-    de run ne montre pas la meme chose selon le critere choisi."""
+    """Le cas ne se produit plus par le jeu des criteres -- les deux
+    historiques sont remplis ensemble -- mais un run arrete avant la
+    premiere mesure en laisse un vide. La ligne ne doit pas s'imprimer."""
     a, j = _arret_avec("BB", hist_BB=[0.1, 0.02])
     a.bilan(0.5, 3)
     assert any("[historique ratio BB]" in m for m in j)
@@ -439,3 +478,51 @@ def test_aucune_etude_ne_rebinde_ses_historiques(script):
         "%s : historique remis a zero par rebinding (%s). Vider en place "
         "avec `del l[:]` -- voir le contrat dans `ArretEFF`."
         % (script, fautifs))
+
+
+# --------------------------------------------------------------------- #
+# LA REPRISE DU TROISIEME COMPTEUR (28/08/2026)
+# --------------------------------------------------------------------- #
+def test_une_reprise_en_mode_both_ne_repart_pas_de_zero():
+    """Sans cela, une reprise en mode `both` redemandait ses deux iterations
+    valides -- et sur le Moulin Blanc, une iteration EFF vaut un appel
+    solveur de 466 s. C'est le defaut que `reprendre_depuis_historique`
+    ferme pour BB et BS depuis le 26/08 ; le troisieme compteur y echappait.
+    """
+    a = _a("both", hist_BB=[0.5, 0.001, 0.002], hist_BS=[0.5, 0.001, 0.002])
+    a.reprendre_depuis_historique()
+    assert a.n_both == 2, "les deux dernieres iterations valaient pour both"
+    assert a.n_BB == 2 and a.n_BS == 2
+
+
+def test_une_iteration_ou_UN_SEUL_ratio_tient_ne_compte_pas_pour_both():
+    a = _a("both", hist_BB=[0.001, 0.001], hist_BS=[0.001, 0.5])
+    a.reprendre_depuis_historique()
+    assert a.n_both == 0
+    assert a.n_BB == 2 and a.n_BS == 0
+
+
+def test_un_trou_arrete_le_compte_conjoint():
+    """Un `None` -- FORM en echec -- ne se suppose pas valide : le supposer
+    raccourcirait l'enrichissement sur une ignorance."""
+    a = _a("both", hist_BB=[0.001, None, 0.001], hist_BS=[0.001, 0.001, 0.001])
+    a.reprendre_depuis_historique()
+    assert a.n_both == 1
+
+
+def test_l_amorce_ne_decale_pas_le_compte_conjoint():
+    """`hist_BB` porte une entree de plus -- celle du plan initial. Les deux
+    historiques sont donc apparies A DROITE, sinon le compte conjoint
+    comparerait l'iteration k de l'un a l'iteration k+1 de l'autre."""
+    a = _a("both", hist_BB=[0.9, 0.001, 0.001], hist_BS=[0.001, 0.001])
+    a.reprendre_depuis_historique()
+    assert a.n_both == 2
+
+
+def test_la_reprise_annonce_les_trois_compteurs():
+    j = _Journal()
+    a = _arret.ArretEFF("both", TOL_BB, TOL_BS, 15, 0.001,
+                        hist_BB=[0.001, 0.001], hist_BS=[0.001, 0.001],
+                        tracer=j)
+    a.reprendre_depuis_historique()
+    assert any("count_valid_both=2" in m for m in j), list(j)

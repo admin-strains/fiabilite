@@ -55,13 +55,22 @@ def tracer_convergence_eff(historique_eff, historique_bb, historique_bs,
 
     # --- 2 : criteres d'arret BB et BS ---
     ax = axes[1]
+    # LES DEUX COURBES SONT ALIGNEES A DROITE. Elles sont alimentees ensemble
+    # a chaque iteration, mais `hist_BB` peut porter UNE entree de plus : le
+    # ratio mesure sur le plan INITIAL, avant tout enrichissement, quand
+    # l'encadrement de depart a ete calcule (`print_Pf`). Les indexer toutes
+    # deux a partir de 1 decalerait alors BB d'une iteration -- deux courbes
+    # censees se lire l'une contre l'autre, et qui ne parlent pas du meme
+    # point. L'ancrage a droite les fait finir ensemble ; l'amorce se lit en
+    # iteration 0.
+    _fin = max(len(historique_bb), len(historique_bs))
     if historique_bb:
-        x_bb = list(range(1, len(historique_bb) + 1))
+        x_bb = list(range(_fin - len(historique_bb) + 1, _fin + 1))
         vals_bb = [max(v, CLIP) if v is not None else np.nan for v in historique_bb]
         ax.semilogy(x_bb, vals_bb, 'g-o', ms=4, lw=1.2, label='BB')
         ax.axhline(tol_BB, color='g', ls='--', lw=0.8, label=f'tol_BB={tol_BB:.1e}')
     if historique_bs:
-        x_bs = list(range(1, len(historique_bs) + 1))
+        x_bs = list(range(_fin - len(historique_bs) + 1, _fin + 1))
         vals_bs = [max(v, CLIP) if v is not None else np.nan for v in historique_bs]
         ax.semilogy(x_bs, vals_bs, 'r-s', ms=4, lw=1.2, label='BS')
         ax.axhline(tol_BS, color='r', ls='--', lw=0.8, label=f'tol_BS={tol_BS:.1e}')

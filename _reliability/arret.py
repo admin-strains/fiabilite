@@ -19,23 +19,35 @@ Un critere doit etre satisfait TROIS fois de suite (deux pour `both`) : une
 seule iteration stable ne prouve rien, l'enrichissement peut traverser un
 palier.
 
-CE QUE CE MODULE NE TRANCHE PAS
---------------------------------
-Agnes, 27/08/2026 : « on n'est pas au clair sur nos criteres de convergence ».
-Ce module ne les change donc PAS -- il les rassemble, les nomme et les rend
-testables, pour qu'on puisse ensuite en discuter sur pieces.
+MESURER N'EST PAS DECIDER -- decision d'Agnes, 28/08/2026
+----------------------------------------------------------
+Ce module transcrivait quatre branches quasi identiques, une par critere,
+chacune ne remplissant que ce dont SON critere se servait. Deux asymetries en
+resultaient, portees a l'arbitrage et tranchees :
 
-Deux asymetries transcrites telles quelles, et qui meritent une decision :
+1. **Tout ce qui est PAYE est ENREGISTRE.** Le ratio BS ne coute rien de plus
+   que `beta`, calcule a chaque iteration de toute facon : il est donc
+   toujours mesurable, et desormais toujours enregistre. Le ratio BB, lui,
+   coute un encadrement `g +/- 2 sigma` -- trois FORM+IS de plus par
+   iteration. Quand il n'est pas calcule il vaut None ; mais quand il l'est
+   -- parce que le critere en a besoin, ou parce que `print_Pf` l'a demande
+   pour les courbes de Pf -- il est range, quel que soit le critere. Avant,
+   le mode `BS` avec `print_Pf` payait ce ratio et le jetait.
 
-1. **Les historiques ne sont pas remplis de la meme facon selon le critere.**
-   En mode `BB`, `hist_BS` ne recoit rien ; en mode `BS`, `hist_BB` ne recoit
-   rien. La courbe de convergence tracee en fin de run montre donc des
-   choses differentes selon le critere choisi.
-2. **En mode `both`, les compteurs BB et BS ne sont jamais mis a jour** --
-   seul `both` l'est. En mode `at_least_one`, les trois le sont. Le bilan de
-   fin de run affiche pourtant les trois compteurs dans les deux cas.
+2. **Les trois compteurs sont tenus dans tous les modes.** En mode `both`,
+   `n_BB` et `n_BS` restaient a zero pendant tout un run : le bilan
+   affichait `count_valid_BB=0 count_valid_BS=0` alors que les deux criteres
+   pouvaient etre satisfaits a chaque iteration. Ils sont desormais tenus
+   comme dans `at_least_one`.
 
-Ni l'une ni l'autre n'est forcement un defaut ; aucune n'etait ecrite.
+Ce que le critere commande, et lui seul : L'ARRET (`continuer`). Aucune
+decision d'arret ne change -- chaque mode lit exactement le compteur qu'il
+lisait deja. Ce qui change, c'est ce qui est OBSERVE et RAPPORTE.
+
+Consequence : `reprendre_depuis_historique` recompte aussi `n_both`. Sans
+cela, une reprise en mode `both` repartait de zero et repayait des appels
+solveur pour reprouver ce qui l'etait deja -- exactement le defaut que cette
+methode existe pour fermer, mais pour le troisieme compteur.
 """
 
 
@@ -45,6 +57,12 @@ def _ecrire(message):
 
 #: Combien de fois de suite un critere doit etre satisfait pour arreter.
 REPETITIONS = {"BB": 3, "BS": 3, "both": 2}
+
+#: Ce que le journal ecrit apres le ratio BS, pour dire quel critere est en
+#: vigueur. Les libelles sont ceux d'origine : ils rendent les journaux de
+#: deux runs comparables.
+SUFFIXE_JOURNAL = {"BB": " bb", "BS": "", "both": " both",
+                   "at_least_one": " alo"}
 
 #: Quels criteres ont besoin de l'encadrement `g +/- 2 sigma` -- qui coute
 #: DEUX FORM+IS de plus par iteration.
@@ -92,12 +110,16 @@ class ArretEFF:
 
         Il compte deja pour une iteration valide : un plan qui part deja
         convergent ne doit pas payer trois iterations pour le prouver.
+
+        Appelee seulement quand l'encadrement initial a ete calcule -- donc
+        quand ce ratio a ete PAYE. Il est alors range quel que soit le
+        critere, et il n'a pas de contrepartie BS : a la premiere mesure il
+        n'existe pas d'iteration precedente. `hist_BB` porte donc une entree
+        de plus que `hist_BS`, celle du plan initial ; les courbes de
+        convergence sont alignees a droite pour cette raison.
         """
-        if self.critere not in UTILISE_BB:
-            return
         self.hist_BB.append(ratio_bb)
-        if self.critere in ("BB", "at_least_one") \
-                and ratio_bb is not None and ratio_bb < self.tol_BB:
+        if ratio_bb is not None and ratio_bb < self.tol_BB:
             self.n_BB = 1
 
     def reprendre_depuis_historique(self):
@@ -115,9 +137,20 @@ class ArretEFF:
         """
         self.n_BS = _valides_consecutifs(self.hist_BS, self.tol_BS)
         self.n_BB = _valides_consecutifs(self.hist_BB, self.tol_BB)
-        if self.n_BS or self.n_BB:
+        # `n_both` aussi (28/08/2026) : sans lui, une reprise en mode `both`
+        # repartait de zero et repayait des appels solveur pour reprouver ce
+        # qui l'etait deja -- le defaut meme que cette methode ferme, mais
+        # pour le troisieme compteur. Les historiques sont alignes a DROITE :
+        # `hist_BB` peut porter une entree de plus, celle du plan initial.
+        n = min(len(self.hist_BB), len(self.hist_BS))
+        self.n_both = _valides_consecutifs_deux(
+            list(self.hist_BB)[len(self.hist_BB) - n:],
+            list(self.hist_BS)[len(self.hist_BS) - n:],
+            self.tol_BB, self.tol_BS)
+        if self.n_BS or self.n_BB or self.n_both:
             self.tracer("  [RESTART] compteurs repris : count_valid_BB=%d  "
-                        "count_valid_BS=%d" % (self.n_BB, self.n_BS))
+                        "count_valid_BS=%d  count_valid_both=%d"
+                        % (self.n_BB, self.n_BS, self.n_both))
         return self.n_BB, self.n_BS
 
     def continuer(self, n_points, valeur_eff):
@@ -157,43 +190,27 @@ class ArretEFF:
         return r
 
     def enregistrer(self, ratio_bb, beta, beta_precedent, prefixe=""):
-        """Met a jour les compteurs pour une iteration, et remplit les
-        historiques.
+        """Mesure une iteration : les deux ratios, les trois compteurs, les
+        deux historiques.
 
-        Retourne `(ratio_bb, ratio_bs)` -- les deux valeurs retenues, dont
-        l'une peut etre None selon le critere.
+        UNE SEULE VOIE, quel que soit le critere -- c'etait quatre branches
+        quasi identiques, chacune ne remplissant que ce dont son critere se
+        servait. Le critere ne commande plus que L'ARRET (`continuer`).
+
+        `ratio_bb` peut valoir None : il demande un encadrement que seuls
+        certains modes paient. `ratio_bs` est calcule ici, parce qu'il ne
+        coute rien de plus que `beta`.
+
+        Retourne `(ratio_bb, ratio_bs)`.
         """
-        if self.critere == "BB":
-            self._compter_bb(ratio_bb)
-            self.hist_BB.append(ratio_bb)
-            return ratio_bb, None
-
-        if self.critere == "BS":
-            ratio_bs = self._ratio_bs(beta, beta_precedent, prefixe, "")
-            if ratio_bs is None:
-                self.n_BS = 0
-            else:
-                self._compter_bs(ratio_bs)
-            self.hist_BS.append(ratio_bs)
-            return None, ratio_bs
-
-        if self.critere == "both":
-            ratio_bs = self._ratio_bs(beta, beta_precedent, prefixe, " both")
-            self.n_both = (self.n_both + 1) if self._les_deux(ratio_bb, ratio_bs) else 0
-            self.hist_BB.append(ratio_bb)
-            self.hist_BS.append(ratio_bs)
-            return ratio_bb, ratio_bs
-
-        if self.critere == "at_least_one":
-            ratio_bs = self._ratio_bs(beta, beta_precedent, prefixe, " alo")
-            self._compter_bb(ratio_bb)
-            self._compter_bs(ratio_bs)
-            self.n_both = (self.n_both + 1) if self._les_deux(ratio_bb, ratio_bs) else 0
-            self.hist_BB.append(ratio_bb)
-            self.hist_BS.append(ratio_bs)
-            return ratio_bb, ratio_bs
-
-        return ratio_bb, None
+        ratio_bs = self._ratio_bs(beta, beta_precedent, prefixe,
+                                  SUFFIXE_JOURNAL.get(self.critere, ""))
+        self._compter_bb(ratio_bb)
+        self._compter_bs(ratio_bs)
+        self.n_both = (self.n_both + 1) if self._les_deux(ratio_bb, ratio_bs) else 0
+        self.hist_BB.append(ratio_bb)
+        self.hist_BS.append(ratio_bs)
+        return ratio_bb, ratio_bs
 
     def _compter_bb(self, ratio):
         self.n_BB = (self.n_BB + 1) if (ratio is not None
@@ -211,13 +228,12 @@ class ArretEFF:
     def bilan(self, eff_final, n_points_ajoutes):
         """Ce qui a arrete l'enrichissement, et sur quel historique.
 
-        LE BILAN AFFICHE TROIS COMPTEURS, MAIS EN MODE `both` DEUX D'ENTRE
-        EUX NE BOUGENT JAMAIS -- `n_BB` et `n_BS` restent a zero pendant que
-        seul `n_both` est tenu. De meme, en mode `BB` l'historique BS reste
-        vide, et la ligne correspondante ne s'imprime pas. Ces deux
-        asymetries sont DECRITES, pas corrigees : Agnes, 27/08/2026, « on
-        n'est pas au clair sur nos criteres de convergence ». Les changer
-        avant cet arbitrage reviendrait a trancher a sa place.
+        LES TROIS COMPTEURS SONT TENUS DANS TOUS LES MODES depuis le
+        28/08/2026, et les deux historiques sont remplis des que leur ratio
+        est disponible. Le bilan dit donc ce qui s'est passe, et pas
+        seulement ce que le critere en vigueur a regarde : un run en mode
+        `both` affichait `count_valid_BB=0 count_valid_BS=0` alors que les
+        deux criteres pouvaient etre satisfaits a chaque iteration.
 
         `?` comme raison n'est pas un defaut d'affichage : c'est un run
         arrete par le budget de points, ni par EFF ni par la convergence.
@@ -265,6 +281,22 @@ def _valides_consecutifs(historique, tolerance):
     n = 0
     for valeur in reversed(list(historique or ())):
         if valeur is None or valeur >= tolerance:
+            break
+        n += 1
+    return n
+
+
+def _valides_consecutifs_deux(hist_a, hist_b, tol_a, tol_b):
+    """Combien d'iterations de suite ou LES DEUX ratios sont valides.
+
+    Le compteur du mode `both`, recompute depuis les historiques. Un `None`
+    d'un cote ou de l'autre arrete le compte, pour la meme raison que dans
+    `_valides_consecutifs` : on ne sait pas, et supposer raccourcirait
+    l'enrichissement sur une ignorance.
+    """
+    n = 0
+    for a, b in zip(reversed(list(hist_a or ())), reversed(list(hist_b or ()))):
+        if a is None or b is None or a >= tol_a or b >= tol_b:
             break
         n += 1
     return n
