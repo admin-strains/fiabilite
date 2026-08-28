@@ -476,7 +476,6 @@ if __name__ == '__main__':
 
 
 
-    _run_HF_count = [0]  # compteur pour le print memoire (temporaire)
 
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):

@@ -108,7 +108,8 @@ def test_le_flux_principal_ne_DIVERGE_pas_davantage(comparaison_du_flux):
     qu'un ecart NOUVEAU est apparu, et il faut le lire.
     """
     #: 27/08/2026, apres alignement de `xt_eff` sur le Moulin Blanc.
-    PLAFOND = 26
+    #: 27/08 (suite) : le compteur mort `_run_HF_count` retire. 26 -> 25.
+    PLAFOND = 25
     n_pf, n_mb, ecarts = comparaison_du_flux
     listing = "\n  ".join("%s  %s" % (cote, txt) for cote, txt in ecarts)
     assert len(ecarts) <= PLAFOND, (
@@ -146,36 +147,45 @@ def test_un_run_neuf_part_bien_de_zero(script):
 
 
 # --------------------------------------------------------------------------- #
-# CE QUE LE DETECTEUR SIGNALE ET QUI RESTE A ARBITRER                          #
+# CE QUE LE DETECTEUR A SIGNALE, ET CE QU'IL EN EST RESTE                      #
 # --------------------------------------------------------------------------- #
-def test_seule_la_flexion_pure_verifie_ses_parametres_CAD():
-    """CONSTATE, NON CORRIGE -- a arbitrer avec Agnes.
+def test_le_garde_de_la_surcouche_analytique_est_propre_a_la_flexion_pure():
+    """PAS une derive -- une difference d'etude, et j'avais dit le contraire.
 
-    La flexion pure refuse de demarrer si un `params_names` n'est pas connu
-    de `PARAM_CONFIG_CAD` ; le Moulin Blanc ne verifie rien. Un parametre mal
-    orthographie y serait donc simplement ignore : la variable aleatoire
-    n'atteindrait jamais le modele, et le calcul tournerait sur un ouvrage
-    ou elle est figee -- sans une ligne de journal.
+    J'ai d'abord lu
 
-    Ce test FIGE l'asymetrie plutot que de la corriger : ajouter le controle
-    au Moulin Blanc peut faire echouer une etude qui tourne aujourd'hui, et
-    c'est une decision d'etude.
+        if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
+            print_ana = False
+
+    comme une VALIDATION des parametres, absente du Moulin Blanc. C'est faux.
+    Cette ligne ne valide rien et n'empeche aucun run : elle DESACTIVE la
+    surcouche analytique. `_surcouche_analytique` et `_relief_analytique`
+    superposent aux figures la solution de section en flexion pure, etablie
+    pour `fc` et `fy` seulement. Des qu'une variable hors CAD entre dans le
+    tirage -- une charge, via `PARAM_CONFIG_LOAD` -- cette courbe de
+    reference cesse d'etre valide, et le garde l'efface plutot que de la
+    laisser mentir.
+
+    Le Moulin Blanc n'a pas de surcouche analytique : `print_ana` n'y existe
+    meme pas. Il n'y a rien a desactiver, donc rien a corriger.
     """
-    controle = "if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):"
-    presents = [s for s in ETUDES
-                if controle in io.open(os.path.join(_REPO, s),
-                                       encoding="utf-8", errors="replace").read()]
-    assert presents == ["pure_flexion/AC3_pure_flexion.py"], (
-        "l'asymetrie a bouge : %s. Si le controle a ete ajoute au Moulin "
-        "Blanc, supprimer ce test." % presents)
+    pf = io.open(os.path.join(_REPO, ETUDES[0]), encoding="utf-8",
+                 errors="replace").read()
+    mb = io.open(os.path.join(_REPO, ETUDES[1]), encoding="utf-8",
+                 errors="replace").read()
+    assert "print_ana = False" in pf
+    assert "surcouche=_surcouche_analytique if print_ana else None" in pf
+    assert "print_ana" not in mb, (
+        "le Moulin Blanc a desormais une surcouche analytique : le garde de "
+        "`PARAM_CONFIG_CAD` devient pertinent pour lui aussi.")
 
 
-def test_un_compteur_temporaire_traine_dans_le_moulin_blanc():
-    """CONSTATE, NON CORRIGE. `_run_HF_count = [0]  # temporaire` date d'un
-    diagnostic memoire. Il n'existe pas en flexion pure. Le retirer est sans
-    risque, mais c'est du code de l'auteur : on le signale."""
-    s = io.open(os.path.join(_REPO, ETUDES[1]), encoding="utf-8",
+@pytest.mark.parametrize("script", ETUDES)
+def test_aucun_compteur_de_diagnostic_ne_traine(script):
+    """`_run_HF_count = [0]  # temporaire` restait dans le Moulin Blanc :
+    ecrit une fois, jamais incremente, jamais lu -- le diagnostic memoire
+    auquel il servait avait disparu. Retire le 27/08/2026."""
+    s = io.open(os.path.join(_REPO, script), encoding="utf-8",
                 errors="replace").read()
-    assert "_run_HF_count = [0]" in s, (
-        "le compteur temporaire a disparu du Moulin Blanc -- supprimer ce "
-        "test, il a fait son office.")
+    assert "_run_HF_count" not in s, (
+        "%s : un compteur de diagnostic est revenu." % script)
