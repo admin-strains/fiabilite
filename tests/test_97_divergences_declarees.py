@@ -212,7 +212,9 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: etude -- rejoignent `_reliability/eff_ot`. 630 -> 621.
     #: 27/08 (suite) : la coupe finale se decide dans le flux, et l'enveloppe
     #: locale `_coupe_la_plus_parlante` disparait. 621 -> 615.
-    PLAFOND = 615
+    #: 28/08 : « juger une iteration » -- et la decision de payer ou non
+    #: l'encadrement -- rejoint `ControleurFORM`. 615 -> 598.
+    PLAFOND = 598
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

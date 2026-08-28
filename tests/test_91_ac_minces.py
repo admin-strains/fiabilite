@@ -146,7 +146,11 @@ PROJET = {
 #: par effet de bord, et son enveloppe locale disparait. Le nombre de lignes
 #: ne bouge pas -- la correction coute deux lignes, les suppressions les
 #: rendent. Fonctions : 42 -> 39.
-PLAFOND_LIGNES = 1477
+#: 28/08 : la conduite d'une iteration d'enrichissement -- beta, l'encadrement
+#: s'il est du, les compteurs -- rejoint `ControleurFORM.mesurer_iteration`.
+#: La decision de payer l'encadrement s'ecrivait en deux `if` qui se
+#: recouvraient ; c'est un `or`. 1477 -> 1460.
+PLAFOND_LIGNES = 1460
 PLAFOND_FONCTIONS = 39
 
 

@@ -960,30 +960,13 @@ if __name__ == '__main__':
                 taylor=(do_PCK and n_batch_EFF <= 1), eps_taylor=eps_taylor)
             g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
 
-            # --- Suivi convergence beta_IS ---
+            # --- L'iteration, jugee : `_reliability/controle.py` ---
             iter_count += 1
-            _fm_eff = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
-            import time as _t_mod; _t0_is = _t_mod.perf_counter()
-            _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} mu conv", fm=_fm_eff)
-            print(f"  [TIMING _form_is_iter] dt={_t_mod.perf_counter()-_t0_is:.2f}s (fm={'oui' if _fm_eff else 'non'})", flush=True)
-
-            # --- FORM+IS mid/sup/inf (conditionne par print_Pf) ---
-            _ratio_bb = None
-            if print_Pf:
-                _ratio_bb, _pf_mid, _pf_sup, _pf_inf = _three_form_is(g_ot, sigma_func, f"N={len(xt)} iter {iter_count}", b_mid_precalc=(_b_mid, _pf_mid_conv))
-                list_Pf.append({'mid': _pf_mid, 'sup': _pf_sup, 'inf': _pf_inf})
-
-            # --- Les criteres, en un seul endroit ---
-            if _arret.a_besoin_de_l_encadrement and not print_Pf:
-                _ratio_bb, _, _, _ = _three_form_is(
-                    g_ot, sigma_func, f"N={len(xt)} iter {iter_count}",
-                    b_mid_precalc=(_b_mid, _pf_mid_conv))
-            _arret.enregistrer(_ratio_bb, _b_mid,
-                               list_beta_IS[-1] if list_beta_IS else None,
-                               prefixe=f"N={len(xt)}")
-
-            if _b_mid is not None:
-                list_beta_IS.append(_b_mid)
+            _b_mid, _pf_mid_conv, _ratio_bb = _controleur.mesurer_iteration(
+                g_ot, sigma_func, BoundSurrogateFunction, _arret,
+                n_points=len(xt), iteration=iter_count, avec_Pf=print_Pf,
+                historique_Pf=list_Pf, historique_beta=list_beta_IS,
+                etat=_etat_courant())
 
             # --- Visu intermediaire apres ajout de point ---
             if print_EFF_progres:

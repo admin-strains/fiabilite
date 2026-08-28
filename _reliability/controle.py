@@ -35,6 +35,7 @@ travaillait sur l'etat courant du plan. Ici, cet etat est un argument.
 """
 
 import os
+import time
 
 import openturns as ot
 
@@ -174,6 +175,59 @@ class ControleurFORM:
         self.tracer("  [%s] |beta_IS_sup - beta_IS_inf| / beta_IS = %.4f"
                     % (label, ratio))
         return ratio, pf_mid, pf_sup, pf_inf
+
+
+    def mesurer_iteration(self, g_ot, sigma_func, borner, arret, *,
+                          n_points, iteration, avec_Pf,
+                          historique_Pf=None, historique_beta=None, etat=None):
+        """Une iteration d'enrichissement, jugee.
+
+        `beta` par FORM + tirage d'importance ; l'encadrement `g +/- 2 sigma`
+        s'il est du ; les compteurs d'arret mis a jour.
+
+        LA DECISION DE COUT, ENFIN NOMMEE
+        ----------------------------------
+        L'encadrement vaut DEUX FORM+IS de plus par iteration -- le central
+        est reutilise. Deux raisons de le payer, et une seule facture :
+
+          * le critere d'arret en a besoin (`BB`, `both`, `at_least_one`) ;
+          * `print_Pf` reclame les courbes de Pf mid/sup/inf.
+
+        Cela s'ecrivait `if print_Pf: ...` puis
+        `if a_besoin and not print_Pf: ...` -- deux conditions qui se
+        recouvrent, et dont il fallait deduire qu'elles ne paient qu'une
+        fois. Ici c'est un seul `or`, et le triplet de Pf n'est range que si
+        on l'a demande.
+
+        Le ratio BB obtenu est enregistre quel que soit le critere : tout ce
+        qui est paye est enregistre (voir `_reliability/arret.py`).
+
+        Retourne `(beta, pf, ratio_bb)`. `ratio_bb` vaut None quand
+        l'encadrement n'a pas ete paye -- pas quand il a echoue, que
+        `encadrement` signale de la meme facon ; c'est une limite heritee.
+        """
+        fm = getattr(getattr(sigma_func, '__self__', None), 'fm', None)
+        t0 = time.perf_counter()
+        beta, pf = self.beta_et_pf(g_ot, "N=%d mu conv" % n_points, fm=fm,
+                                   etat=etat)
+        self.tracer("  [TIMING _form_is_iter] dt=%.2fs (fm=%s)"
+                    % (time.perf_counter() - t0, "oui" if fm else "non"))
+
+        ratio_bb = None
+        if avec_Pf or arret.a_besoin_de_l_encadrement:
+            ratio_bb, pf_mid, pf_sup, pf_inf = self.encadrement(
+                g_ot, sigma_func, "N=%d iter %d" % (n_points, iteration),
+                borner, etat=etat, beta_central=(beta, pf))
+            if avec_Pf and historique_Pf is not None:
+                historique_Pf.append({'mid': pf_mid, 'sup': pf_sup,
+                                      'inf': pf_inf})
+
+        arret.enregistrer(ratio_bb, beta,
+                          historique_beta[-1] if historique_beta else None,
+                          prefixe="N=%d" % n_points)
+        if beta is not None and historique_beta is not None:
+            historique_beta.append(beta)
+        return beta, pf, ratio_bb
 
 
 # --------------------------------------------------------------------------- #
