@@ -62,6 +62,66 @@ def _signature_compatible(d, signature, etiquette):
     return True
 
 
+
+#: Deux valeurs figees sont « les memes » en dessous de cet ecart. Elles
+#: viennent de `u*`, donc de flottants : une egalite stricte refuserait des
+#: caches legitimes pour un dernier bit.
+TOL_FIGEES = 1e-9
+
+
+def _meme_coupe(d, sd, etiquette, tol=TOL_FIGEES):
+    """La coupe cachee est-elle CELLE QU'ON DEMANDE ?
+
+    Une coupe, c'est TROIS choses : deux axes, et les valeurs auxquelles les
+    autres variables sont figees. Seuls les deux axes etaient compares --
+    alors que les valeurs figees etaient bel et bien ecrites dans le fichier.
+
+    `(0, 2, {1: 7.5})` et `(0, 2, {1: -3.0})` ont les memes axes et sont deux
+    surfaces sans rapport. Le cache servait l'une pour l'autre, en annoncant
+    « coupe OK ». Sans effet a deux variables, ou le dictionnaire est
+    toujours vide ; faux au-dela -- et c'est justement au-dela que la coupe
+    finale fige les variables secondaires a `u*`.
+
+    CE QUE CE CONTROLE COUTE. `u*` bouge d'un run a l'autre : a trois
+    variables ou plus, la grille de la coupe finale sera souvent recalculee.
+    C'est le prix a payer pour ne pas tracer une surface calculee ailleurs.
+    """
+    axes_cachees = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
+    axes_demandees = (sd[0], sd[1]) if sd is not None else (0, 1)
+    if axes_cachees != axes_demandees:
+        print("[%s] coupe differente (cache=%s, courant=%s) -> recalcul"
+              % (etiquette, axes_cachees, axes_demandees), flush=True)
+        return False
+
+    figees_cachees = d['slice_def'][2] if len(d.get('slice_def', [])) > 2 else None
+    figees_demandees = sd[2] if sd is not None and len(sd) > 2 else {}
+    if figees_cachees is None:
+        if figees_demandees:
+            print("[%s] cache sans valeurs figees (anterieur au controle) -> "
+                  "recalcul" % etiquette, flush=True)
+            return False
+        return True
+
+    # les clefs passent par JSON, donc en chaines
+    cachees = {int(k): float(v) for k, v in figees_cachees.items()}
+    demandees = {int(k): float(v) for k, v in figees_demandees.items()}
+    if set(cachees) != set(demandees):
+        print("[%s] variables figees differentes (cache=%s, courant=%s) -> "
+              "recalcul" % (etiquette, sorted(cachees), sorted(demandees)),
+              flush=True)
+        return False
+    ecarts = {k: abs(cachees[k] - demandees[k]) for k in cachees}
+    pires = [k for k, e in ecarts.items() if e > tol]
+    if pires:
+        print("[%s] valeurs figees differentes -> recalcul. %s"
+              % (etiquette,
+                 ", ".join("u%d : cache=%.6g courant=%.6g"
+                           % (k, cachees[k], demandees[k]) for k in sorted(pires))),
+              flush=True)
+        return False
+    return True
+
+
 def save_hf_cache(Z, n_grid_hf_local, cache_file, sd, signature=None):
     try:
         _sd = sd if sd is not None else (0, 1, {})
@@ -83,10 +143,7 @@ def load_hf_cache(n_grid_hf_local, cache_file, sd, config_is_identical=True,
         return None
     try:
         d = json.load(open(cache_file))
-        _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
-        _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
-        if _sd_cache != _sd_now:
-            print(f"[HF CACHE] coupe differente (cache={_sd_cache}, courant={_sd_now}) -> recalcul", flush=True)
+        if not _meme_coupe(d, sd, "HF CACHE"):
             return None
         # `n_grid_hf_local` etait recu et JAMAIS lu : une grille 2x2 pouvait
         # etre relue pour une demande 15x15.
@@ -96,7 +153,8 @@ def load_hf_cache(n_grid_hf_local, cache_file, sd, config_is_identical=True,
             return None
         if not _signature_compatible(d, signature, "HF CACHE"):
             return None
-        print(f"[HF CACHE] charge depuis {cache_file} (coupe OK -> 0 SOCP grille)", flush=True)
+        print(f"[HF CACHE] charge depuis {cache_file} "
+              f"(meme coupe, memes valeurs figees -> 0 SOCP grille)", flush=True)
         return np.array(d['Z'])
     except Exception as e:
         print(f"[HF CACHE] lecture echouee ({type(e).__name__}: {e}) -> recalcul", flush=True)
@@ -125,9 +183,9 @@ def load_hf_cache_partial(cache_file, sd, n_total, config_is_identical=True,
         return None
     try:
         d = json.load(open(partial_file))
-        _sd_cache = tuple(d['slice_def'][:2]) if 'slice_def' in d else None
-        _sd_now = (sd[0], sd[1]) if sd is not None else (0, 1)
-        if _sd_cache != _sd_now or d.get('n_total') != n_total:
+        if d.get('n_total') != n_total:
+            return None
+        if not _meme_coupe(d, sd, "HF CACHE PARTIAL"):
             return None
         if not _signature_compatible(d, signature, "HF CACHE PARTIAL"):
             return None

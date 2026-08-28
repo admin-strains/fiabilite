@@ -525,3 +525,100 @@ def test_le_cache_partiel_ecrit_ses_coordonnees(tmp_path):
     d = _json.load(open(str(tmp_path / "pts.json.partial")))
     assert d["pts"] == PTS_A
     assert d["g_vals"][0] is not None and d["g_vals"][2] is None
+
+
+# --------------------------------------------------------------------- #
+# UNE COUPE, C'EST TROIS CHOSES -- pas deux (28/08/2026)
+#
+# Le cache ne comparait que les deux AXES. Les valeurs auxquelles les autres
+# variables sont figees etaient ECRITES dans le fichier et jamais relues :
+# `(0, 2, {1: 7.5})` et `(0, 2, {1: -3.0})` sont deux surfaces sans rapport,
+# et le cache servait l'une pour l'autre en annoncant « coupe OK ».
+#
+# Sans effet a deux variables, ou le dictionnaire est toujours vide. Faux
+# au-dela -- et c'est justement au-dela que la coupe finale fige les
+# variables secondaires a `u*`. Meme cause masquante que le fond trace sur
+# le cadre des figures et que la coupe finale decidee trop tard : l'etude de
+# reference a deux variables.
+# --------------------------------------------------------------------- #
+def _cache_hf():
+    import sys, os as _os
+    chemin = _os.path.join(_REPO, "_cache")
+    if chemin not in sys.path:
+        sys.path.insert(0, chemin)
+    import hf
+    return hf
+
+
+SIG = {"solveur": "analytique"}
+
+
+def test_une_autre_valeur_figee_n_est_PAS_la_meme_coupe(tmp_path):
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache(np.arange(9.0).reshape(3, 3), 3, f, (0, 2, {1: 7.5}),
+                     signature=SIG)
+    assert hf.load_hf_cache(3, f, (0, 2, {1: -3.0}), signature=SIG) is None, (
+        "une surface calculee a u1 = 7,5 a ete servie pour u1 = -3,0")
+
+
+def test_la_MEME_coupe_est_toujours_servie(tmp_path):
+    """Une garde qui refuse un cache legitime coute `cote^2` appels
+    solveur -- 29 heures sur le Moulin Blanc a 15."""
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache(np.arange(9.0).reshape(3, 3), 3, f, (0, 2, {1: 7.5}),
+                     signature=SIG)
+    Z = hf.load_hf_cache(3, f, (0, 2, {1: 7.5}), signature=SIG)
+    assert Z is not None and Z.shape == (3, 3)
+
+
+def test_a_deux_variables_rien_ne_change(tmp_path):
+    """Le dictionnaire est vide des deux cotes : c'est pourquoi le defaut
+    etait invisible dans les deux etudes du depot."""
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache(np.arange(16.0).reshape(4, 4), 4, f, (0, 1, {}),
+                     signature=SIG)
+    assert hf.load_hf_cache(4, f, (0, 1, {}), signature=SIG) is not None
+
+
+def test_un_ecart_infime_sur_une_valeur_figee_ne_refuse_pas(tmp_path):
+    """Les valeurs figees viennent de `u*`, donc de flottants. Une egalite
+    stricte refuserait des caches legitimes pour un dernier bit."""
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache(np.zeros((3, 3)), 3, f, (0, 2, {1: 7.5}), signature=SIG)
+    assert hf.load_hf_cache(3, f, (0, 2, {1: 7.5 + 1e-12}),
+                            signature=SIG) is not None
+
+
+def test_des_variables_figees_DIFFERENTES_sont_refusees(tmp_path):
+    """Meme axes, mais ce n'est pas la meme variable qu'on immobilise."""
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache(np.zeros((3, 3)), 3, f, (0, 3, {1: 1.0}), signature=SIG)
+    assert hf.load_hf_cache(3, f, (0, 3, {2: 1.0}), signature=SIG) is None
+
+
+def test_un_cache_anterieur_au_controle_est_refuse_SI_ON_FIGE(tmp_path):
+    """Un fichier sans valeurs figees ne peut pas etre valide quand la coupe
+    demandee en a. Mais a deux variables il reste utilisable."""
+    import json as _json
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    _json.dump({"Z": [[0.0]], "n_grid_hf": 1, "signature": SIG,
+                "slice_def": [0, 2]}, open(f, "w"))
+    assert hf.load_hf_cache(1, f, (0, 2, {1: 7.5}), signature=SIG) is None
+    assert hf.load_hf_cache(1, f, (0, 2, {}), signature=SIG) is not None
+
+
+def test_le_cache_PARTIEL_compare_lui_aussi_la_coupe_entiere(tmp_path):
+    hf = _cache_hf()
+    f = str(tmp_path / "c.json")
+    hf.save_hf_cache_partial([1.0, None, None], 3, f, (0, 2, {1: 7.5}),
+                             signature=SIG)
+    assert hf.load_hf_cache_partial(f, (0, 2, {1: -3.0}), 3,
+                                    signature=SIG) is None
+    assert hf.load_hf_cache_partial(f, (0, 2, {1: 7.5}), 3,
+                                    signature=SIG) is not None
