@@ -389,6 +389,51 @@ def rejouer_l_enrichissement(xt, yt, all_grad, xt_eff, n0, *, reajuster,
     return etapes
 
 
+
+def ajuster_sur_le_plan(cfg, xt, yt, all_grad, *, max_degree, dist_X,
+                        diagnostics, evaluer_hf=None, fixed_fm=None,
+                        tracer=_ecrire):
+    """Le metamodele ajuste sur le plan courant, et ce qu'il dit de lui-meme.
+
+    C'etait `init_g_ot`, ecrite dans les DEUX etudes. Elle garde cinq entrees
+    et cinq sorties parce que cinq appels en dependent, mais trois sont du
+    TRANSPORT : `xt` ressort toujours identique, et `yt`/`all_grad` ne changent
+    qu'en haute fidelite pure -- ou ils tombent a None, le plan ne servant
+    alors plus que de points.
+
+    `max_degree` EST UN ARGUMENT D'APPEL, PAS UN CHAMP DE `cfg`. Une reprise le
+    relit dans le dump et ECRASE celui du fichier d'etude ; le lire ici sur la
+    configuration rendrait l'ajustement sourd a la reprise. C'est le meme piege
+    que dans la boucle d'enrichissement, et il se tend au meme endroit.
+
+    LA GARDE SUR `xt`, ET LES SEPT LIGNES CACHEES
+    ----------------------------------------------
+    Cette fonction AJUSTE ; elle ne CONSTRUIT PAS le plan. Sept branches de
+    l'original portaient chacune un `build_DOE()` cache, si bien qu'une figure
+    pouvait declencher n0 appels solveur sans que rien ne l'annonce. Le plan se
+    construit chez l'appelant, une fois, et lui est passe.
+    """
+    if xt is None:
+        raise ValueError(
+            "ajuster_sur_le_plan ajuste un surrogate ; elle ne CONSTRUIT plus "
+            "le plan d'experiences. Appeler `construire_plan_initial` chez "
+            "l'appelant et passer xt/yt/all_grad. (Sept branches portaient la "
+            "meme ligne cachee, ce qui rendait une figure capable de lancer n0 "
+            "appels solveur.)")
+    g_ot, sigma_func, diag = construire_surrogate(
+        cfg.modele, xt, yt, all_grad,
+        dist_X=dist_X, q=cfg.q, max_degree=max_degree, fixed_fm=fixed_fm,
+        # Borne inferieure des longueurs de correlation : elle DIFFERAIT entre
+        # les deux etudes sans que rien ne le dise.
+        theta_min=cfg.theta_min_krg,
+        evaluer_hf=evaluer_hf, tracer_appels=cfg.print_gepck_calls,
+        tracer=tracer)
+    diagnostics.enregistrer(diag)
+    if cfg.do_HF:
+        yt, all_grad = None, None
+    return g_ot, sigma_func, xt, yt, all_grad
+
+
 class Diagnostics:
     """Ce que le dernier ajustement du metamodele dit de lui-meme.
 

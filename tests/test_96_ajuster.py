@@ -74,10 +74,28 @@ def test_la_borne_de_theta_est_un_reglage_declare(etude, attendu):
 
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_l_etude_ne_code_plus_la_borne_en_dur(script):
+    """Ni en dur, ni du tout : la borne suit l'ajustement.
+
+    Elle a d'abord ete lue dans le fichier d'etude par l'etude elle-meme
+    (27/08/2026, quand on a decouvert qu'elle DIFFERAIT entre les deux sans
+    que rien ne le dise). Depuis le 29/08/2026 l'ajustement est dans
+    `_surrogate/ajuster.py`, et c'est lui qui la lit.
+    """
     with open(os.path.join(_REPO, script), encoding="utf-8",
               errors="replace") as fh:
         src = fh.read()
-    assert "THETA_MIN_KRG = CFG.theta_min_krg" in src, script
+    assert "theta_min" not in src, (
+        "%s parle encore de la borne des longueurs de correlation ; elle "
+        "appartient a l'ajustement." % script)
+
+
+def test_l_ajustement_lit_la_borne_dans_le_fichier_d_etude():
+    """Le pendant positif, sur le seul lecteur qui reste."""
+    with open(os.path.join(_REPO, "_surrogate", "ajuster.py"),
+              encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "theta_min=cfg.theta_min_krg" in src, (
+        "la borne ne vient plus du fichier d'etude : elle a redivergé.")
 
 
 def test_la_borne_n_est_appliquee_que_si_on_le_demande():

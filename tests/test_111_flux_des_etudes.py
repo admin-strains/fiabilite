@@ -109,7 +109,7 @@ def test_le_flux_principal_ne_DIVERGE_pas_davantage(comparaison_du_flux):
     """
     #: 27/08/2026, apres alignement de `xt_eff` sur le Moulin Blanc.
     #: 27/08 (suite) : le compteur mort `_run_HF_count` retire. 26 -> 25.
-    PLAFOND = 25
+    PLAFOND = 23
     n_pf, n_mb, ecarts = comparaison_du_flux
     listing = "\n  ".join("%s  %s" % (cote, txt) for cote, txt in ecarts)
     assert len(ecarts) <= PLAFOND, (

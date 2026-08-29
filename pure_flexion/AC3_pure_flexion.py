@@ -97,9 +97,6 @@ if __name__ == '__main__':
     modele              = CFG.modele
     n0                  = CFG.n0
     max_degree          = CFG.max_degree
-    q                   = CFG.q
-    reduc_PLS           = CFG.reduc_PLS
-    do_analytic_grad    = CFG.do_analytic_grad
     do_EFF              = CFG.eff_actif
     epsilon_factor      = CFG.epsilon_factor
     tol_EFF             = CFG.tol_EFF
@@ -107,9 +104,7 @@ if __name__ == '__main__':
     tol_BS              = CFG.tol_BS
     EFF_criteria        = CFG.EFF_criteria
     n_NLopt_EFF         = CFG.n_NLopt_EFF
-    n_max_EFF_points    = CFG.n_max_EFF_points
     n_batch_EFF         = CFG.n_batch_EFF
-    eps_taylor          = CFG.eps_taylor
     n_max_FORM          = CFG.n_max_FORM
     tol_FORM            = CFG.tol_FORM
     tol_all_modes       = CFG.tol_all_modes
@@ -136,31 +131,22 @@ if __name__ == '__main__':
     n_grid_hf           = CFG.n_grid_hf
     print_HF            = CFG.print_HF
     print_fullHF        = CFG.print_fullHF
-    print_DOE           = CFG.print_DOE
     print_3D            = CFG.print_3D
     print_ana           = CFG.print_ana
     print_Pf            = CFG.print_Pf
     print_grad_sp       = CFG.print_grad_sp
     print_EFF_progres   = CFG.print_EFF_progres
-    print_gepck_calls   = CFG.print_gepck_calls
     do_custom_hf        = CFG.do_custom_hf
     hf_2d_grid_fixed    = CFG.hf_2d_grid_fixed
     hf_3d_grid_fixed    = CFG.hf_3d_grid_fixed
 
-    # Les sept drapeaux de modele : derives, donc mutuellement exclusifs par
+    # Les drapeaux de modele sont DERIVES, donc mutuellement exclusifs par
     # construction. Ils etaient sept lignes ecrites a la main, qui pouvaient
-    # toutes valoir False sur une faute de frappe.
-    do_KRG       = CFG.do_KRG
-    do_GEK       = CFG.do_GEK
+    # toutes valoir False sur une faute de frappe. Trois seulement sont lus
+    # ici ; les quatre autres restent disponibles sur `CFG`.
     do_HF        = CFG.do_HF
-    do_PCKRG     = CFG.do_PCKRG
-    do_old_GEPCK = CFG.do_old_GEPCK
     do_GEPCK     = CFG.do_GEPCK
     do_PCK       = CFG.do_PCK
-    #: Borne inferieure des longueurs de correlation du krigeage :
-    #: elle divergeait entre les deux etudes, elle est maintenant
-    #: dans le fichier d'etude (cf. schema.theta_min_krg).
-    THETA_MIN_KRG = CFG.theta_min_krg
 
     # Un worker de DOE parallele travaille sur une copie isolee du modele : son
     # nom lui est impose par le processus pere, pas par le fichier d'etude.
@@ -666,33 +652,16 @@ if __name__ == '__main__':
     def init_g_ot(g_ot, sigma_func, xt, yt, all_grad, fixed_fm=None):
         """Ajuste le metamodele sur le plan courant.
 
-        125 lignes de dispatch sont parties dans `_surrogate/ajuster.py`. Ne
-        reste ici que ce qui appartient a CETTE etude : le journal de
-        convergence de l'enrichissement.
+        Tout est dans `_surrogate/ajuster.py`. `g_ot` et `sigma_func` restent
+        en entree parce que cinq sites d'appel les passent ; ils n'ont jamais
+        ete lus.
 
-        La signature garde ses cinq entrees et ses cinq sorties parce que cinq
-        appels en dependent, mais trois d'entre elles sont du transport :
-        `xt` ressort toujours identique, `g_ot` et `sigma_func` en entree
-        n'ont jamais ete lus, et `yt`/`all_grad` ne changent qu'en HF pur.
+        `max_degree` est passe A L'APPEL : une reprise l'ecrase.
         """
-        if xt is None:
-            raise ValueError(
-                "init_g_ot ajuste un surrogate ; elle ne CONSTRUIT plus le plan "
-                "d'experiences. Appeler build_DOE() chez l'appelant et passer "
-                "xt/yt/all_grad. (Sept branches portaient la meme ligne cachee, "
-                "ce qui rendait une figure capable de lancer n0 appels solveur.)")
-        g_ot, sigma_func, diag = _fit.construire_surrogate(
-            modele, xt, yt, all_grad,
-            dist_X=dist_jointe(), q=q, max_degree=max_degree,
-            fixed_fm=fixed_fm,
-            # borne inferieure des longueurs de correlation : elle DIFFERAIT
-            # entre les deux etudes sans que rien ne le dise.
-            theta_min=THETA_MIN_KRG,
-            evaluer_hf=run_HF, tracer_appels=print_gepck_calls)
-        _DIAG.enregistrer(diag)
-        if do_HF:
-            yt, all_grad = None, None
-        return g_ot, sigma_func, xt, yt, all_grad
+        return _fit.ajuster_sur_le_plan(
+            CFG, xt, yt, all_grad, max_degree=max_degree,
+            dist_X=dist_jointe(), diagnostics=_DIAG,
+            evaluer_hf=run_HF, fixed_fm=fixed_fm)
 
 
     def init_FORM(g_ot, sigma_func, xt, yt, all_grad):

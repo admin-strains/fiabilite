@@ -71,7 +71,19 @@ def test_l_etude_n_a_plus_a_connaitre_les_enveloppes(script):
     assert "from wrappers import" not in src, (
         "%s connait encore les enveloppes OpenTURNS : le choix de la famille "
         "appartient a `_surrogate.construire_surrogate`." % script)
-    assert "construire_surrogate(" in src, script
+    assert "construire_surrogate(" not in src, (
+        "%s appelle le dispatch en direct ; il passe par "
+        "`_surrogate.ajuster_sur_le_plan` depuis le 29/08/2026." % script)
+
+
+def test_l_ajustement_partage_choisit_la_famille():
+    """Le pendant positif, sur le seul appelant qui reste."""
+    with open(os.path.join(_REPO, "_surrogate", "ajuster.py"),
+              encoding="utf-8", errors="replace") as fh:
+        src = fh.read()
+    assert "construire_surrogate(" in src
+    assert "cfg.modele" in src, (
+        "la famille doit venir du fichier d'etude, pas d'un booleen recopie")
 
 
 def test_les_six_enveloppes_existent():

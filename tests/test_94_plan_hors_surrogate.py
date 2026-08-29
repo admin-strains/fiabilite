@@ -78,12 +78,39 @@ def test_init_g_ot_ne_construit_plus_le_plan(script):
         % script)
 
 
-@pytest.mark.parametrize("script", SCRIPTS)
-def test_init_g_ot_refuse_un_plan_absent_au_lieu_de_le_fabriquer(script):
-    """Le garde-fou doit LEVER, pas retomber silencieusement sur build_DOE."""
-    fn = _fonctions(script)["init_g_ot"]
+def test_l_ajustement_refuse_un_plan_absent_au_lieu_de_le_fabriquer():
+    """Le garde-fou doit LEVER, pas retomber silencieusement sur le plan.
+
+    Il portait sur `init_g_ot` DANS CHAQUE ETUDE tant que les trente lignes y
+    etaient recopiees. Elles sont dans `_surrogate/ajuster.py` depuis le
+    29/08/2026, et la garde avec elles.
+    """
+    chemin = os.path.join(_REPO, "_surrogate", "ajuster.py")
+    with open(chemin, encoding="utf-8", errors="replace") as fh:
+        arbre = ast.parse(fh.read(), filename=chemin)
+    fn = {n.name: n for n in arbre.body
+          if isinstance(n, ast.FunctionDef)}["ajuster_sur_le_plan"]
     leve = [n for n in ast.walk(fn) if isinstance(n, ast.Raise)]
-    assert leve, "%s : `init_g_ot` doit refuser xt=None explicitement" % script
+    assert leve, "`ajuster_sur_le_plan` doit refuser xt=None explicitement"
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_l_etude_ne_fabrique_plus_de_plan_dans_son_ajustement(script):
+    """Le pendant negatif : `init_g_ot` n'est plus qu'un delegue.
+
+    C'est la CONSTRUCTION cachee qui coutait -- sept branches portaient chacune
+    un `build_DOE()`, si bien qu'une figure pouvait lancer n0 appels solveur
+    sans que rien ne l'annonce. Un delegue de quelques lignes ne peut plus la
+    porter.
+    """
+    fn = _fonctions(script)["init_g_ot"]
+    corps = [n for n in fn.body if not (isinstance(n, ast.Expr)
+                                        and isinstance(n.value, ast.Constant))]
+    assert len(corps) == 1 and isinstance(corps[0], ast.Return), (
+        "%s : `init_g_ot` n'est plus un delegue (%d instructions) -- "
+        "l'ajustement est-il revenu dans l'etude ?" % (script, len(corps)))
+    assert not _appelle(fn, "build_DOE"), (
+        "%s : la construction du plan est revenue dans l'ajustement." % script)
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
