@@ -168,8 +168,8 @@ PROJET = {
 #: 28/08 (suite) : la couche d'acces au solveur -- un solveur par modele,
 #: memoise parce qu'il porte un compteur d'appels, et les deux
 #: adaptateurs paralleles (plan et points). 1380 -> 1346.
-PLAFOND_LIGNES = 1235
-PLAFOND_FONCTIONS = 36
+PLAFOND_LIGNES = 1194
+PLAFOND_FONCTIONS = 34
 
 
 def _imports_tiers(chemin):

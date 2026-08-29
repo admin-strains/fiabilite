@@ -32,6 +32,8 @@ DEUX DEFAUTS QUE CES FONCTIONS PORTENT DANS LEUR HISTOIRE
 import numpy as np
 import openturns as ot
 
+import doe as _cache_doe
+
 
 def _ecrire(message):
     print(message, flush=True)
@@ -197,3 +199,100 @@ def journaliser_plan(yt, all_grad, tracer=_ecrire):
     for k in range(len(all_grad)):
         tracer("    [" + ", ".join("%.10f" % v for v in all_grad[k]) + "],")
     tracer("]")
+
+
+# --------------------------------------------------------------------------- #
+# L'ENCHAINEMENT COMPLET : du tirage au plan pret a nourrir un metamodele     #
+# --------------------------------------------------------------------------- #
+def construire_plan_initial(cfg, n_doe, *, dist_jointe, params_names,
+                            bornes_min, bornes_max, fichier_cache, signature,
+                            executer_plan, executer_en_parallele=None,
+                            journaliser=None, tracer=_ecrire):
+    """Le plan d'experiences initial : `n_doe` appels solveur, ou zero.
+
+    C'etait `build_DOE`, cinquante-deux lignes ecrites dans les DEUX etudes.
+    Ce qui restait a l'etude n'etait pas l'enchainement -- il est identique --
+    mais le nom du modele et la facon d'appeler le solveur. Ce sont donc les
+    seules choses qu'on lui demande encore, sous forme d'appelables.
+
+    Retourne TOUJOURS `(xt, yt, all_grad)`.
+
+    UNE ARITE, PAS DEUX. `build_DOE` rendait tantot un triplet, tantot le seul
+    `xt` -- et son propre commentaire gardait la trace de ce que cela avait
+    coute : « l'ancienne branche faisait `xt = build_DOE()` et recevait un
+    TRIPLET -- xt devenait un tuple, silencieusement ». En haute fidelite
+    pure il n'y a ni valeurs ni gradients a rendre : ce sont deux `None`, pas
+    une signature differente.
+
+    `eval_hf` a disparu avec cette unification. Il valait `False` en un seul
+    site d'appel, et ce site etait deja garde par `do_HF` -- les deux
+    conditions ne se sont jamais separees.
+
+    LES DEUX CACHES, QUI NE FONT PAS LA MEME CHOSE
+    -----------------------------------------------
+    * le cache COMPLET (`load_doe_cache`) rend un plan entier deja paye, et
+      la fonction sort aussitot ;
+    * le cache PARTIEL (`charger_doe_partiel`) rend les points d'un plan
+      INTERROMPU, greffes dans `SOL` pour que le solveur ne les repaie pas.
+      Il verifie les coordonnees qu'il rend (`xt_attendu`) : sans cela, un
+      plan retire d'ailleurs serait apparie aux mauvais points.
+
+    Le cache complet n'est consulte qu'en presence d'un metamodele : en HF
+    pur, `xt` seul ne se relit pas d'un fichier qui porte aussi `yt`.
+
+    Les deux caches sont clefs sur `n_doe`. `build_DOE` les clefait sur `n0`
+    quel que soit le `n_doe` demande ; les deux sites d'appel prenaient le
+    defaut `n_doe=n0`, donc rien ne change -- mais un plan d'une autre taille
+    n'ira plus relire le cache d'un plan de taille n0.
+    """
+    n_var = len(params_names)
+    if not cfg.do_HF:
+        depuis_cache = _cache_doe.load_doe_cache(
+            fichier_cache, n_doe, cfg.config_is_identical, signature=signature)
+        if depuis_cache is not None:
+            return depuis_cache
+
+    dist_X = dist_jointe()
+    U_doe, X_doe, xt = tirer_plan_lhs(dist_X, n_doe, bornes_min, bornes_max)
+    if cfg.print_DOE:
+        tracer_plan(U_doe, tracer=tracer)
+    if cfg.do_HF:
+        # Haute fidelite pure : le plan sert de POINTS, pas de donnees
+        # d'apprentissage. Aucun appel solveur ici -- ils viendront un par un.
+        return xt, None, None
+
+    SOL = [{params_names[j]: X_doe[i][j] for j in range(n_var)}
+           for i in range(n_doe)]
+
+    # Reprise d'un plan interrompu : la greffe est dans `_cache/doe.py`, avec
+    # ce qu'une interruption coutait avant qu'elle existe.
+    if cfg.config_is_identical:
+        _cache_doe.greffer_reprise(
+            SOL,
+            _cache_doe.charger_doe_partiel(fichier_cache, n_doe,
+                                           signature=signature,
+                                           xt_attendu=xt),
+            params_names)
+
+    if cfg.n_workers_DOE and cfg.n_workers_DOE > 1:
+        SOL = executer_en_parallele(SOL, cfg.n_workers_DOE)
+    else:
+        SOL = executer_plan(SOL)
+
+    complets = points_avec_gradient(SOL, params_names, U_doe,
+                                    cfg.exclure_points_sans_gradient,
+                                    tracer=tracer)
+    xt, yt, all_grad = assembler_plan(SOL, complets, xt, params_names)
+
+    if journaliser is not None:
+        for i in complets:
+            journaliser(list(U_doe[i]), list(X_doe[i]), SOL[i]['g'], phase="DOE")
+    if cfg.print_DOE:
+        journaliser_plan(yt, all_grad, tracer=tracer)
+    _cache_doe.save_doe_cache(fichier_cache, n_doe, xt, yt, all_grad,
+                              signature=signature)
+    if cfg.do_PCK:
+        xt, yt, all_grad = augmenter_par_taylor(xt, yt, all_grad,
+                                                cfg.eps_taylor, n_var,
+                                                tracer=tracer)
+    return xt, yt, all_grad

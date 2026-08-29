@@ -263,8 +263,14 @@ def test_plus_aucune_variable_libre():
             assert not restantes, f"{module}.{nom} depend encore de {sorted(restantes)}"
 
 
-EXTRAITES = ["_doe_cache_sig", "_save_doe_cache", "_load_doe_cache",
-             "_save_doe_cache_incremental"]
+EXTRAITES = ["_doe_cache_sig", "_save_doe_cache_incremental"]
+
+#: Le chargement et la sauvegarde du cache COMPLET sont partis le 29/08/2026
+#: avec `build_DOE`, leur seul appelant : ils sont appeles depuis
+#: `_doe/plan.py`. Ne restent dans les etudes que les deux delegues qui ont
+#: encore un appelant local -- la signature informative du dump de reprise, et
+#: la sauvegarde INCREMENTALE, qui appartient a l'evaluateur.
+PARTIES_AVEC_LE_PLAN = ["_load_doe_cache", "_save_doe_cache"]
 
 #: Les caches de la GRILLE haute fidelite ont quitte les AC le 27/08/2026 :
 #: ils sont devenus des methodes de `_etapes.grille.Grille`, qui porte la
@@ -330,6 +336,27 @@ def test_les_scripts_ac_ne_portent_plus_que_des_delegues(rel):
                    if isinstance(d, ast.Attribute) and isinstance(d.value, ast.Name)]
         assert any(a in ("_cache_doe", "_cache_hf") for a in appelle),             f"{rel} : {n.name} ne transmet pas a _cache"
     assert vus == set(EXTRAITES), f"{rel} : manquants {sorted(set(EXTRAITES) - vus)}"
+    for parti in PARTIES_AVEC_LE_PLAN:
+        assert "def %s(" % parti not in source, (
+            "%s : %s est revenu dans l'etude. Son unique appelant, `build_DOE`, "
+            "vit dans `_doe/plan.py` -- le redefinir ici veut dire qu'une "
+            "seconde copie du plan initial est reapparue." % (rel, parti))
+
+
+def test_le_plan_initial_passe_par_le_cache_partage():
+    """Le pendant positif : `_doe/plan.py` REUTILISE `_cache/doe.py`.
+
+    C'est le meme controle que pour la grille juste au-dessus : verifier que
+    les noms ont disparu des etudes ne dit pas ou ils sont alles, et une
+    logique de cache reecrite passerait ce test-la sans etre vue.
+    """
+    src = open(os.path.join(REPO, "_doe", "plan.py"),
+               encoding="utf-8", errors="replace").read()
+    for nom in ("load_doe_cache", "save_doe_cache", "charger_doe_partiel",
+                "greffer_reprise"):
+        assert "_cache_doe.%s(" % nom in src, (
+            "_doe/plan.py n'appelle pas `_cache_doe.%s` : la logique de cache "
+            "a ete reecrite au lieu d'etre reutilisee." % nom)
 
 
 def test_ce_qui_reste_dans_main_est_documente():

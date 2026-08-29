@@ -481,14 +481,10 @@ if __name__ == '__main__':
     # backend en silence (constat du 26/08/2026).
     _SIG_SOLVEUR = CFG.signature_solveur()
 
-    def _load_doe_cache():
-        return _cache_doe.load_doe_cache(_DOE_CACHE_FILE, n0, config_is_identical,
-                                         signature=_SIG_SOLVEUR)
-
-    def _save_doe_cache(xt, yt, all_grad):
-        return _cache_doe.save_doe_cache(_DOE_CACHE_FILE, n0, xt, yt, all_grad,
-                                         signature=_SIG_SOLVEUR)
-
+    # Le chargement et la sauvegarde du cache complet sont partis avec
+    # `build_DOE` : son seul appelant. Ne reste que la sauvegarde
+    # INCREMENTALE, qui appartient a l'evaluateur -- elle s'ecrit pendant le
+    # plan, point par point, pour qu'une interruption ne coute pas tout.
     def _save_doe_cache_incremental(SOL, n_done):
         return _cache_doe.save_doe_cache_incremental(
             _DOE_CACHE_FILE, n0, params_names, SOL, n_done,
@@ -531,58 +527,23 @@ if __name__ == '__main__':
         _journal_points.fichier_de(_path_ds), params_names)
 
     # --- DOE ---
-    def build_DOE(n_doe=n0, eval_hf=True):
-        """Le plan d'experiences initial : n_doe appels solveur.
+    def build_DOE():
+        """Le plan d'experiences initial : n0 appels solveur, ou zero.
 
-        Le tirage, le tri des points sans gradient et l'augmentation de Taylor
-        sont dans `_doe/plan.py`. Ne reste ici que l'enchainement, et les
-        caches propres a cette etude.
+        L'enchainement est dans `_doe/plan.py`, en un seul exemplaire pour les
+        deux etudes. Ne restent ici que le nom du modele et la facon d'appeler
+        le solveur -- les deux seules choses qui different d'une etude a
+        l'autre.
         """
-        if not do_HF and eval_hf:
-            _cached = _load_doe_cache()
-            if _cached is not None:
-                return _cached
-
-        dist_X = dist_jointe()
-        U_doe, X_doe, xt = _plan.tirer_plan_lhs(
-            dist_X, n_doe, eff_bounds_min, eff_bounds_max)
-        if print_DOE:
-            _plan.tracer_plan(U_doe)
-        if do_HF or not eval_hf:
-            return xt
-
-        SOL = [{params_names[j]: X_doe[i][j] for j in range(n_var)}
-               for i in range(n_doe)]
-
-        # Reprise d'un plan interrompu : la greffe est dans `_cache/doe.py`,
-        # avec ce qu'une interruption coutait avant qu'elle existe.
-        if config_is_identical:
-            _cache_doe.greffer_reprise(
-                SOL,
-                _cache_doe.charger_doe_partiel(_DOE_CACHE_FILE, n0,
-                                               signature=_SIG_SOLVEUR,
-                                               xt_attendu=xt),
-                params_names)
-
-        if n_workers_DOE and n_workers_DOE > 1:
-            SOL = run_DOE_parallel(modelname, SOL, params_names, n_workers_DOE)
-        else:
-            SOL = run_one_SOL(modelname, SOL, params_names, sensitivity=True)
-
-        _complets = _plan.points_avec_gradient(
-            SOL, params_names, U_doe, CFG.exclure_points_sans_gradient)
-        xt, yt, all_grad = _plan.assembler_plan(SOL, _complets, xt, params_names)
-
-        for i in _complets:
-            _JOURNAL.enregistrer(list(U_doe[i]), list(X_doe[i]),
-                                 SOL[i]['g'], phase="DOE")
-        if print_DOE:
-            _plan.journaliser_plan(yt, all_grad)
-        _save_doe_cache(xt, yt, all_grad)
-        if do_PCK:
-            xt, yt, all_grad = _plan.augmenter_par_taylor(
-                xt, yt, all_grad, eps_taylor, n_var)
-        return xt, yt, all_grad
+        return _plan.construire_plan_initial(
+            CFG, n0, dist_jointe=dist_jointe, params_names=params_names,
+            bornes_min=eff_bounds_min, bornes_max=eff_bounds_max,
+            fichier_cache=_DOE_CACHE_FILE, signature=_SIG_SOLVEUR,
+            executer_plan=lambda SOL: run_one_SOL(
+                modelname, SOL, params_names, sensitivity=True),
+            executer_en_parallele=lambda SOL, nw: run_DOE_parallel(
+                modelname, SOL, params_names, nw),
+            journaliser=_JOURNAL.enregistrer)
 
     def build_starting_points():
         """Les points de depart du FORM multimodal. ZERO appel solveur."""
@@ -1015,13 +976,11 @@ if __name__ == '__main__':
     # surrogate. C'est le seul endroit du programme ou le plan initial doit
     # reellement etre construit.
     if xt is None:
-        if do_HF:
-            # en HF pur, aucun surrogate a nourrir : on ne veut que les points.
-            # (l'ancienne branche faisait `xt = build_DOE()` et recevait un
-            #  TRIPLET -- xt devenait un tuple, silencieusement.)
-            xt, yt, all_grad = build_DOE(eval_hf=False), None, None
-        else:
-            xt, yt, all_grad = build_DOE()
+        # UNE arite, plus deux. `build_DOE` rendait tantot un triplet, tantot
+        # le seul `xt`, et la branche haute fidelite devait le savoir -- elle
+        # ne l'a pas toujours su : « xt devenait un tuple, silencieusement ».
+        # En HF pur, `yt` et `all_grad` sont deux `None`, pas une signature.
+        xt, yt, all_grad = build_DOE()
         print(f"[PLAN] plan initial construit : {len(xt)} points", flush=True)
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
     if print_HF and print_fullHF and n_var <= 3:

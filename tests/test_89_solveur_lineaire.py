@@ -341,8 +341,11 @@ def test_le_plan_ecarte_au_lieu_de_fabriquer(script):
     chemin = os.path.join(_REPO, script)
     with open(chemin, "r", encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert "exclure_points_sans_gradient" in src, (
-        "%s n'honore pas le parametre" % script)
+    plan = open(os.path.join(_REPO, "_doe", "plan.py"),
+                encoding="utf-8", errors="replace").read()
+    assert "cfg.exclure_points_sans_gradient" in plan, (
+        "l'enchainement du plan initial n'honore pas le parametre ; il vit "
+        "dans `_doe/plan.py` depuis le 29/08/2026")
     # le motif trompeur ne doit plus servir a construire all_grad du plan
     assert not re.search(r"all_grad = np\.array\(\[\[SOL\[i\]\.get\(f'dg_\{p\}', 0\.0\)", src), (
         "%s reconstruit all_grad avec le defaut 0.0 illusoire" % script)
@@ -455,7 +458,15 @@ def test_l_ecrivain_incremental_ne_fabrique_plus_de_zero(tmp_path):
 def test_le_script_reprend_et_saute_les_points_connus(script):
     with open(os.path.join(_REPO, script), encoding="utf-8", errors="replace") as fh:
         src = fh.read()
-    assert "charger_doe_partiel" in src, "%s ne reprend pas un plan interrompu" % script
+    plan = open(os.path.join(_REPO, "_doe", "plan.py"),
+                encoding="utf-8", errors="replace").read()
+    assert "charger_doe_partiel" in plan, (
+        "l'enchainement du plan initial ne reprend pas un plan interrompu")
+    assert "xt_attendu=" in plan, (
+        "la reprise partielle ne VERIFIE pas les coordonnees qu'elle rend : "
+        "un plan retire d'ailleurs serait apparie aux mauvais points")
+    assert "charger_doe_partiel" not in src, (
+        "%s : la reprise d'un plan interrompu est revenue dans l'etude." % script)
     # Le saut d'un point deja calcule est dans `_doe/evaluation.py` depuis le
     # 27/08/2026 : c'est LUI qui fait gagner les heures, et il n'existe plus
     # qu'en un exemplaire.

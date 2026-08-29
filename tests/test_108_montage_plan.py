@@ -229,5 +229,16 @@ def test_les_etudes_ne_montent_plus_le_plan_elles_memes(script):
         assert interdit not in s, (
             "%s : le montage du plan est revenu dans l'etude (%r)."
             % (script, interdit))
-    assert "_plan.assembler_plan(" in s
-    assert "_cache_doe.greffer_reprise(" in s
+    for parti in ("_plan.assembler_plan(", "_cache_doe.greffer_reprise(",
+                  "_plan.tirer_plan_lhs("):
+        assert parti not in s, (
+            "%s : %s est revenu dans l'etude ; l'enchainement du plan initial "
+            "appartient a `_doe/plan.py` depuis le 29/08/2026." % (script, parti))
+
+
+def test_le_plan_initial_est_monte_par_le_module():
+    """Le pendant positif, sur le seul assembleur qui reste."""
+    s = io.open(os.path.join(_REPO, "_doe", "plan.py"), encoding="utf-8").read()
+    for atteste in ("def construire_plan_initial(", "assembler_plan(",
+                    "_cache_doe.greffer_reprise("):
+        assert atteste in s, atteste
