@@ -328,7 +328,6 @@ def test_seuls_les_criteres_qui_l_utilisent_paient_l_encadrement(critere, attend
 def test_les_scripts_ne_tiennent_plus_les_compteurs(script):
     src = open(os.path.join(_REPO, script), encoding="utf-8",
                errors="replace").read()
-    assert "_arret_eff.ArretEFF.pour_un_run(" in src
     assert "count_valid_BB +=" not in src, (
         "%s tient encore ses propres compteurs" % script)
     # La reprise des compteurs n'existait que d'un cote ; elle est desormais
@@ -337,6 +336,19 @@ def test_les_scripts_ne_tiennent_plus_les_compteurs(script):
     assert "reprendre_depuis_historique" not in src, (
         "%s : la reprise des compteurs est ressortie dans l'etude ; elle "
         "appartient a `ArretEFF.pour_un_run`." % script)
+
+
+def test_la_boucle_passe_par_la_fabrique():
+    """Le pendant positif, sur le seul appelant qui reste.
+
+    Il etait porte par les deux etudes tant que la boucle y etait recopiee.
+    Depuis le 28/08/2026 elle est dans `_reliability/enrichissement.py`, et
+    c'est la que la fabrique doit etre appelee -- une etude qui la rappellerait
+    elle-meme aurait remis en place la duplication.
+    """
+    src = open(os.path.join(_REPO, "_reliability", "enrichissement.py"),
+               encoding="utf-8", errors="replace").read()
+    assert "ArretEFF.pour_un_run(" in src
 
 
 # --------------------------------------------------------------------------- #

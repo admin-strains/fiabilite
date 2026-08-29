@@ -187,4 +187,14 @@ def test_les_etudes_ne_decident_plus_du_cout_de_l_encadrement(script):
         assert interdit not in s, (
             "%s : la conduite d'une iteration est revenue dans l'etude (%r)."
             % (script, interdit))
-    assert "_controleur.mesurer_iteration(" in s
+    assert "mesurer_iteration" not in s, (
+        "%s : la conduite d'une iteration est revenue dans l'etude ; elle "
+        "appartient a `_reliability/enrichissement.py`." % script)
+
+
+def test_la_boucle_conduit_l_iteration():
+    """Le pendant positif, sur le seul appelant qui reste."""
+    import io
+    s = io.open(os.path.join(_REPO, "_reliability", "enrichissement.py"),
+                encoding="utf-8", errors="replace").read()
+    assert "controleur.mesurer_iteration(" in s

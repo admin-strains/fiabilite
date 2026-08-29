@@ -34,11 +34,10 @@ import lois as _lois
 import doe as _cache_doe
 import journal_points as _journal_points
 import reprise as _reprise
-import eff as _eff
 import eff_ot as _eff_ot
 import form as _form
 import controle as _controle
-import arret as _arret_eff
+import enrichissement as _enrichissement
 import graphiques as _graphiques
 import figurer as _figurer
 # NOM : `ajuster`, pas `fit` -- `_lib/fit.py` (le clone UQLab) porte
@@ -51,11 +50,6 @@ import plan as _plan
 import parallele as _parallele
 import schema as _schema
 from fabrique import solveur as _fabriquer_solveur
-from _parallel_is import adaptive_is
-_IS_PARALLEL = os.environ.get("_IS_PARALLEL", "1") != "0"
-_IS_K        = int(os.environ.get("_IS_K", "16"))
-_IS_CHUNK    = int(os.environ.get("_IS_CHUNK", "8"))
-_IS_PROBE    = int(os.environ.get("_IS_PROBE", "16"))
 
 
 def _parse(text, name):
@@ -718,139 +712,34 @@ if __name__ == '__main__':
             gradient_du_surrogate=do_GEPCK)
 
     def run_EFF(g_ot, sigma_func, xt, yt, all_grad):
+        """Ameliore le metamodele jusqu'au critere d'arret, et le renvoie.
+
+        Les 136 lignes de la boucle sont dans `_reliability/enrichissement.py`,
+        en un seul exemplaire pour les deux etudes. Ne restent ici que les
+        collaborateurs -- ce que CETTE etude sait faire et que la boucle
+        ignore.
+
+        `max_degree` est passe A L'APPEL : une reprise le relit dans le dump
+        et ecrase celui du fichier d'etude, donc le figer dans l'objet
+        rendrait la boucle sourde a la reprise.
         """
-        Cette fonction reçoit le métamodele et ses paramètres, et l'améliore jusqu'à vérifier le critère EFF puis
-        renvoie métamodèle+ paramètres mis à jour.
-        """
-        # Seul `_eff_history_beta_IS` est REBINDE (c'est un instantane) ; les
-        # autres ne sont que lus et modifies en place.
-        global _eff_history_beta_IS
-        # --- Si aucune branche ne tourne, on ne fait rien ---
-        if g_ot is None or do_HF:
-            return g_ot, sigma_func, xt, yt, all_grad, []
-        _JOURNAL.marquer("EFF")
-
-        xt_eff = list(_restart_xt_eff) if restart_enrich_only else []
-
-        # FORM + tirage d'importance sur le metamodele COURANT : le juge de
-        # l'arret. 80 lignes sont dans `_reliability/controle.py` ; l'etat du
-        # plan (`xt`, `yt`, `all_grad`) leur est PASSE, alors qu'il etait
-        # capture par fermeture -- juste, mais invisible : rien ne disait que
-        # le tirage adaptatif travaillait sur l'etat courant.
-        _controleur = _controle.ControleurFORM(
-            n_var, n_max_FORM, tol_FORM, executer_is=run_IS,
-            adaptatif=(adaptive_is if (_IS_PARALLEL and not do_PCK) else None),
-            cov_cible=cov_IS, n_is=n_IS,
-            K=_IS_K, chunk=_IS_CHUNK, sondes=_IS_PROBE)
-
-        def _etat_courant():
-            return dict(xt=xt, yt=yt, all_grad=all_grad, max_degree=max_degree)
-
-        def _form_is_iter(g_ot_i, label, sign=0, fm=None):
-            return _controleur.beta_et_pf(g_ot_i, label, sign=sign, fm=fm,
-                                          etat=_etat_courant())
-
-        def _three_form_is(g_ot_i, sigma_func_i, label, b_mid_precalc=None):
-            return _controleur.encadrement(
-                g_ot_i, sigma_func_i, label, BoundSurrogateFunction,
-                etat=_etat_courant(), beta_central=b_mid_precalc)
-
-
-        # --- On résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
-        _batch_pts, _eff_val_init = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
-        u_opt = ot.Point(_batch_pts[0].tolist())
-        f = ot.Function(EFFFunction(g_ot, sigma_func))
-        _sigG = sigma_func(u_opt)
-        _muG  = g_ot(ot.Point(u_opt))[0]
-        _eps  = epsilon_factor * _sigG
-        print(f"  EFF debug u_opt={list(np.round(np.array(u_opt),3))} : sigmaG={_sigG:.6f}  muG={_muG:.6f}  epsilon={_eps:.6f}", flush=True)
-        print(f"  EFF initial : EFF(u_opt)={_eff_val_init:.6f}, tol={tol_EFF}", flush=True)
-
-        iter_count = 0
-
-        _b_mid, _pf_mid_conv = _form_is_iter(g_ot, f"N={len(xt)} initial mu conv")
-        if restart_enrich_only:
-            list_beta_IS = list(_eff_history_beta_IS) + ([_b_mid] if _b_mid is not None else [])
-        else:
-            list_beta_IS = [_b_mid] if _b_mid is not None else []
-        # Les historiques remis dans le bon etat, l'objet d'arret construit
-        # dessus, les compteurs repris s'il y a lieu : `_reliability/arret.py`.
-        _arret = _arret_eff.ArretEFF.pour_un_run(
-            EFF_criteria, tol_BB, tol_BS, n_max_EFF_points, tol_EFF,
-            hist_BB=_eff_history_BB, hist_BS=_eff_history_BS,
-            hist_Pf=_eff_history_Pf, reprise=restart_enrich_only)
-        list_Pf = _eff_history_Pf
-        # La condition de boucle, une fois pour les quatre criteres.
-        _cond = lambda: _arret.continuer(len(xt_eff), f(u_opt)[0])
-        # Lu APRES la boucle, meme si elle ne tourne jamais : `test_113`.
-        _ratio_bb = None
-        _eff_history_EFF.append(f(u_opt)[0])   # EFF initial (avant ajout du 1er point)
-
-        # --- Ratio BB du plan initial : `_reliability/controle.py` ---
-        if print_Pf:
-            _controleur.amorcer_iteration(
-                g_ot, sigma_func, BoundSurrogateFunction, _arret,
-                n_points=len(xt), historique_Pf=list_Pf, etat=_etat_courant())
-
-        while _cond():
-            _sigG = sigma_func(u_opt)
-            _muG  = g_ot(ot.Point(u_opt))[0]
-            print(f"  EFF={f(u_opt)[0]:.6f} > {tol_EFF} -- u_opt={list(np.round(np.array(u_opt),3))}  sigmaG={_sigG:.6f}  muG={_muG:.6f}", flush=True)
-            _eff_history_EFF.append(f(u_opt)[0])   # EFF apres rebuild a cette iteration
-
-            # --- Calcul HF des points du batch : `_doe/evaluation.py` ---
-            xt, yt, all_grad, xt_eff = _evaluation.evaluer_batch_EFF(
-                _batch_pts, xt, yt, all_grad, xt_eff,
-                n_max_points=n_max_EFF_points, n_batch=n_batch_EFF,
-                n_workers=n_workers_DOE, n_var=n_var,
-                evaluer_un_point=run_HF,
-                executer_en_parallele=lambda SOL, nw: run_DOE_parallel(
-                    modelname, SOL, params_names, nw),
-                dist_jointe=dist_jointe, params_names=params_names,
-                taylor=(do_PCK and n_batch_EFF <= 1), eps_taylor=eps_taylor)
-            g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-
-            # --- L'iteration, jugee : `_reliability/controle.py` ---
-            iter_count += 1
-            _b_mid, _pf_mid_conv, _ratio_bb = _controleur.mesurer_iteration(
-                g_ot, sigma_func, BoundSurrogateFunction, _arret,
-                n_points=len(xt), iteration=iter_count, avec_Pf=print_Pf,
-                historique_Pf=list_Pf, historique_beta=list_beta_IS,
-                etat=_etat_courant())
-
-            # --- Visu intermediaire apres ajout de point ---
-            if print_EFF_progres:
-                print_planche_EFF(g_ot, sigma_func, xt, xt_eff,
-                                  fond_hf=fond_hf_pour_figures())
-
-            # --- Dump restart incremental (kill-safe) ---
-            _eff_history_beta_IS = list(list_beta_IS)
-            _save_restart_state(xt, yt, all_grad, xt_eff, None, None, [], None)
-
-            # --- On re-résoud u = argmax(EFF) (batch KB si n_batch_EFF > 1) ---
-            _batch_pts, _ = _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad)
-            u_opt = ot.Point(_batch_pts[0].tolist())
-            f = ot.Function(EFFFunction(g_ot, sigma_func))
-
-        # Le bilan : la decomposition du critere au point d'arret
-        # (`_reliability/eff.py`), puis ce qui a arrete et sur quel
-        # historique (`_reliability/arret.py`, ou vivent les compteurs).
-        # sigma AVANT mu : l'ordre des deux appels est celui d'origine, et
-        # un metamodele peut journaliser.
-        _sigG2 = sigma_func(u_opt)
-        _muG2 = g_ot(ot.Point(u_opt))[0]
-        _eff.journaliser_decomposition(_muG2, _sigG2, epsilon_factor, u_opt)
-        _arret.bilan(f(u_opt)[0], len(xt_eff))
-
-        # --- BB informatif final (1 appel _three_form_is apres la boucle) ---
-        # Avec `print_Pf`, le ratio vient du dernier `_three_form_is` de la
-        # boucle ; sans lui, il faut le payer une fois de plus.
-        if not print_Pf:
-            _ratio_bb, _, _, _ = _three_form_is(g_ot, sigma_func, "BB final", b_mid_precalc=(_b_mid, _pf_mid_conv))
-        print(f"  [BB informatif final] ratio = {_ratio_bb}  tol_BB = {tol_BB}", flush=True)
-
-        _eff_history_beta_IS = list(list_beta_IS)
-        return g_ot, sigma_func, xt, yt, all_grad, xt_eff
+        return _enrichissement.BoucleEFF(
+            CFG, n_var, journal=_JOURNAL,
+            historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
+                         "BS": _eff_history_BS, "Pf": _eff_history_Pf,
+                         "beta_IS": _eff_history_beta_IS},
+            points_EFF=_find_batch_EFF_points, fonction_EFF=EFFFunction,
+            ajuster=init_g_ot, bornes_surrogate=BoundSurrogateFunction,
+            executer_is=run_IS, evaluer_un_point=run_HF,
+            executer_en_parallele=lambda SOL, nw: run_DOE_parallel(
+                modelname, SOL, params_names, nw),
+            dist_jointe=dist_jointe, params_names=params_names,
+            figure=lambda g, s, x, xe: print_planche_EFF(
+                g, s, x, xe, fond_hf=fond_hf_pour_figures()),
+            sauver=lambda x, y, a, xe: _save_restart_state(
+                x, y, a, xe, None, None, [], None),
+        ).enrichir(g_ot, sigma_func, xt, yt, all_grad,
+                   max_degree=max_degree, xt_eff_initial=_restart_xt_eff)
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #

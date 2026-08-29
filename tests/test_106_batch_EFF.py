@@ -367,4 +367,21 @@ def test_les_etudes_ne_versent_plus_les_points_elles_memes(script):
         assert interdit not in s, (
             "%s : l'evaluation du batch EFF est revenue dans l'etude (%r). "
             "Elle appartient a `_doe/evaluation.py`." % (script, interdit))
+    assert "evaluer_batch_EFF" not in s, (
+        "%s : l'appel au versement du batch est revenu dans l'etude ; il "
+        "appartient a la boucle d'enrichissement, qui en porte les reglages."
+        % script)
+
+
+def test_la_boucle_verse_les_points():
+    """Le pendant positif, sur le seul appelant qui reste.
+
+    Il portait sur les deux etudes tant que la boucle y etait recopiee. Ce
+    qu'elles gardent -- comment on evalue, sous quel nom de modele -- leur est
+    demande a la construction ; les REGLAGES (budget, taille de batch,
+    workers, Taylor) viennent du fichier d'etude et sont lus dans la boucle.
+    """
+    import io
+    s = io.open(os.path.join(_REPO, "_reliability", "enrichissement.py"),
+                encoding="utf-8").read()
     assert "_evaluation.evaluer_batch_EFF(" in s

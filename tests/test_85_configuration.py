@@ -326,9 +326,46 @@ def test_la_liste_des_parametres_sans_effet_est_exacte():
     assert not ressuscites, "\n  ".join(ressuscites)
 
 
+#: Les dossiers de code partage. Un reglage peut y etre lu sans etre nomme
+#: dans une etude : c'est le cas de tout ce qui a suivi une extraction.
+DOSSIERS_MODULES = ("_reliability", "_surrogate", "_doe", "_cache", "_etapes",
+                    "_model", "_lib")
+
+
+def _champs_lus_par_les_modules():
+    """Les champs lus PAR ATTRIBUT dans le code partage : `cfg.x` / `CFG.x`.
+
+    Une etude lit ses reglages par un bloc de liaison ; un module, lui, recoit
+    la configuration et lit ses champs directement. Depuis que la boucle
+    d'enrichissement est sortie des etudes (28/08/2026), plusieurs de ses
+    reglages -- `n_max_EFF_points` le premier -- ne sont plus nommes que la.
+
+    NE PAS elargir cette sonde aurait voulu dire exempter ces reglages. C'est
+    exactement ce qui avait laisse `dossier_sortie` mort pendant des mois,
+    derriere une exemption au motif faux. Un faux positif de sonde se corrige
+    en regardant, pas en exemptant.
+
+    On exige un ACCES par attribut, plus strict que la recherche de mot
+    employee sur les etudes : un nom cite dans un commentaire ne fait pas
+    vivre un reglage.
+    """
+    lus = set()
+    for dossier in DOSSIERS_MODULES:
+        for racine, _, fichiers in os.walk(os.path.join(REPO, dossier)):
+            if "__pycache__" in racine:
+                continue
+            for nom in fichiers:
+                if not nom.endswith(".py"):
+                    continue
+                texte = io.open(os.path.join(racine, nom), encoding="utf-8",
+                                errors="replace").read()
+                lus |= set(re.findall(r"\b(?:cfg|CFG)\.(\w+)", texte))
+    return lus
+
+
 def test_aucun_autre_parametre_n_est_mort_en_silence():
-    """Le pendant : un champ du schema que plus aucun script ne lit doit
-    rejoindre `SANS_EFFET`, pas rester un reglage sans effet."""
+    """Le pendant : un champ du schema que plus personne ne lit doit rejoindre
+    `SANS_EFFET`, pas rester un reglage sans effet."""
     from schema import SANS_EFFET                            # noqa: PLC0415
     champs = set(Configuration(modelname="x").en_dict())
     # Champs que les scripts ne nomment pas -- soit ils passent par une
@@ -341,11 +378,26 @@ def test_aucun_autre_parametre_n_est_mort_en_silence():
     HORS_SCRIPTS = {"modelname", "storage", "dossier_sortie",
                     "hf_2d_grid_fixed", "hf_3d_grid_fixed"}
     corps = "\n".join(_noms_lus(c) for c in ETUDES.values())
+    ailleurs = _champs_lus_par_les_modules()
     morts = sorted(champ for champ in champs - HORS_SCRIPTS - set(SANS_EFFET)
-                   if not re.search(r"\b%s\b" % re.escape(champ), corps))
+                   if champ not in ailleurs
+                   and not re.search(r"\b%s\b" % re.escape(champ), corps))
     assert not morts, (
-        "parametre(s) que plus aucun script ne lit : %s\n"
-        "Les ajouter a SANS_EFFET (avec la raison) ou recabler leur usage." % morts)
+        "parametre(s) que plus personne ne lit : %s\n"
+        "Ni une etude, ni un module de %s. Les ajouter a SANS_EFFET (avec la "
+        "raison) ou recabler leur usage." % (morts, ", ".join(DOSSIERS_MODULES)))
+
+
+def test_la_sonde_des_modules_voit_vraiment_quelque_chose():
+    """Une sonde qui ne trouve rien ne prouve rien.
+
+    `n_max_EFF_points` est le cas d'espece : il a quitte les etudes avec la
+    boucle d'enrichissement le 28/08/2026, et il est desormais lu par elle
+    seule. Si ce test tombe, c'est la sonde qui est aveugle -- pas le reglage
+    qui est mort.
+    """
+    lus = _champs_lus_par_les_modules()
+    assert "n_max_EFF_points" in lus, sorted(lus)
 
 
 @pytest.mark.parametrize("champ", ["reduc_PLS", "do_analytic_grad",
