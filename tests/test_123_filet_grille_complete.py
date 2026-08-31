@@ -199,7 +199,15 @@ def test_toute_boucle_d_appels_solveur_ecrit_son_filet():
         if not isinstance(fn, ast.FunctionDef):
             continue
         for boucle in ast.walk(fn):
-            if not isinstance(boucle, (ast.For, ast.While)):
+            # UNE COMPREHENSION EST UNE BOUCLE. La premiere version de cette
+            # regle ne regardait que `for` et `while`, et approuvait donc
+            # `surface_3d`, qui payait `cote^2` appels dans un
+            # `[self.evaluer(pt)[0] for pt in points]` -- 225 appels, 29 heures
+            # sur le Moulin Blanc, sans filet ni cache. Une sonde aveugle a une
+            # forme de boucle approuve les boucles de cette forme.
+            if not isinstance(boucle, (ast.For, ast.While, ast.ListComp,
+                                       ast.GeneratorExp, ast.SetComp,
+                                       ast.DictComp)):
                 continue
             # `evaluer_lot` DEBALLE un lot deja calcule : cette boucle-la ne
             # paie rien par tour, et n'a donc rien a ecrire par tour. Le filet
@@ -223,6 +231,26 @@ def test_toute_boucle_d_appels_solveur_ecrit_son_filet():
         "premiere interruption -- c'est ce que `calculer_complete` faisait "
         "jusqu'au 29/08/2026, sur la boucle la plus chere du programme."
         % ", ".join(sans_filet))
+
+
+def test_la_sonde_voit_les_COMPREHENSIONS():
+    """L'angle mort du 29/08/2026, fige en test.
+
+    Une comprehension est une boucle. La regle ne regardait que `for` et
+    `while`, et approuvait `surface_3d` -- qui payait `cote^2` appels dans un
+    `[self.evaluer(pt)[0] for pt in points]`.
+    """
+    import ast
+    source = """
+class G:
+    def payer(self):
+        return [self.evaluer(p)[0] for p in self.points]
+"""
+    arbre = ast.parse(source)
+    boucles = [n for n in ast.walk(arbre)
+               if isinstance(n, (ast.For, ast.While, ast.ListComp,
+                                 ast.GeneratorExp, ast.SetComp, ast.DictComp))]
+    assert len(boucles) == 1 and isinstance(boucles[0], ast.ListComp)
 
 
 def test_la_sonde_trouve_bien_des_boucles():
@@ -265,3 +293,75 @@ def test_un_lot_trop_court_LEVE_au_lieu_de_laisser_des_trous():
         tracer=lambda _m: None)
     with pytest.raises(ValueError, match="valeur"):
         g.depuis_points_libres([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+
+
+# --------------------------------------------------------------------------- #
+# 4. LE RELIEF 3D PARTAGE LA GRILLE DU FOND DE FIGURE                          #
+#                                                                             #
+# `surface_3d` reconstruisait son quadrillage a la main -- au caractere pres  #
+# ce que rendent `maillage_2d()` et `points_de_coupe((0, 1, {}))`. Les memes  #
+# points, dans le meme ordre, payes une SECONDE fois : 225 appels sur le      #
+# Moulin Blanc, soit 29 heures. Meme defaut que celui du 27/08/2026, ou la    #
+# coupe finale et la coupe courante etaient servies par deux fichiers.        #
+# --------------------------------------------------------------------------- #
+def _grille_2d(tmp_path, cote=3):
+    payes = []
+
+    def evaluer(pt):
+        payes.append(tuple(round(float(v), 9) for v in pt))
+        return (float(len(payes)), None, None)
+
+    g = _grille.Grille(
+        evaluer=evaluer, n_var=2, cote=cote, bornes=(-1.0, 1.0, -2.0, 2.0),
+        fichier_cache=str(tmp_path / "hf.json"),
+        fichier_cache_complet=str(tmp_path / "hf_full.json"),
+        coupe_courante=(0, 1, {}), active=True,
+        signature=SIG, config_identique=True, tracer=lambda _m: None)
+    return g, payes
+
+
+def test_le_relief_ne_repaie_pas_le_fond_de_figure(tmp_path):
+    g, payes = _grille_2d(tmp_path)
+    g.fond_de_figure()
+    apres_fond = len(payes)
+    assert apres_fond == 9, apres_fond
+
+    g2, payes2 = _grille_2d(tmp_path)
+    g2.surface_3d(ecrire_recopiable=False)
+    assert payes2 == [], (
+        "le relief a repaye %d point(s) que le fond de figure avait deja "
+        "calcules" % len(payes2))
+
+
+def test_le_relief_et_le_fond_portent_les_MEMES_points(tmp_path):
+    """S'ils partagent un cache, ils doivent partager les points -- sinon
+    c'est un cache qui ne verifie pas ce qu'il rend."""
+    g, payes = _grille_2d(tmp_path)
+    g.fond_de_figure()
+    du_fond = list(payes)
+
+    g2, payes2 = _grille_2d(tmp_path / "autre")
+    (tmp_path / "autre").mkdir()
+    g2, payes2 = _grille_2d(tmp_path / "autre")
+    g2.surface_3d(ecrire_recopiable=False)
+    assert payes2 == du_fond
+
+
+def test_le_relief_rend_un_maillage_de_la_bonne_forme(tmp_path):
+    g, _ = _grille_2d(tmp_path)
+    U1, U2, Z = g.surface_3d(ecrire_recopiable=False)
+    assert U1.shape == U2.shape == Z.shape == (3, 3)
+    # les deux axes ont LEURS bornes, pas celles de u1 deux fois
+    assert (U1.min(), U1.max()) == (-1.0, 1.0)
+    assert (U2.min(), U2.max()) == (-2.0, 2.0)
+
+
+def test_une_grille_figee_reste_gratuite(tmp_path):
+    """`hf_3d_grid_fixed` est le seul cache qui vit dans le fichier d'etude :
+    il sert a figer une figure pour un rapport."""
+    g, payes = _grille_2d(tmp_path)
+    U1, U2, Z = g.surface_3d(
+        fige={'params': (-1.0, 1.0, -2.0, 2.0, 3), 'Z': [[1.0] * 3] * 3},
+        ecrire_recopiable=False)
+    assert payes == []
+    assert Z.tolist() == [[1.0] * 3] * 3

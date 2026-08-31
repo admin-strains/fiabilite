@@ -643,9 +643,33 @@ class Grille:
         d'etude plutot que sur le disque -- il sert a figer une figure pour
         un rapport.
 
-        COUT : `cote^2` appels solveur si `fige` est None.
+        COUT : ZERO appel solveur de plus que le fond de figure -- voir
+        ci-dessous.
 
         Retourne `(U1, U2, Z)`.
+
+        C'EST LA MEME GRILLE QUE LE FOND DE FIGURE -- 29/08/2026
+        ---------------------------------------------------------
+        Cette methode reconstruisait son quadrillage a la main :
+
+            U1, U2 = np.meshgrid(np.linspace(self.u1_min, self.u1_max, cote),
+                                 np.linspace(self.u2_min, self.u2_max, cote))
+            points = np.column_stack([U1.ravel(), U2.ravel()])
+
+        C'est, au caractere pres, ce que rendent `maillage_2d()` et
+        `points_de_coupe((0, 1, {}))`. Les memes `cote^2` points, dans le meme
+        ordre -- mais payes une SECONDE fois, sans cache, sans filet de
+        reprise et sans verification de signature. Sur le Moulin Blanc, 225
+        appels : 29 heures. C'est le meme defaut que celui du 27/08/2026, ou
+        la coupe finale et la coupe courante etaient servies par deux fichiers
+        differents.
+
+        Elle etait de surcroit FAUSSE au-dela de deux variables : elle empilait
+        deux colonnes pour un point que le solveur attend complet.
+
+        Deleguer a `calculer_2d` donne le cache, le filet, la signature et la
+        coupe correcte -- et, quand le fond de figure a deja ete calcule, zero
+        appel.
         """
         if fige is not None:
             self.tracer("Cache hf_3d_grid_fixed disponible - pas d'appels solveur.")
@@ -654,15 +678,15 @@ class Grille:
                                  np.linspace(u2_min, u2_max, cote))
             return U1, U2, np.array(fige['Z'])
 
-        U1, U2 = np.meshgrid(np.linspace(self.u1_min, self.u1_max, self.cote),
-                             np.linspace(self.u2_min, self.u2_max, self.cote))
-        points = np.column_stack([U1.ravel(), U2.ravel()])
-        self.tracer("Evaluation HF grille %dx%d = %d appels solveur..."
-                    % (self.cote, self.cote, self.cote ** 2))
-        Z = np.array([self.evaluer(pt)[0] for pt in points]).reshape(self.cote,
-                                                                     self.cote)
+        # La coupe COURANTE, pas `(0, 1, {})` : les points doivent etre ceux
+        # que la clef du cache annonce, sinon on retombe sur un cache qui ne
+        # verifie pas ce qu'il rend.
+        coupe = self.coupe_courante if self.coupe_courante is not None else (0, 1, {})
+        Z, _ = self.calculer_2d(self.points_de_coupe(coupe),
+                                contexte="surface_3d", coupe=coupe)
         if ecrire_recopiable:
             self.ecrire_recopiable(Z)
+        U1, U2 = self.maillage_2d()
         return U1, U2, Z
 
     def ecrire_recopiable(self, Z):
