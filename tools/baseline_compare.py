@@ -73,6 +73,21 @@ def ecart(a, b):
         return 0.0 if a == b else None
     if a.get("shape") != b.get("shape"):
         return None
+    # UN NaN QUI APPARAIT EST UNE DIVERGENCE, quelle que soit la taille.
+    #
+    # `telemetry.fingerprint` compte les valeurs non finies -- et ce compte
+    # n'etait JAMAIS relu (constat du 29/08/2026). Au-dela de 256 elements,
+    # les valeurs ne sont pas stockees et la comparaison se fait sur les
+    # statistiques, calculees sur les seules valeurs FINIES : un NaN nouveau
+    # n'y apparait que par le decalage qu'il induit sur `mean` et `l2`.
+    #
+    # Mesure : un NaN pose sur la valeur la plus proche de la moyenne donne
+    # un ecart de 1,6e-3 a n=300 et de 2,4e-6 a n=200 000 -- toujours au-dessus
+    # des tolerances, donc toujours vu. Mais il l'est PAR ACCIDENT, et l'ecart
+    # decroit avec la taille. Le compte, lui, ne depend ni de la taille ni de
+    # la tolerance.
+    if a.get("non_finis", 0) != b.get("non_finis", 0):
+        return float("inf")
     if "values" in a and "values" in b:
         num = den = 0.0
         for x, y in zip(a["values"], b["values"]):

@@ -35,3 +35,10 @@ mix_fonctionnement_global.md
 
 # Script genere par tools/run_comparatif.py
 _run_comparatif.py
+
+# Journaux de baseline : un par execution de tools/baseline_run.py, que
+# la documentation demande de rejouer a chaque commit. Le depot suit la
+# REFERENCE et le plancher de bruit ; les runs, eux, sont jetables et
+# salissaient `git status` -- ce qui invite au `git add -A` que
+# CONTRIBUTING interdit.
+baselines/*/run_*.jsonl
