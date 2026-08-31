@@ -295,7 +295,7 @@ if __name__ == '__main__':
     _eff_history_EFF   = []   # EFF(u_opt) avant ajout de chaque point (incl. initial)
     _eff_history_BB    = []   # ratio BB par iteration (None si FORM echoue)
     _eff_history_BS    = []   # ratio BS par iteration (None si calcul impossible)
-    _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter, inconditionnel
+    _eff_history_Pf    = []   # Pf_IS (mid/sup/inf) par iter -- SEULEMENT sous `print_Pf`
     _fosm = [None]     # l'objet ErreurFOSM, construit au premier usage
     _eff_history_beta_IS = []   # snapshot de list_beta_IS (locale a run_EFF) pour le dump restart
     _enrich_round     = 0       # 0 = run initial, k = k-ieme reprise
