@@ -223,7 +223,7 @@ def test_la_duplication_ne_REGROSSIT_pas(comparaison):
     #: grille qui le calcule. 555 -> 520.
     #: 28/08 (suite) : la couche d'acces au solveur -- fabrique memoisee
     #: et deux adaptateurs paralleles. 520 -> 477.
-    PLAFOND = 314
+    PLAFOND = 313
     communes, differentes, A, B = comparaison
     total = sum(len(A[n]) for n in communes)
     identiques = sum(len(A[n]) for n in communes

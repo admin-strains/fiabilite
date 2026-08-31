@@ -615,3 +615,85 @@ def test_la_moisson_et_le_saut_du_pool_se_completent(tmp_path):
                                     lancer=lancer, tracer=lambda _m: None)
     envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
     assert envoyes == [1, 3, 4], envoyes
+
+
+# --------------------------------------------------------------------- #
+# LA GRILLE LIBRE EN PARALLELE : le jumeau HF du defaut n°14
+#
+# Les workers de grille ecrivent dans `_hf_workers/`, que personne ne
+# relisait. C'est atteignable sur la VRAIE etude -- `moulin_blanc.toml` porte
+# `do_custom_hf = true` et six workers -- et vaut 2 h 30 pour vingt points.
+#
+# La moisson se fait dans `evaluer_points_en_parallele` et non dans la
+# grille, parce que c'est la que les points existent en variables PHYSIQUES :
+# c'est sous cette forme que les fichiers de tache les portent, donc la seule
+# ou la verification des coordonnees ait un sens.
+# --------------------------------------------------------------------- #
+class _Loi:
+    """Une loi jointe reduite a ce que le module lui demande."""
+
+    class _T:
+        def __call__(self, u):
+            return [10.0 * v for v in u]
+
+    def getInverseIsoProbabilisticTransformation(self):
+        return self._T()
+
+
+def _grille_interrompue(tmp_path, u_faits):
+    """Un run de grille parallele dont certains points sont alles au bout."""
+    storage, nom = _modele(tmp_path)
+    base = os.path.join(storage, nom + ".ds")
+    for k, (i, u) in enumerate(u_faits):
+        wds = os.path.join(base, "_hf_workers", "hfw%d.ds" % k)
+        os.makedirs(wds, exist_ok=True)
+        x = {p: 10.0 * u[j] for j, p in enumerate(PARAMS)}
+        json.dump({"points": [dict({"idx": i}, **x)]},
+                  open(os.path.join(wds, "_doe_task.json"), "w"))
+        json.dump({str(i): {"g": 100.0 + i}},
+                  open(os.path.join(wds, "_doe_out.json"), "w"))
+    return storage, nom
+
+
+def test_la_grille_libre_parallele_recupere_ce_qui_etait_paye(tmp_path):
+    u_points = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
+    storage, nom = _grille_interrompue(tmp_path, [(0, u_points[0]),
+                                                  (2, u_points[2])])
+    lancer = _lanceur(calcul=lambda p: {"g": float(p["idx"])})
+    g = _parallele.evaluer_points_en_parallele(
+        u_points, _Loi(), PARAMS, storage, nom, 3,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        config_identique=True)
+    envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
+    assert envoyes == [1], "le pool a repaye des points deja calcules : %s" % envoyes
+    assert g == [100.0, 1.0, 102.0]
+
+
+def test_sans_config_identique_la_grille_libre_repaie_tout(tmp_path):
+    """`config_is_identical = false` veut dire « recalcule », pas
+    « recalcule si tu ne trouves rien »."""
+    u_points = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
+    storage, nom = _grille_interrompue(tmp_path, [(0, u_points[0])])
+    lancer = _lanceur(calcul=lambda p: {"g": float(p["idx"])})
+    _parallele.evaluer_points_en_parallele(
+        u_points, _Loi(), PARAMS, storage, nom, 3,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        config_identique=False)
+    envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
+    assert envoyes == [0, 1, 2]
+
+
+def test_la_grille_libre_ecarte_un_point_d_AUTRES_coordonnees(tmp_path):
+    """La verification porte sur les variables PHYSIQUES, apres la
+    transformation isoprobabiliste -- c'est sous cette forme que le fichier de
+    tache les porte."""
+    u_points = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
+    storage, nom = _grille_interrompue(tmp_path, [(0, [9.0, 9.0])])
+    lancer = _lanceur(calcul=lambda p: {"g": float(p["idx"])})
+    _parallele.evaluer_points_en_parallele(
+        u_points, _Loi(), PARAMS, storage, nom, 3,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        config_identique=True)
+    envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
+    assert envoyes == [0, 1, 2], (
+        "un point d'une AUTRE grille a ete greffe : %s" % envoyes)

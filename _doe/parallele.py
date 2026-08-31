@@ -311,7 +311,7 @@ def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
 
 def evaluer_points_en_parallele(u_points, dist, params_names, storage,
                                 modelname, n_workers, script_etude, repo,
-                                lancer=None):
+                                lancer=None, config_identique=False):
     """Des points de l'espace STANDARD, repartis sur plusieurs solveurs.
 
     Le solveur ne connait que les variables physiques : les points passent
@@ -319,6 +319,23 @@ def evaluer_points_en_parallele(u_points, dist, params_names, storage,
 
     Retourne la liste des `g`, DANS L'ORDRE de `u_points` -- les workers
     rendent un dictionnaire indexe, et l'appelant attend une grille.
+
+    LE FILET, JUMEAU DE CELUI DU PLAN -- 29/08/2026
+    ------------------------------------------------
+    Les workers de grille ecrivent dans `_hf_workers/`, que personne ne
+    relisait : une interruption perdait tout ce qu'ils avaient paye, comme
+    ceux du plan avant `moissonner_sorties`. C'est atteignable sur la vraie
+    etude -- `moulin_blanc.toml` porte `do_custom_hf = true` et six workers --
+    et vaut 2 h 30 pour une grille libre de vingt points.
+
+    La moisson se fait ICI et non dans la grille, parce que c'est ici que les
+    points existent en variables PHYSIQUES : c'est sous cette forme que les
+    fichiers de tache des workers les portent, donc la seule ou la
+    verification des coordonnees ait un sens.
+
+    Elle n'a lieu que si l'etude accepte de reutiliser du calcul
+    (`config_identique`) : `config_is_identical = false` veut dire
+    « recalcule », pas « recalcule si tu ne trouves rien ».
     """
     # `T_inv(list(u))` et non `T_inv(ot.Point(list(u)))` : OpenTURNS accepte
     # une sequence, et ce module n'a alors AUCUNE dependance a OpenTURNS --
@@ -328,6 +345,12 @@ def evaluer_points_en_parallele(u_points, dist, params_names, storage,
     for u in u_points:
         x = T_inv(list(u))
         points.append({p: float(x[j]) for j, p in enumerate(params_names)})
+    if config_identique:
+        # Greffe : le pool saute ensuite ce qui porte deja `g`.
+        for i, rendu in moissonner_sorties(points, params_names, storage,
+                                           modelname,
+                                           sous_dossier="_hf_workers").items():
+            points[i].update(rendu)
     resultats = evaluer_en_parallele(
         points, params_names, storage, modelname, n_workers,
         script_etude=script_etude, repo=repo,

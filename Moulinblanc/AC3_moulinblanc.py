@@ -434,17 +434,18 @@ if __name__ == '__main__':
 
 
     # --- DOE PARALLELE ---
-    def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
+    def run_DOE_parallel(SOL, n_workers):
         """Le plan d'experiences reparti. Tout est dans `_doe/parallele.py`."""
         return _parallele.evaluer_plan_en_parallele(
-            SOL, params_names, storage, base_modelname, n_workers,
+            SOL, params_names, storage, modelname, n_workers,
             script_etude=__file__, repo=_REPO)
 
-    def run_HF_grid_parallel(u_points, n_workers=3):
+    def run_HF_grid_parallel(u_points):
         """Les points d'une grille, repartis. Dans `_doe/parallele.py`."""
         return _parallele.evaluer_points_en_parallele(
             u_points, dist_jointe(), params_names, storage, modelname,
-            n_workers, script_etude=__file__, repo=_REPO)
+            n_workers_DOE, script_etude=__file__, repo=_REPO,
+            config_identique=config_is_identical)
 
 
     # --- DOE cache ---
@@ -519,8 +520,7 @@ if __name__ == '__main__':
             fichier_cache=_DOE_CACHE_FILE, signature=_SIG_SOLVEUR,
             executer_plan=lambda SOL: run_one_SOL(
                 modelname, SOL, params_names, sensitivity=True),
-            executer_en_parallele=lambda SOL, nw: run_DOE_parallel(
-                modelname, SOL, params_names, nw),
+            executer_en_parallele=run_DOE_parallel,
             journaliser=_JOURNAL.enregistrer)
 
     def build_starting_points():
@@ -652,8 +652,7 @@ if __name__ == '__main__':
             points_EFF=_find_batch_EFF_points, fonction_EFF=EFFFunction,
             ajuster=init_g_ot, bornes_surrogate=BoundSurrogateFunction,
             executer_is=run_IS, evaluer_un_point=run_HF,
-            executer_en_parallele=lambda SOL, nw: run_DOE_parallel(
-                modelname, SOL, params_names, nw),
+            executer_en_parallele=run_DOE_parallel,
             dist_jointe=dist_jointe, params_names=params_names,
             figure=lambda g, s, x, xe: print_planche_EFF(
                 g, s, x, xe, fond_hf=fond_hf_pour_figures()),
@@ -707,8 +706,7 @@ if __name__ == '__main__':
         coupe_initiale=hf_2d_grid_fixed,
         coupe_courante=slice_def, points_libres=hf_custom_points,
         active=print_HF,
-        evaluer_lot=(lambda pts: run_HF_grid_parallel(pts, n_workers=n_workers_DOE))
-                    if n_workers_DOE and n_workers_DOE > 1 else None,
+        evaluer_lot=run_HF_grid_parallel if n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
         config_identique=config_is_identical,
         marquer_phase=_JOURNAL.marquer)
