@@ -72,12 +72,17 @@ def test_une_serialisation_impossible_laisse_l_ancien_intact(tmp_path):
     assert json.load(open(f))["n_total"] == 1
 
 
-def test_un_np_int64_ne_detruit_pas_le_cache(tmp_path):
-    """Le declencheur reel, et non un objet fabrique pour le test."""
+def test_un_cache_de_grille_survit_a_une_ecriture_refusee(tmp_path):
+    """La forme reelle d'un cache de grille, avec une valeur indigeste.
+
+    Le declencheur d'origine etait `np.int64` -- il ne leve PLUS, puisque la
+    traduction exacte l'accepte (voir plus bas). La propriete verifiee ici est
+    l'autre : quoi qu'il arrive a l'ecriture, l'ancien contenu reste.
+    """
     f = str(tmp_path / "hf.json")
     _ecriture.ecrire_json({"Z": [[0.0]], "n_grid_hf": 1}, f)
     with pytest.raises(TypeError):
-        _ecriture.ecrire_json({"slice_def": [np.int64(0), np.int64(1), {}]}, f)
+        _ecriture.ecrire_json({"Z": [[0.0]], "slice_def": [0, 1, _Refuse()]}, f)
     assert json.load(open(f))["n_grid_hf"] == 1
 
 
@@ -206,3 +211,53 @@ def test_les_caches_passent_tous_par_le_helper():
         src = io.open(os.path.join(_REPO, "_cache", nom), encoding="utf-8").read()
         n += src.count("_ecriture.ecrire_json(")
     assert n >= 7, "seulement %d ecriture(s) protegee(s) dans _cache" % n
+
+
+# --------------------------------------------------------------------------- #
+# 4. LES TYPES NUMPY : traduits exactement, jamais devines                     #
+# --------------------------------------------------------------------------- #
+def test_un_entier_numpy_n_empeche_plus_d_ecrire(tmp_path):
+    """`np.float64` est une sous-classe de `float` et JSON l'acceptait deja ;
+    `np.int64` n'est PAS une sous-classe de `int`, et il etait refuse.
+
+    Mesure du 29/08/2026 : sur huit ecritures de cache nourries de types
+    numpy, QUATRE n'ecrivaient aucun fichier -- toutes celles qui portaient un
+    entier (`n0`, `n_grid`, un champ de signature).
+    """
+    f = str(tmp_path / "cache.json")
+    _ecriture.ecrire_json({"n0": np.int64(5), "cote": np.int32(7)}, f)
+    assert json.load(open(f)) == {"n0": 5, "cote": 7}
+
+
+@pytest.mark.parametrize("valeur,attendu", [
+    (np.int64(-3), -3),
+    (np.int32(2 ** 30), 2 ** 30),
+    (np.float64(0.1), 0.1),
+    (np.float32(0.5), 0.5),
+    (np.bool_(True), True),
+    (np.array([[1.5, 2.5]]), [[1.5, 2.5]]),
+])
+def test_la_traduction_est_EXACTE(tmp_path, valeur, attendu):
+    """Une traduction, pas une tolerance qui devine : ces caches portent des
+    heures de solveur, la valeur relue doit etre la valeur ecrite."""
+    f = str(tmp_path / "cache.json")
+    _ecriture.ecrire_json({"v": valeur}, f)
+    assert json.load(open(f))["v"] == attendu
+
+
+def test_un_objet_inconnu_LEVE_toujours(tmp_path):
+    """La traduction ne doit pas devenir une tolerance generale : ce qu'on ne
+    sait pas ecrire ne doit pas etre ecrit a peu pres."""
+    f = str(tmp_path / "cache.json")
+    with pytest.raises(TypeError):
+        _ecriture.ecrire_json({"v": _Refuse()}, f)
+    assert not os.path.exists(f)
+
+
+def test_un_grand_entier_numpy_garde_sa_valeur(tmp_path):
+    """`int(np.int64)` ne tronque pas -- contrairement a un passage par
+    `float`, qui perdrait les entiers au-dela de 2^53."""
+    f = str(tmp_path / "cache.json")
+    grand = np.int64(2 ** 62 + 1)
+    _ecriture.ecrire_json({"v": grand}, f)
+    assert json.load(open(f))["v"] == 2 ** 62 + 1

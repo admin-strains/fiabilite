@@ -48,6 +48,8 @@ import json
 import os
 import time
 
+import numpy as np
+
 #: Nombre de tentatives de renommage, et pause entre deux. Mesure du
 #: 29/08/2026 sur `pure_flexion_grille` : UN `os.replace` sur 49 a echoue en
 #: `PermissionError [WinError 5]`. Sous Windows, un renommage peut se voir
@@ -56,6 +58,35 @@ import time
 #: fois sur le Moulin Blanc, donc un echec isole y est certain.
 TENTATIVES = 5
 PAUSE = 0.05
+
+
+def _traduire(valeur):
+    """Ce que JSON ne sait pas ecrire, et qui a une traduction EXACTE.
+
+    `np.float64` est une sous-classe de `float` : JSON l'accepte deja.
+    `np.int64` n'est PAS une sous-classe de `int`, et il est refuse -- d'ou
+    le defaut du 29/08/2026, ou une coupe rendue par `argsort` empechait
+    d'ecrire un cache de grille.
+
+    Mesure du meme jour : sur huit ecritures de cache nourries de types
+    numpy, QUATRE n'ecrivaient aucun fichier -- toutes celles qui portaient
+    un entier (`n0`, `n_grid`, un champ de signature).
+
+    Les quatre conversions sont exactes : `int(np.int64)`, `float(np.float64)`,
+    `bool(np.bool_)`, `ndarray.tolist()`. Ce n'est donc pas une tolerance qui
+    devine, c'est une traduction. Tout le reste continue de LEVER : un objet
+    qu'on ne sait pas ecrire ne doit pas etre ecrit a peu pres.
+    """
+    if isinstance(valeur, np.integer):
+        return int(valeur)
+    if isinstance(valeur, np.floating):
+        return float(valeur)
+    if isinstance(valeur, np.bool_):
+        return bool(valeur)
+    if isinstance(valeur, np.ndarray):
+        return valeur.tolist()
+    raise TypeError("Object of type %s is not JSON serializable"
+                    % type(valeur).__name__)
 
 
 def ecrire_json(objet, fichier, indent=1):
@@ -71,7 +102,7 @@ def ecrire_json(objet, fichier, indent=1):
     """
     # Serialiser D'ABORD : une valeur refusee leve ici, sans que le fichier
     # ait ete ouvert. C'est ce qui ferme le defaut mesure.
-    texte = json.dumps(objet, indent=indent)
+    texte = json.dumps(objet, indent=indent, default=_traduire)
     temporaire = fichier + ".tmp"
     try:
         with open(temporaire, "w") as fh:
