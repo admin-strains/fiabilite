@@ -154,7 +154,7 @@ class Grille:
     # grille 2D, avec reprise
     # ------------------------------------------------------------------ #
     def calculer_2d(self, points, cote=None, contexte="", fichier=None,
-                    coupe=None):
+                    coupe=None, deja_lu=False):
         """La surface sur une coupe 2D. Retourne `(Z, description)`.
 
         `description` est le dictionnaire que l'etude range dans son etat de
@@ -163,13 +163,21 @@ class Grille:
 
         COUT : `cote^2` appels solveur si le cache est vide, moins ce que le
         fichier `.partial` d'un run interrompu permet de sauter.
+
+        `deja_lu` dit que l'appelant VIENT de lire ce meme cache, avec les
+        memes arguments, et qu'il a manque. Relire ne changerait rien au
+        resultat -- mais le journal annoncerait DEUX FOIS une decision
+        unique. Or le journal est ce sur quoi cette chaine est attestee : a
+        15x15 une grille vaut 29 heures, et qui compte les lignes « aucun
+        cache » pour savoir combien de fois elle a ete recalculee doit
+        obtenir le bon compte. Constate sur le run de fumee du 31/08/2026.
         """
         cote = self.cote if cote is None else cote
         fichier = self.fichier_cache if fichier is None else fichier
 
-        cached = _cache_hf.load_hf_cache(cote, fichier, coupe,
-                                         self.config_identique,
-                                         signature=self.signature)
+        cached = None if deja_lu else _cache_hf.load_hf_cache(
+            cote, fichier, coupe, self.config_identique,
+            signature=self.signature)
         if cached is not None:
             return cached, self._description(coupe, cote, cached)
 
@@ -570,9 +578,13 @@ class Grille:
             self.coupes[cle] = self._description(sd, self.cote, Z)
             return Z
 
+        # `deja_lu` : la lecture ci-dessus vient d'echouer sur CE cache, avec
+        # ces memes arguments. La refaire n'ajouterait qu'une seconde ligne
+        # au journal pour une decision unique.
         Z, description = self.calculer_2d(self.points_de_coupe(sd),
                                           contexte="get_hf_slice",
-                                          fichier=fichier, coupe=sd)
+                                          fichier=fichier, coupe=sd,
+                                          deja_lu=True)
         self.coupes[cle] = description
         return Z
 

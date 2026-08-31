@@ -684,3 +684,61 @@ def test_aucun_gestionnaire_muet_dans_la_grille():
     assert not muets, (
         "gestionnaire(s) d'exception muet(s) aux lignes %s : ils avalent un "
         "echec sans laisser de trace." % muets)
+
+
+# --------------------------------------------------------------------- #
+# le journal ne dit pas deux fois ce qui n'arrive qu'une fois
+#
+# Constate sur le run de fumee du Moulin Blanc, 31/08/2026 : la grille etait
+# payee UNE fois -- « 2x2 = 4 points solveur [skip 0, calcul 4] » -- mais le
+# journal l'annoncait DEUX fois. Rien de faux dans le calcul ; une fausse
+# piste pour qui lit le journal. Or c'est sur le journal que cette chaine est
+# attestee, et a 15x15 une grille vaut 29 heures : se tromper d'un facteur
+# deux sur le nombre de recalculs n'est pas anodin.
+# --------------------------------------------------------------------- #
+def test_une_grille_calculee_une_fois_est_annoncee_une_fois(tmp_path, capsys):
+    g = _grille_de_test(tmp_path, _Compteur())
+    capsys.readouterr()                      # on repart d'une sortie vide
+    g.coupe(COUPE)
+    annonces = [l for l in capsys.readouterr().out.splitlines()
+                if "aucun cache" in l]
+    assert len(annonces) == 1, (
+        "le journal annonce %d fois une decision unique : %s\n"
+        "`Grille.coupe` lit le cache, puis `calculer_2d` le relit avec les "
+        "MEMES arguments. Le calcul est juste ; le compte que le journal "
+        "permet ne l'est pas." % (len(annonces), annonces))
+
+
+def test_le_cache_disque_passe_AVANT_l_interpolation(tmp_path):
+    """LA RAISON DE NE PAS AVOIR SIMPLEMENT SUPPRIME UNE LECTURE.
+
+    Les deux lectures du cache portent. Celle de `coupe` etablit une
+    PRECEDENCE : un cache disque existant doit etre servi tel quel, meme
+    quand une grille complete est en memoire et pourrait l'interpoler.
+    L'interpolation rendrait des valeurs approchees la ou le cache porte des
+    valeurs CALCULEES -- ce n'est pas une difference de journal, c'est une
+    difference de resultat.
+
+    Le correctif du 31/08/2026 fait sauter la lecture de `calculer_2d`, pas
+    celle-ci. Ce temoin le dit, pour que la prochaine simplification sache
+    ce qu'elle casserait.
+    """
+    pytest.importorskip("scipy")
+    ev = _Compteur()
+    g = _grille_de_test(tmp_path, ev)
+    Z_calcule = g.coupe(COUPE)               # paie, et ecrit le cache disque
+
+    # une SECONDE grille, meme cache disque, mais qui porte en plus une
+    # grille complete en memoire -- volontairement fausse, pour qu'on voie
+    # laquelle des deux sources a servi.
+    g2 = _grille_de_test(tmp_path, _Compteur())
+    UX, UY = g2.maillage_2d()
+    g2.complete = np.full((g2.cote, g2.cote), -999.0)
+    g2.axes_complets = (UX[0, :], UY[:, 0])
+
+    Z_relu = g2.coupe(COUPE)
+    assert np.allclose(Z_relu, Z_calcule), (
+        "la coupe a ete INTERPOLEE depuis la grille complete alors qu'un "
+        "cache disque existait. La lecture de `Grille.coupe` etablit cette "
+        "precedence : elle n'est pas redondante avec celle de `calculer_2d`.")
+    assert not np.any(Z_relu == -999.0)
