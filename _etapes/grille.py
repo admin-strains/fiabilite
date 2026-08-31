@@ -40,6 +40,8 @@ import time
 
 import numpy as np
 
+import ecriture as _ecriture
+
 import hf as _cache_hf
 
 
@@ -442,10 +444,10 @@ class Grille:
         if not self.fichier_cache_points:
             return
         try:
-            json.dump({'n_total': n_total, 'pts': pts.tolist(),
+            _ecriture.ecrire_json({'n_total': n_total, 'pts': pts.tolist(),
                        'g_vals': g_vals, 'complet': True,
                        'signature': self.signature},
-                      open(self.fichier_cache_points, 'w'), indent=1)
+                      self.fichier_cache_points, indent=1)
             partiel = self.fichier_cache_points + '.partial'
             if os.path.exists(partiel):
                 os.remove(partiel)
@@ -462,9 +464,9 @@ class Grille:
         if not self.fichier_cache_points:
             return
         try:
-            json.dump({'n_total': n_total, 'pts': np.asarray(pts).tolist(),
+            _ecriture.ecrire_json({'n_total': n_total, 'pts': np.asarray(pts).tolist(),
                        'g_vals': g_vals, 'signature': self.signature},
-                      open(self.fichier_cache_points + '.partial', 'w'), indent=1)
+                      self.fichier_cache_points + '.partial', indent=1)
         except Exception as e:
             # Le filet de la reprise. S'il ne s'ecrit pas, une interruption
             # perd TOUT ce qui precede -- et c'est justement la situation ou

@@ -22,6 +22,8 @@ import os
 
 import numpy as np
 
+import ecriture as _ecriture
+
 
 #: CE QUE LA SIGNATURE PROTEGE -- 26/08/2026
 #:
@@ -125,10 +127,10 @@ def _meme_coupe(d, sd, etiquette, tol=TOL_FIGEES):
 def save_hf_cache(Z, n_grid_hf_local, cache_file, sd, signature=None):
     try:
         _sd = sd if sd is not None else (0, 1, {})
-        json.dump({'Z': Z.tolist(), 'n_grid_hf': n_grid_hf_local,
+        _ecriture.ecrire_json({'Z': Z.tolist(), 'n_grid_hf': n_grid_hf_local,
                    'signature': signature,
                    'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
-                  open(cache_file, 'w'), indent=1)
+                  cache_file, indent=1)
         print(f"[HF CACHE] sauve dans {cache_file}", flush=True)
     except Exception as e:
         print(f"[HF CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
@@ -165,10 +167,10 @@ def save_hf_cache_partial(Z_flat, n_total, cache_file, sd, signature=None):
     """Sauvegarde incrementale de la grille HF (Z_flat peut contenir des None)."""
     try:
         _sd = sd if sd is not None else (0, 1, {})
-        json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
+        _ecriture.ecrire_json({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
                    'signature': signature,
                    'slice_def': [_sd[0], _sd[1], {str(k): v for k, v in _sd[2].items()}]},
-                  open(cache_file + '.partial', 'w'), indent=1)
+                  cache_file + '.partial', indent=1)
     except Exception as e:
         print(f"[HF CACHE PARTIAL] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
@@ -199,9 +201,9 @@ def load_hf_cache_partial(cache_file, sd, n_total, config_is_identical=True,
 
 def save_hf_grid_full(fichier, Z_full, n_var, n_grid_hf, signature=None):
     try:
-        json.dump({'Z': Z_full.tolist(), 'n_var': n_var, 'n_grid': n_grid_hf,
+        _ecriture.ecrire_json({'Z': Z_full.tolist(), 'n_var': n_var, 'n_grid': n_grid_hf,
                    'signature': signature},
-                  open(fichier, 'w'), indent=1)
+                  fichier, indent=1)
         print(f"[HF FULL CACHE] sauve dans {fichier}", flush=True)
     except Exception as e:
         print(f"[HF FULL CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
@@ -225,9 +227,9 @@ def save_hf_grid_full_partial(fichier, Z_flat, n_total, n_var, n_grid_hf,
     d'autre. Il n'y a pas de coupe ici, donc rien de plus a verifier.
     """
     try:
-        json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
+        _ecriture.ecrire_json({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
                    'n_var': n_var, 'n_grid': n_grid_hf, 'signature': signature},
-                  open(fichier + '.partial', 'w'), indent=1)
+                  fichier + '.partial', indent=1)
     except Exception as e:
         # PAS EN SILENCE : sans ce fichier, une interruption repaie tout, et
         # c'est justement la situation ou personne ne relit le journal apres.

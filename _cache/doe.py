@@ -23,6 +23,8 @@ import os
 
 import numpy as np
 
+import ecriture as _ecriture
+
 
 def doe_cache_sig(n0, params_names, n_var, modelname):
     """Signature de configuration du DOE : ce qui doit coincider pour
@@ -39,12 +41,12 @@ def doe_cache_sig(n0, params_names, n_var, modelname):
 def save_doe_cache(fichier, n0, xt, yt, all_grad, signature=None):
     """Ecrit un DOE complet, avec la signature sous laquelle il a ete calcule."""
     try:
-        json.dump({"n0": n0, "complet": True,
+        _ecriture.ecrire_json({"n0": n0, "complet": True,
                    "signature": signature,
                    "xt": np.asarray(xt).tolist(),
                    "yt": np.asarray(yt).tolist(),
                    "all_grad": np.asarray(all_grad).tolist()},
-                  open(fichier, "w"), indent=1)
+                  fichier, indent=1)
         print(f"[DOE CACHE] sauve (complet) dans {fichier}", flush=True)
     except Exception as e:
         print(f"[DOE CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
@@ -112,10 +114,10 @@ def save_doe_cache_incremental(fichier, n0, params_names, SOL, n_done, signature
         # toujours, avec la valeur None -- mais il n'attendait qu'une clef
         # manquante pour mentir.
         _ag = [[SOL[i].get(f'dg_{p}') for p in params_names] for i in range(n_done)]
-        json.dump({"n0": n0, "complet": False, "n_completed": n_done,
+        _ecriture.ecrire_json({"n0": n0, "complet": False, "n_completed": n_done,
                    "signature": signature,
                    "xt": _xt, "yt": _yt, "all_grad": _ag},
-                  open(fichier, "w"), indent=1)
+                  fichier, indent=1)
         print(f"[DOE CACHE INCR] {n_done}/{len(SOL)} pts sauves", flush=True)
     except Exception as e:
         print(f"[DOE CACHE INCR] echoue ({type(e).__name__}: {e})", flush=True)

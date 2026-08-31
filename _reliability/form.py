@@ -328,7 +328,14 @@ def coupe_la_plus_parlante(best_result, n_var, coupe_par_defaut):
     if best_result is None:
         return coupe_par_defaut
     importance = np.array(best_result.getImportanceFactors())
-    deux = list(np.argsort(importance)[::-1][:2])
+    # `int(...)` et non les `np.int64` que rend `argsort` : cette coupe part
+    # dans du JSON -- les caches de grille et le dump de reprise la portent --
+    # et `json.dumps(np.int64(0))` LEVE. Le Moulin Blanc passait par ici, la
+    # flexion pure non : elle codait sa coupe finale en dur, avec des `int`.
+    # Mesure du 29/08/2026 : `[HF CACHE] sauvegarde echouee (TypeError: Object
+    # of type int64 is not JSON serializable)`, et le fichier vise laisse pour
+    # mort.
+    deux = [int(i) for i in np.argsort(importance)[::-1][:2]]
     u_star = np.array(best_result.getStandardSpaceDesignPoint())
     return (min(deux), max(deux),
             {i: float(u_star[i]) for i in range(n_var) if i not in deux})

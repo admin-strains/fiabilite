@@ -21,6 +21,8 @@ import os
 
 import numpy as np
 
+import ecriture as _ecriture
+
 
 NOM_PAR_DEFAUT = "restart_state.json"
 
@@ -144,7 +146,7 @@ def enregistrer(fichier, **champs):
     """
     try:
         st = construire_etat(**champs)
-        json.dump(st, open(fichier, "w"), indent=1)
+        _ecriture.ecrire_json(st, fichier, indent=1)
         print("[RESTART DUMP] etat sauve dans %s "
               "(n_total=%s, n_eff=%d, hist_EFF=%d, modes=%d)"
               % (fichier, st["n_total"], len(st["xt_eff"]),
