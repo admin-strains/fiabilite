@@ -250,29 +250,51 @@ class Grille:
         grids = np.meshgrid(*axes, indexing='ij')
         points = np.column_stack([g.ravel() for g in grids])
         n_total = len(points)
-        Z_flat = []
+        # Reprise : ce qu'un run interrompu a deja paye. C'est la boucle la
+        # plus chere du programme, et elle etait la seule sans filet.
+        Z_flat = _cache_hf.load_hf_grid_full_partial(
+            self.fichier_cache_complet, n_total, self.n_var, self.cote,
+            self.config_identique, signature=self.signature)
+        if Z_flat is None:
+            Z_flat = [None] * n_total
+        n_sautes = sum(1 for v in Z_flat if v is not None)
+        n_faits = 0
         t_debut = time.perf_counter()
-        self.tracer("\n##### HF FULL GRID START: %d^%d = %d points solveur #####"
-                    % (self.cote, self.n_var, n_total))
+        self.tracer("\n##### HF FULL GRID START: %d^%d = %d points solveur"
+                    " [skip %d, calcul %d] #####"
+                    % (self.cote, self.n_var, n_total, n_sautes,
+                       n_total - n_sautes))
         for i, pt in enumerate(points):
+            if Z_flat[i] is not None:
+                continue
             t_pt0 = time.perf_counter()
             g_val = self.evaluer(pt)[0]
-            Z_flat.append(g_val)
+            Z_flat[i] = g_val
+            n_faits += 1
+            # ecriture APRES chaque point : c'est ce qui rend l'interruption
+            # supportable.
+            _cache_hf.save_hf_grid_full_partial(
+                self.fichier_cache_complet, Z_flat, n_total, self.n_var,
+                self.cote, signature=self.signature)
             t_pt = time.perf_counter() - t_pt0
             t_ecoule = time.perf_counter() - t_debut
-            t_eta = (t_ecoule / (i + 1)) * (n_total - i - 1)
+            t_eta = (t_ecoule / n_faits) * (n_total - n_sautes - n_faits)
             self.tracer("  [HF FULL %3d/%d]  u=[%s]  g=%+.4f  dt=%.0fs  "
                         "elapsed=%.1fmin  ETA=%.1fmin"
-                        % (i + 1, n_total,
+                        % (n_sautes + n_faits, n_total,
                            ", ".join("%+.3f" % pt[j] for j in range(self.n_var)),
                            g_val, t_pt, t_ecoule / 60, t_eta / 60))
-        self.tracer("\n##### HF FULL GRID DONE in %.1f min (%d appels solveur) #####\n"
-                    % ((time.perf_counter() - t_debut) / 60, n_total))
+        self.tracer("\n##### HF FULL GRID DONE in %.1f min (%d appels solveur, "
+                    "%d skip) #####\n"
+                    % ((time.perf_counter() - t_debut) / 60, n_faits, n_sautes))
         Z_full = np.array(Z_flat).reshape([self.cote] * self.n_var)
         self.complete, self.axes_complets = Z_full, axes
         _cache_hf.save_hf_grid_full(self.fichier_cache_complet, Z_full,
                                     self.n_var, self.cote,
                                     signature=self.signature)
+        partiel = self.fichier_cache_complet + '.partial'
+        if os.path.exists(partiel):
+            os.remove(partiel)
         return Z_full
 
     def coupe_depuis_complete(self, coupe):
@@ -463,7 +485,20 @@ class Grille:
 
         liste = [list(pts[i]) for i in a_faire]
         if self.evaluer_lot is not None and len(liste) > 1:
-            for k, valeur in enumerate(self.evaluer_lot(liste)):
+            # Cette boucle ne PAIE rien : le lot est deja calcule. Elle le
+            # deballe -- et `enumerate` s'arreterait sans un mot sur un lot
+            # trop court, laissant des `None` que `_ecrire_cache_points`
+            # enregistrerait ensuite sous `complet: True`, et que numpy
+            # convertirait en NaN. Le pool tient sa promesse aujourd'hui ; on
+            # la VERIFIE plutot que de la supposer.
+            valeurs = list(self.evaluer_lot(liste))
+            if len(valeurs) != len(liste):
+                raise ValueError(
+                    "[HF CUSTOM] le lot a rendu %d valeur(s) pour %d point(s). "
+                    "Les completer par des trous ferait une surface de "
+                    "reference avec des NaN, enregistree comme complete."
+                    % (len(valeurs), len(liste)))
+            for k, valeur in enumerate(valeurs):
                 g_vals[a_faire[k]] = valeur
         else:
             self.marquer_phase("HF_CUSTOM")

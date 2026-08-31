@@ -207,6 +207,68 @@ def save_hf_grid_full(fichier, Z_full, n_var, n_grid_hf, signature=None):
         print(f"[HF FULL CACHE] sauvegarde echouee ({type(e).__name__}: {e})", flush=True)
 
 
+def save_hf_grid_full_partial(fichier, Z_flat, n_total, n_var, n_grid_hf,
+                              signature=None):
+    """Sauvegarde incrementale de la grille COMPLETE. `Z_flat` porte des None.
+
+    LE TROU QUE CECI BOUCHE -- 29/08/2026
+    --------------------------------------
+    Toutes les boucles qui paient du solveur ecrivent apres CHAQUE point : la
+    coupe 2D, les points libres, le plan d'experiences, l'enrichissement.
+    `calculer_complete` etait la seule a n'ecrire qu'a la fin -- et c'est
+    elle dont le docstring dit : « la seule action du programme dont le budget
+    peut depasser la semaine ». A trois variables et un cote de 15, c'est
+    3 375 appels ; une interruption au 3 374e les perdait tous.
+
+    Les clefs sont celles du cache complet -- `n_var`, `n_grid`, la signature
+    -- plus `n_total` : ce sont elles qui determinent la grille, et rien
+    d'autre. Il n'y a pas de coupe ici, donc rien de plus a verifier.
+    """
+    try:
+        json.dump({'Z_flat': Z_flat, 'n_total': n_total, 'complet': False,
+                   'n_var': n_var, 'n_grid': n_grid_hf, 'signature': signature},
+                  open(fichier + '.partial', 'w'), indent=1)
+    except Exception as e:
+        # PAS EN SILENCE : sans ce fichier, une interruption repaie tout, et
+        # c'est justement la situation ou personne ne relit le journal apres.
+        print(f"[HF FULL PARTIAL] sauvegarde echouee ({type(e).__name__}: {e}) "
+              f"-- une interruption perdra les points deja payes", flush=True)
+
+
+def load_hf_grid_full_partial(fichier, n_total, n_var, n_grid_hf,
+                              config_is_identical=True, signature=None):
+    """Les points d'une grille complete interrompue, ou None.
+
+    Retourne une liste `Z_flat` de longueur `n_total`, avec `None` aux places
+    qui restent a payer.
+    """
+    if not config_is_identical:
+        return None
+    partial_file = fichier + '.partial'
+    if not os.path.exists(partial_file):
+        return None
+    try:
+        d = json.load(open(partial_file))
+        if (d.get('n_total') != n_total or d.get('n_var') != n_var
+                or d.get('n_grid') != n_grid_hf):
+            print("[HF FULL PARTIAL] dimensions differentes -> recalcul complet",
+                  flush=True)
+            return None
+        if not _signature_compatible(d, signature, "HF FULL PARTIAL"):
+            return None
+        z = d['Z_flat']
+        if len(z) != n_total:
+            return None
+        n_done = sum(1 for v in z if v is not None)
+        print(f"[HF FULL PARTIAL] reprise : {n_done}/{n_total} points deja "
+              f"calcules", flush=True)
+        return z
+    except Exception as e:
+        print(f"[HF FULL PARTIAL] lecture echouee ({type(e).__name__}: {e}) -> "
+              f"recalcul complet", flush=True)
+        return None
+
+
 def load_hf_grid_full(fichier, n_var, n_grid_hf, config_is_identical=True,
                       signature=None):
     if not config_is_identical:
