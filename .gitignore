@@ -42,3 +42,6 @@ _run_comparatif.py
 # salissaient `git status` -- ce qui invite au `git add -A` que
 # CONTRIBUTING interdit.
 baselines/*/run_*.jsonl
+
+# residus d installation editable (pip install -e .)
+*.egg-info/
