@@ -436,6 +436,46 @@ class Configuration:
                 problemes.append("%s=%r doit etre strictement positif" % (nom, v))
         if self.n_batch_EFF > 1 and self.eps_taylor > 0:
             problemes.append("n_batch_EFF>1 et eps_taylor>0 : combinaison non prevue")
+        # LES TAILLES. Toutes etaient acceptees a zero ou negatives -- mesure
+        # du 29/08/2026 sur les dix-huit valeurs absurdes essayees : les
+        # dix-huit passaient. La consequence n'est pas un plantage, c'est un
+        # run qui NE FAIT RIEN et se declare convergé : avec `n_batch_EFF = 0`,
+        # la boucle d'enrichissement tourne, ne paie aucun point, et le critere
+        # BS se satisfait puisque beta ne bouge pas -- faute de point nouveau.
+        #
+        # Les bornes ci-dessous sont celles que les cinq etudes du depot
+        # respectent deja : `n_grid_hf` descend a 2 (run de fumee), `eps_taylor`
+        # et `theta_min_krg` valent 0, `n_max_EFF_points` vaut au moins 5.
+        for nom, mini, pourquoi in (
+                ("n_batch_EFF", 1, "un batch vide n'ajoute aucun point et la "
+                                   "boucle se declare convergee"),
+                ("n_max_EFF_points", 0, "un budget negatif interdit toute "
+                                        "iteration"),
+                ("n_IS", 1, "un tirage d'importance sans tirage"),
+                ("n_max_FORM", 1, "FORM sans iteration ne cherche rien"),
+                ("n_sp", 1, "aucun point de depart pour le multi-start"),
+                ("n_NLopt_EFF", 1, "aucun appel a l'optimiseur du critere EFF"),
+                ("n_grid", 2, "une grille de trace a moins de deux points par "
+                              "axe ne couvre pas ses bornes"),
+                ("n_grid_hf", 2, "une grille haute fidelite a moins de deux "
+                                 "points par axe ne couvre pas ses bornes"),
+                ("geo_min_approx", 0, "approximation geometrique negative"),
+                ("eps_taylor", 0, "pas de Taylor negatif"),
+                ("theta_min_krg", 0, "une longueur de correlation est positive"),
+        ):
+            v = getattr(self, nom)
+            if v < mini:
+                problemes.append("%s=%r : attendu >= %s -- %s"
+                                 % (nom, v, mini, pourquoi))
+        for nom, pourquoi in (
+                ("epsilon_factor", "le critere EFF s'annule et l'enrichissement "
+                                   "n'a plus de cible"),
+                ("global_size", "taille de maille nulle ou negative"),
+        ):
+            v = getattr(self, nom)
+            if v <= 0:
+                problemes.append("%s=%r doit etre strictement positif -- %s"
+                                 % (nom, v, pourquoi))
         for nom, pourquoi in SANS_EFFET.items():
             defaut = _DEFAUTS[nom]
             if getattr(self, nom) != defaut:
