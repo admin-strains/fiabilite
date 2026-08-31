@@ -301,7 +301,11 @@ def test_un_plan_reparti_est_RECOPIE_dans_la_liste_de_l_appelant():
              1: {"g": 1.5, "dg_fc": 3.0, "dg_fy": 4.0}}
     vu = {}
 
-    def faux_pool(SOL_, params, storage, base, n, script_etude=None, repo=None):
+    def faux_pool(SOL_, params, storage, base, n, script_etude=None, repo=None,
+                  lancer=None, **reste):
+        # `**reste` : cette doublure suit une signature reelle, et le jour ou
+        # elle en diverge le test doit tomber sur SON sujet -- le pont entre
+        # le dictionnaire indexe et la liste -- pas sur un mot-clef de plus.
         vu["n"] = n
         return rendu
 
@@ -396,3 +400,109 @@ def test_chaque_worker_a_SON_solveur():
     assert solveur("w1") == "w1.ds"
     assert solveur() == "principal.ds"
     assert set(solveur.cache) == {"w0", "w1", "principal"}
+
+
+# --------------------------------------------------------------------- #
+# LA REPRISE : ce qui est deja paye ne repart pas au solveur
+#
+# DEFAUT MESURE LE 29/08/2026. `evaluer_plan` saute depuis toujours une
+# entree qui porte deja `g` -- c'est tout l'interet du cache partiel. Le pool,
+# lui, ne sautait rien : le worker RECONSTRUIT son dictionnaire a partir des
+# seuls parametres physiques, et le `g` greffe disparaissait en route.
+#
+# L'appelant, lui, annoncait la reprise :
+#
+#     [DOE PARTIEL] 3/5 points repris du cache -> autant de SOCP evites
+#
+# et payait les cinq. Un journal qui affirme une economie qu'il ne fait pas
+# est pire qu'un journal muet.
+#
+#     voie sequentielle   2 points payes sur 5
+#     voie parallele      5 points payes sur 5
+#
+# Sur le Moulin Blanc (`n0 = 5`, six workers, `config_is_identical`), cinq
+# appels solveur -- environ 39 minutes.
+# --------------------------------------------------------------------- #
+def _points_dont_deja(n, deja):
+    """`n` points, dont les indices `deja` portent leur resultat."""
+    pts = _points(n)
+    for i in deja:
+        pts[i]["g"] = 100.0 + i
+        pts[i]["dg_fc"], pts[i]["dg_fy"] = 1.0 + i, 2.0 + i
+    return pts
+
+
+def test_un_point_deja_calcule_ne_repart_pas_au_solveur(tmp_path):
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(
+        _points_dont_deja(5, [0, 1, 2]), PARAMS, storage, nom, 6,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        tracer=lambda _m: None)
+    envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
+    assert envoyes == [3, 4], (
+        "le pool a repaye des points deja calcules : %s" % envoyes)
+
+
+def test_le_resultat_deja_connu_est_rendu_tel_quel(tmp_path):
+    """Il doit ressortir a son INDICE GLOBAL, melange aux points calcules."""
+    storage, nom = _modele(tmp_path)
+    res = _parallele.evaluer_en_parallele(
+        _points_dont_deja(5, [0, 2]), PARAMS, storage, nom, 6,
+        script_etude="etude.py", repo=_REPO, lancer=_lanceur(),
+        tracer=lambda _m: None)
+    assert sorted(res) == [0, 1, 2, 3, 4]
+    assert res[0] == {"g": 100.0, "dg_fc": 1.0, "dg_fy": 2.0}
+    assert res[2] == {"g": 102.0, "dg_fc": 3.0, "dg_fy": 4.0}
+    assert res[1]["g"] == 1.0, "un point a payer n'a pas ete calcule"
+
+
+def test_un_plan_entierement_connu_ne_lance_aucun_worker(tmp_path):
+    """Le cas d'une reprise juste apres la fin du plan : monter des
+    sous-processus pour ne rien calculer coute des secondes et une copie du
+    modele par worker."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    res = _parallele.evaluer_en_parallele(
+        _points_dont_deja(4, [0, 1, 2, 3]), PARAMS, storage, nom, 4,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        tracer=lambda _m: None)
+    assert lancer.trace == [], "des workers ont ete lances pour rien"
+    assert sorted(res) == [0, 1, 2, 3]
+
+
+def test_les_workers_se_partagent_les_SEULS_points_a_payer(tmp_path):
+    """La repartition porte sur ce qui reste, pas sur le plan entier --
+    sinon un worker recevrait un lot vide et un autre deux points."""
+    storage, nom = _modele(tmp_path)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(
+        _points_dont_deja(6, [0, 1, 2, 3]), PARAMS, storage, nom, 2,
+        script_etude="etude.py", repo=_REPO, lancer=lancer,
+        tracer=lambda _m: None)
+    lots = sorted(sorted(p["idx"] for p in t["points"]) for t in lancer.trace)
+    assert lots == [[4], [5]], lots
+
+
+def test_la_reprise_est_annoncee(tmp_path):
+    storage, nom = _modele(tmp_path)
+    messages = []
+    _parallele.evaluer_en_parallele(
+        _points_dont_deja(5, [0, 1, 2]), PARAMS, storage, nom, 6,
+        script_etude="etude.py", repo=_REPO, lancer=_lanceur(),
+        tracer=messages.append)
+    assert any("3/5" in m and "deja connus" in m for m in messages), messages
+    assert any("2 pts ->" in m for m in messages), (
+        "le journal du dispatch doit compter les points A PAYER, pas le "
+        "plan entier : %s" % messages)
+
+
+def test_le_controle_de_completude_porte_sur_le_plan_ENTIER(tmp_path):
+    """Un worker qui meurt doit toujours faire lever, meme si des points
+    grefes comblent les trous."""
+    storage, nom = _modele(tmp_path)
+    with pytest.raises(RuntimeError, match="sans sortie"):
+        _parallele.evaluer_en_parallele(
+            _points_dont_deja(5, [0, 1, 2]), PARAMS, storage, nom, 6,
+            script_etude="etude.py", repo=_REPO,
+            lancer=_lanceur(muet=True), tracer=lambda _m: None)

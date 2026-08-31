@@ -95,6 +95,21 @@ def evaluer_en_parallele(points, params_names, storage, base_modelname,
     Retourne `{indice: resultat}` ou `resultat` porte `g` et les `dg_<var>`
     rendus par le worker.
 
+    UN POINT QUI PORTE DEJA `g` EST SAUTE -- comme dans `evaluer_plan`.
+    C'est tout l'interet de la reprise, et cela a manque jusqu'au 29/08/2026 :
+    l'appelant greffait les points d'un plan interrompu, le journal annoncait
+    « 3/5 points repris du cache -> autant de SOCP evites », puis le worker
+    RECONSTRUISAIT son dictionnaire a partir des seuls parametres physiques
+    (`_wSOL = [{p: float(pt[p]) for p in params_names}]`) et les repayait
+    tous. Mesure, filet de 3 points sur 5 :
+
+        voie sequentielle   2 points payes sur 5
+        voie parallele      5 points payes sur 5
+
+    Sur le Moulin Blanc (`n0 = 5`, six workers, `config_is_identical`), cela
+    fait jusqu'a cinq appels solveur -- environ 39 minutes -- repayes en
+    annoncant le contraire.
+
     `lancer(argv, env, cwd, journal)` est le lanceur de processus ; il est un
     argument pour que ce module soit testable sans solveur -- c'est la seule
     raison pour laquelle ces 115 lignes, jamais executees depuis leur
@@ -103,11 +118,25 @@ def evaluer_en_parallele(points, params_names, storage, base_modelname,
     lancer = lancer or _lancer_sous_processus
     base_ds = os.path.join(storage, base_modelname + ".ds")
     n_points = len(points)
-    lots = repartir(n_points, n_workers)
+
+    # Ce qui est deja paye ne repart pas au solveur. On garde les INDICES
+    # globaux : les workers rendent un dictionnaire indexe, et le controle de
+    # completude en fin de fonction porte sur `range(n_points)`.
+    connus = {i: {c: v for c, v in points[i].items()
+                  if c == "g" or c.startswith("dg_")}
+              for i in range(n_points) if "g" in points[i]}
+    a_payer = [i for i in range(n_points) if i not in connus]
+    if connus:
+        tracer("  [%s] %d/%d point(s) deja connus (cache partiel) : autant de "
+               "SOCP evites" % (etiquette, len(connus), n_points))
+    if not a_payer:
+        return dict(connus)
+
+    lots = [[a_payer[k] for k in lot] for lot in repartir(len(a_payer), n_workers)]
     n_reels = sum(1 for lot in lots if lot)
     fils = max(1, FILS_MKL_DISPONIBLES // max(1, n_reels))
     tracer("  [%s] %d pts -> %d workers (MKL=%d threads/worker)"
-           % (etiquette, n_points, n_reels, fils))
+           % (etiquette, len(a_payer), n_reels, fils))
 
     processus = []
     for w, idxs in enumerate(lots):
@@ -135,7 +164,7 @@ def evaluer_en_parallele(points, params_names, storage, base_modelname,
         rc = proc.wait()
         tracer("    <- worker %d fini (rc=%d)" % (w, rc))
 
-    resultats = {}
+    resultats = dict(connus)
     for _proc, sortie, w, idxs in processus:
         if not os.path.exists(sortie):
             raise RuntimeError(
@@ -181,12 +210,18 @@ def _lancer_sous_processus(argv, env, cwd, chemin_journal):
 
 
 def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
-                              n_workers, script_etude, repo):
+                              n_workers, script_etude, repo, lancer=None):
     """Un plan d'experiences reparti, puis RECOPIE dans `SOL`.
 
     Les workers rendent un dictionnaire indexe ; l'appelant, lui, travaille
     sur `SOL`, la liste qu'il a construite. Cette fonction fait le pont, en
     place -- `SOL` est modifiee et rendue.
+
+    `lancer` remonte jusqu'ici depuis le 29/08/2026 : la couture de test
+    s'arretait a `evaluer_en_parallele`, alors que les deux POINTS D'ENTREE
+    reels sont cette fonction et sa voisine. Un module dont le commentaire
+    d'en-tete dit « CE CODE N'A JAMAIS TOURNE » ne peut pas se permettre une
+    couture qui s'arrete un niveau trop haut.
 
     Un gradient ABSENT est recopie tel quel, a `None` : c'est ce que le
     solveur a dit. Le remplacer par zero affirmerait un etat limite plat.
@@ -195,7 +230,8 @@ def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
     """
     resultats = evaluer_en_parallele(SOL, params_names, storage,
                                      base_modelname, n_workers,
-                                     script_etude=script_etude, repo=repo)
+                                     script_etude=script_etude, repo=repo,
+                                     lancer=lancer)
     for i, rendu in resultats.items():
         SOL[i]["g"] = rendu["g"]
         for nom in params_names:
@@ -204,7 +240,8 @@ def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
 
 
 def evaluer_points_en_parallele(u_points, dist, params_names, storage,
-                                modelname, n_workers, script_etude, repo):
+                                modelname, n_workers, script_etude, repo,
+                                lancer=None):
     """Des points de l'espace STANDARD, repartis sur plusieurs solveurs.
 
     Le solveur ne connait que les variables physiques : les points passent
@@ -225,7 +262,8 @@ def evaluer_points_en_parallele(u_points, dist, params_names, storage,
         points, params_names, storage, modelname, n_workers,
         script_etude=script_etude, repo=repo,
         sous_dossier="_hf_workers", prefixe="hfw",
-        nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE")
+        nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE",
+        lancer=lancer)
     return [resultats[i]["g"] for i in range(len(points))]
 
 
