@@ -177,17 +177,65 @@ def options_solveur(init_solver, model_handle, regions_sensibilite=None,
 def patch_params(path, **params):
     """Reecrit dsCad.txt et dsLoad.txt avec de nouvelles valeurs de parametres.
 
-    Recopie verbatim de `AC3_pure_flexion.patch_params`. Ecrit EN PLACE dans le
-    modele de l'utilisateur, comme l'original : c'est le mecanisme meme par
-    lequel la geometrie est parametree.
+    Ecrit EN PLACE dans le modele de l'utilisateur : c'est le mecanisme meme
+    par lequel la geometrie est parametree, donc par lequel TOUTE la chaine
+    place ses points.
+
+    LEVE SI UN PARAMETRE N'EST TROUVE DANS AUCUN DES DEUX FICHIERS -- 29/08/2026
+    ---------------------------------------------------------------------------
+    `re.sub` ne dit rien quand il ne trouve pas son motif. Un parametre absent
+    du modele -- renomme dans le `.ds`, mal orthographie dans `PARAM_CONFIG`,
+    ou simplement etranger a ce modele-la -- etait donc IGNORE en silence :
+
+        demande  fc=30, fyd2=400   (fyd2 absent du modele)
+        ecrit    fc = 30.0000000000
+                 fyd1 = 550.0000000000     <- inchange, et fyd2 nulle part
+
+    Le solveur evaluait alors un point qui n'est pas celui demande, et toute
+    la chaine -- `g`, les gradients, le metamodele, beta, Pf -- se construisait
+    dessus en croyant le contraire. C'est le seul defaut rencontre cette
+    semaine dont la consequence soit des CHIFFRES FAUX plutot qu'un cout.
+
+    Le controle porte sur les DEUX fichiers reunis : un parametre de geometrie
+    ne vit que dans `dsCad.txt` et un chargement que dans `dsLoad.txt`, donc
+    « absent d'un fichier » est le cas normal. Sur le Moulin Blanc, `fyd1` et
+    `fyd2` sont dans `dsCad.txt` et dans aucun `dsLoad.txt`.
+
+    Il a lieu AVANT toute ecriture : un modele a moitie patche serait pire que
+    le defaut qu'on ferme.
     """
+    motif = {name: re.compile(r'^' + re.escape(name) + r'\s*=.*$', re.MULTILINE)
+             for name in params}
+    contenus, occurrences = {}, {name: 0 for name in params}
     for filename in ('dsCad.txt', 'dsLoad.txt'):
         fpath = os.path.join(path, filename)
         with open(fpath, 'r') as f:
-            content = f.read()
+            contenus[fpath] = f.read()
+        for name in params:
+            occurrences[name] += len(motif[name].findall(contenus[fpath]))
+
+    absents = sorted(n for n, c in occurrences.items() if c == 0)
+    if absents:
+        raise ValueError(
+            "parametre(s) introuvable(s) dans %s : %s.\n"
+            "Le solveur evaluerait un point qui n'est pas celui demande, et la "
+            "chaine se construirait dessus sans le savoir. Verifier les clefs "
+            "de PARAM_CONFIG contre les noms du modele."
+            % (path, ", ".join(absents)))
+
+    multiples = sorted(n for n, c in occurrences.items() if c > 1)
+    for name in multiples:
+        # Diagnostic, pas correctif : `count=1` par fichier est le
+        # comportement d'origine, et on ne sait pas laquelle des definitions
+        # le solveur retient.
+        print("[PATCH] %s defini %d fois : seule la premiere occurrence de "
+              "chaque fichier est reecrite" % (name, occurrences[name]),
+              flush=True)
+
+    for fpath, content in contenus.items():
         for name, value in params.items():
-            content = re.sub(r'^' + name + r'\s*=.*$', f'{name}    = {value:.10f}',
-                             content, count=1, flags=re.MULTILINE)
+            content = motif[name].sub(f'{name}    = {value:.10f}', content,
+                                      count=1)
         with open(fpath, 'w') as f:
             f.write(content)
 
