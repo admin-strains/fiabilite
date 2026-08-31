@@ -148,16 +148,53 @@ class Evaluateur:
         return SOL
 
     # ------------------------------------------------------------------ #
+    def evaluer_g_en_U(self, u):
+        """L'etat limite en UN point, SANS exiger le gradient.
+
+        Retourne la meme forme que `evaluer_en_U` -- `(g, grad_U, grad_X)` --
+        mais `grad_U` peut porter des `None`.
+
+        A QUOI ELLE SERT, ET QUEL DEFAUT ELLE FERME -- 29/08/2026
+        ----------------------------------------------------------
+        La grille haute fidelite ne veut qu'un `g` : elle DESSINE une surface,
+        elle ne nourrit aucun metamodele. Ses quatre sites d'appel s'ecrivent
+        tous `self.evaluer(pt)[0]`.
+
+        Elle etait pourtant cablee sur `evaluer_en_U`, qui LEVE quand le
+        solveur ne rend pas de gradient -- un refus voulu pour un point
+        d'ENRICHISSEMENT, ou un gradient fabrique contaminerait le
+        metamodele. Resultat, deux voies de la MEME grille jugeaient le meme
+        point differemment. Mesure sur un solveur qui converge sans rendre de
+        sensibilites :
+
+            n_workers <= 1  voie sequentielle  -> ValueError, la grille meurt
+            n_workers >  1  voie parallele     -> g = 0.42, point accepte
+
+        Et `tools/run_comparatif.py` impose `n_workers_DOE = 1` : toute
+        comparaison A/B prenait donc la voie stricte pendant que la
+        production prenait l'autre.
+
+        `sensibilite=True` est CONSERVE. Le gradient n'est pas utilise ici,
+        mais le demander fait partie de ce qui a ete paye jusqu'ici : ne plus
+        le demander changerait le cout et le journal de la grille, ce qui est
+        une decision d'etude, pas un nettoyage.
+        """
+        return self._en_U(u, exiger_gradient=False)
+
     def evaluer_en_U(self, u):
         """L'etat limite en UN point de l'espace standard.
 
-        Retourne `(g, gradient en U, gradient en X)`.
+        Retourne `(g, gradient en U, gradient en X)`, et LEVE si le solveur
+        n'a rendu aucun gradient : les points qu'elle produit rejoignent le
+        plan d'experiences.
 
-        Les points qu'elle produit rejoignent le plan d'experiences : elle
-        maille donc EXACTEMENT comme `evaluer_plan` -- ce qui n'etait pas le
+        Elle maille EXACTEMENT comme `evaluer_plan` -- ce qui n'etait pas le
         cas avant la phase 5, et alimentait le meme metamodele avec deux
         surfaces differentes.
         """
+        return self._en_U(u, exiger_gradient=True)
+
+    def _en_U(self, u, exiger_gradient):
         solveur = self.solveur_pour(None)
         n_var = len(u)
         T_inv = self.dist.getInverseIsoProbabilisticTransformation()
@@ -177,11 +214,14 @@ class Evaluateur:
         grad_U = [None] * n_var
         if ev.gradient_complet:
             grad_U = gradient_vers_U(grad_X, u, T_inv)
-        if any(v is None for v in grad_U):
+        if exiger_gradient and any(v is None for v in grad_U):
             # On LEVE ici, la ou le plan d'experiences ECARTE. La difference
             # est voulue : ce point-la a ete DEMANDE par l'algorithme
             # d'enrichissement. L'ecarter en silence lui ferait reproposer le
             # meme point, indefiniment.
+            #
+            # Une SURFACE DE FOND, elle, ne veut qu'un `g` : c'est
+            # `evaluer_g_en_U` qui la sert, et elle passe ici sans exiger.
             raise ValueError(
                 "run_HF en u=%s : le solveur n'a rendu aucun gradient "
                 "(grad_HF_X=%s). Un gradient fabrique a 0 affirmerait que "

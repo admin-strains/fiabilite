@@ -61,6 +61,10 @@ class Grille:
                  points_libres=None, active=True,
                  signature=None, config_identique=None,
                  marquer_phase=None, tracer=_ecrire):
+        #: `evaluer(u) -> (g, ...)` -- SEUL `g` est lu, aux quatre sites
+        #: d'appel. L'evaluateur donne ici ne doit donc PAS exiger le
+        #: gradient : une surface de fond se dessine, elle ne nourrit aucun
+        #: metamodele. Voir `Evaluateur.evaluer_g_en_U`.
         self.evaluer = evaluer
         self.n_var = n_var
         self.cote = cote

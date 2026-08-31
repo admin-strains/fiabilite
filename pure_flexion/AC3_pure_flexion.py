@@ -794,10 +794,10 @@ if __name__ == '__main__':
     # interruption -- est dans `_etapes/grille.py`. Ne reste ici que le
     # rangement du resultat dans l'etat de CETTE etude.
     _GRILLE = _grille.Grille(
-        evaluer=run_HF, n_var=n_var, cote=n_grid_hf,
+        evaluer=lambda u: _obtenir_evaluateur().evaluer_g_en_U(u),
+        n_var=n_var, cote=n_grid_hf,
         bornes=(u1_min, u1_max, u2_min, u2_max),
-        fichier_cache=_HF_CACHE_FILE,
-        fichier_cache_complet=_HF_FULL_CACHE_FILE,
+        fichier_cache=_HF_CACHE_FILE, fichier_cache_complet=_HF_FULL_CACHE_FILE,
         fichier_cache_points=_HF_CUSTOM_CACHE_FILE,
         coupe_initiale=hf_2d_grid_fixed,
         coupe_courante=slice_def, points_libres=hf_custom_points,
