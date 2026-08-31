@@ -32,6 +32,34 @@ import numpy as np
 import openturns as ot
 
 
+def refus_sans_gradient(ou, grad):
+    """Le refus d'un point d'ENRICHISSEMENT dont le gradient manque.
+
+    Il etait ecrit dans `evaluer_en_U` seulement. Le batch parallele, lui,
+    prenait `SOL[k].get('dg_%s' % p, 0.0)` -- un defaut qui NE SE DECLENCHE
+    JAMAIS, puisque le worker ecrit toujours la clef, avec la valeur `None`
+    quand le solveur n'a rendu aucune sensibilite. Le gradient partait donc
+    `None` dans `all_grad`, qui basculait en `dtype=object` :
+
+        [[0.1 0.2]
+         [0.3 0.4]
+         [None None]]        dtype = object
+
+    et `y_augmente` l'acceptait sans broncher, rendant le vecteur
+    d'apprentissage `[1.0 2.0 3.0 0.1 0.3 None 0.2 0.4 None]`. L'echec
+    surgissait bien plus loin, dans l'algebre lineaire, avec un message qui ne
+    parle pas de gradient.
+
+    Un message UNIQUE pour les deux voies : c'est ce qui les empeche de
+    diverger, comme elles l'avaient fait.
+    """
+    return ValueError(
+        "%s : le solveur n'a rendu aucun gradient (grad_HF_X=%s). Un gradient "
+        "fabrique a 0 affirmerait que l'etat limite est plat ici, et le "
+        "metamodele l'ajusterait. Le plan d'experiences, lui, ecarte ces "
+        "points -- voir `exclure_points_sans_gradient`." % (ou, grad))
+
+
 def _ecrire(message):
     print(message, flush=True)
 
@@ -222,12 +250,7 @@ class Evaluateur:
             #
             # Une SURFACE DE FOND, elle, ne veut qu'un `g` : c'est
             # `evaluer_g_en_U` qui la sert, et elle passe ici sans exiger.
-            raise ValueError(
-                "run_HF en u=%s : le solveur n'a rendu aucun gradient "
-                "(grad_HF_X=%s). Un gradient fabrique a 0 affirmerait que "
-                "l'etat limite est plat ici, et le metamodele l'ajusterait. "
-                "Le plan d'experiences, lui, ecarte ces points -- voir "
-                "`exclure_points_sans_gradient`." % (list(u), grad_X))
+            raise refus_sans_gradient("run_HF en u=%s" % (list(u),), grad_X)
         self.journaliser(u, x_point, ev.g)
         return ev.g, grad_U, grad_X
 
@@ -276,7 +299,16 @@ def evaluer_batch_EFF(batch, xt, yt, all_grad, xt_eff, *,
         SOL = executer_en_parallele(SOL, min(n_workers, len(a_evaluer)))
         for k, u_pt in enumerate(a_evaluer):
             g_k = SOL[k]['g']
-            grad_k = [SOL[k].get('dg_%s' % p, 0.0) for p in params_names]
+            # `.get(..., 0.0)` NE PROTEGEAIT RIEN : le worker ecrit TOUJOURS
+            # la clef, avec la valeur None quand la sensibilite manque. Le
+            # defaut ne s'est jamais declenche -- il n'attendait qu'une clef
+            # absente pour mentir.
+            grad_k = [SOL[k].get('dg_%s' % p) for p in params_names]
+            if any(v is None for v in grad_k):
+                # MEME refus que la voie sequentielle, et pour la meme raison :
+                # ce point a ete DEMANDE par l'enrichissement.
+                raise refus_sans_gradient(
+                    "batch EFF parallele en u=%s" % (list(u_pt),), grad_k)
             xt_eff.append(np.array(u_pt))
             xt = np.vstack([xt, [np.array(u_pt)]])
             yt = np.vstack([yt, [[g_k]]])

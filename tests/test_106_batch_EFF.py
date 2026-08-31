@@ -26,6 +26,7 @@ CE QU'ILS METTENT AUSSI PAR ECRIT
    figes ici parce que la comparaison des journaux atteste des extractions.
 """
 
+import io
 import os
 import sys
 
@@ -281,11 +282,33 @@ def test_un_point_seul_ne_part_pas_au_pool_meme_a_six_workers():
     assert pool.recu is None
 
 
-def test_un_gradient_absent_du_pool_vaut_zero():
-    """Constate, pas approuve : `.get('dg_x', 0.0)` fabrique un gradient nul
-    quand le pool n'en rend pas -- alors que `evaluer_en_U`, elle, LEVE dans
-    ce cas. Les deux portes d'enrichissement ne traitent donc pas le meme
-    defaut de la meme facon.
+# --------------------------------------------------------------------------- #
+# UN POINT SANS GRADIENT -- ARBITRE PAR AGNES LE 29/08/2026                    #
+#                                                                             #
+# Ces deux fonctions etaient des TEMOINS : elles figeaient un angle mort en    #
+# attendant l'arbitrage. Selon que le pool omettait la clef ou y mettait       #
+# `None`, le MEME defaut de solveur donnait un gradient nul silencieux ou une  #
+# exception -- et la voie sequentielle, elle, refusait proprement.             #
+#                                                                             #
+# MESURE qui a servi a trancher, sur `SOL[k]['dg_x'] = None` (ce que le worker #
+# ecrit TOUJOURS quand la sensibilite manque) :                                #
+#                                                                             #
+#     all_grad -> [[0.1 0.2] [0.3 0.4] [None None]]   dtype = object           #
+#     y_augmente l'accepte -> [1.0 2.0 3.0 0.1 0.3 None 0.2 0.4 None]          #
+#                                                                             #
+# L'echec surgissait donc bien plus loin, dans l'algebre lineaire, avec un     #
+# message qui ne parle pas de gradient.                                        #
+#                                                                             #
+# DECISION : REFUSER, comme la voie sequentielle et pour la meme raison -- ce  #
+# point a ete DEMANDE par l'enrichissement. Le message est ecrit UNE fois      #
+# (`refus_sans_gradient`), ce qui empeche les deux voies de rediverger.        #
+# --------------------------------------------------------------------------- #
+def test_une_clef_de_gradient_absente_fait_refuser():
+    """Le pool omet la clef : plus de gradient fabrique a zero.
+
+    `.get('dg_x', 0.0)` semblait couvrir ce cas. Il ne l'a jamais couvert en
+    production -- le worker ecrit toujours la clef -- mais il fabriquait bel
+    et bien un zero quand elle manquait.
     """
     def _pool_muet(SOL, n_workers):
         for d in SOL:
@@ -293,23 +316,21 @@ def test_un_gradient_absent_du_pool_vaut_zero():
         return SOL
 
     xt, yt, ag, eff = _plan_vide()
-    xt, yt, ag, eff = _evaluation.evaluer_batch_EFF(
-        [np.array([1.0, 2.0]), np.array([3.0, 4.0])], xt, yt, ag, eff,
-        n_max_points=10, n_batch=2, n_workers=6, n_var=2,
-        evaluer_un_point=None, executer_en_parallele=_pool_muet,
-        dist_jointe=lambda: _LoiJointe(), params_names=["fc", "fy"],
-        tracer=_Journal())
-    assert ag.tolist() == [[0.0, 0.0], [0.0, 0.0]]
+    with pytest.raises(ValueError, match="aucun gradient"):
+        _evaluation.evaluer_batch_EFF(
+            [np.array([1.0, 2.0]), np.array([3.0, 4.0])], xt, yt, ag, eff,
+            n_max_points=10, n_batch=2, n_workers=6, n_var=2,
+            evaluer_un_point=None, executer_en_parallele=_pool_muet,
+            dist_jointe=lambda: _LoiJointe(), params_names=["fc", "fy"],
+            tracer=_Journal())
 
 
-def test_un_gradient_None_du_pool_fait_lever():
-    """L'autre face du meme defaut. `run_DOE_parallel` ecrit
-    `SOL[i]['dg_q'] = d.get('dg_q')` : la CLEF existe, avec `None` dedans.
-    `.get(..., 0.0)` ne la remplace donc pas, et `round(None, 6)` leve.
+def test_une_clef_de_gradient_a_None_fait_refuser():
+    """Le cas REEL : le worker ecrit `dg_q: None`.
 
-    Ce n'est pas un choix, c'est un angle mort : selon que le pool omette la
-    clef ou y mette `None`, le meme defaut de solveur donne un gradient nul
-    silencieux ou une exception. Fige ici en attendant l'arbitrage.
+    Il levait deja, mais par accident -- `round(None, 6)` dans le journal --
+    donc avec un `TypeError` qui ne disait rien du gradient, et APRES avoir
+    verse le point au plan.
     """
     def _pool_None(SOL, n_workers):
         for d in SOL:
@@ -319,13 +340,47 @@ def test_un_gradient_None_du_pool_fait_lever():
         return SOL
 
     xt, yt, ag, eff = _plan_vide()
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError, match="aucun gradient"):
         _evaluation.evaluer_batch_EFF(
             [np.array([1.0, 2.0]), np.array([3.0, 4.0])], xt, yt, ag, eff,
             n_max_points=10, n_batch=2, n_workers=6, n_var=2,
             evaluer_un_point=None, executer_en_parallele=_pool_None,
             dist_jointe=lambda: _LoiJointe(), params_names=["fc", "fy"],
             tracer=_Journal())
+
+
+def test_le_refus_renvoie_au_parametre_qui_gouverne_l_autre_voie():
+    """Le plan d'experiences, lui, ECARTE -- et c'est un reglage. Le message
+    doit y renvoyer, sinon le lecteur ne sait pas quoi faire de son point."""
+    def _pool_None(SOL, n_workers):
+        for d in SOL:
+            d["g"], d["dg_fc"], d["dg_fy"] = 1.0, None, None
+        return SOL
+
+    xt, yt, ag, eff = _plan_vide()
+    with pytest.raises(ValueError) as exc:
+        _evaluation.evaluer_batch_EFF(
+            [np.array([1.0, 2.0]), np.array([3.0, 4.0])], xt, yt, ag, eff,
+            n_max_points=10, n_batch=2, n_workers=6, n_var=2,
+            evaluer_un_point=None, executer_en_parallele=_pool_None,
+            dist_jointe=lambda: _LoiJointe(), params_names=["fc", "fy"],
+            tracer=_Journal())
+    assert "exclure_points_sans_gradient" in str(exc.value)
+
+
+def test_les_deux_voies_refusent_par_le_MEME_message():
+    """C'est ce qui les empeche de rediverger.
+
+    Elles avaient diverge precisement parce que le refus etait ecrit d'un
+    seul cote.
+    """
+    assert "def refus_sans_gradient(" in io.open(
+        os.path.join(_REPO, "_doe", "evaluation.py"), encoding="utf-8").read()
+    depuis_le_batch = _evaluation.refus_sans_gradient("batch EFF parallele en u=[1.0]",
+                                                      [None, None])
+    depuis_run_HF = _evaluation.refus_sans_gradient("run_HF en u=[1.0]", [None, None])
+    assert str(depuis_le_batch).split(" : ", 1)[1] == \
+        str(depuis_run_HF).split(" : ", 1)[1]
 
 
 # --------------------------------------------------------------------------- #

@@ -364,7 +364,13 @@ def test_run_HF_leve_et_explique_l_asymetrie():
         src = fh.read()
     assert "`exclure_points_sans_gradient`" in src, (
         "le message ne renvoie pas au parametre qui gouverne l'autre voie")
-    assert "raise ValueError(" in src, "l'enrichissement doit LEVER"
+    # Le refus est ecrit UNE fois depuis le 29/08/2026 : les deux portes
+    # d'enrichissement -- `evaluer_en_U` et le batch parallele -- l'emploient,
+    # ce qui les empeche de rediverger comme elles l'avaient fait.
+    assert "def refus_sans_gradient(" in src, "l'enrichissement doit LEVER"
+    assert src.count("raise refus_sans_gradient(") == 2, (
+        "les deux portes d'enrichissement doivent refuser par le meme message "
+        "(trouve %d)" % src.count("raise refus_sans_gradient("))
 
 
 # --------------------------------------------------------------------- #
