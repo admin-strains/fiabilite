@@ -279,8 +279,29 @@ class SolveurDS:
         self.chemin_ds = chemin_ds
         self.dossier_etude = dossier_etude
         self.params_names = tuple(params_names)
-        #: un dict `{'param': ..., 'region_key': ...}` par variable, dans l'ordre
+        #: un dict `{'param': ..., 'region_key': ...}` par variable, DANS
+        #: L'ORDRE de `params_names` : l'appariement est POSITIONNEL. Les
+        #: etudes le construisent par `[PARAM_CONFIG[p]['sens'] for p in
+        #: params_names]`, donc aligne par construction -- mais rien ne le
+        #: verifiait, et un `zip` plus court aurait tronque en silence, laissant
+        #: les dernieres variables sans gradient pour une raison introuvable.
         self.regions = list(regions)
+        if len(self.regions) != len(self.params_names):
+            raise ValueError(
+                "%d region(s) de sensibilite pour %d variable(s) (%s) : "
+                "l'appariement est positionnel, un ecart de longueur "
+                "priverait les dernieres variables de gradient sans le dire."
+                % (len(self.regions), len(self.params_names),
+                   ", ".join(self.params_names)))
+        self._cles = {}
+        for p, sens in zip(self.params_names, self.regions):
+            cle = "%s:%s" % (sens["param"], sens["region_key"])
+            if cle in self._cles:
+                raise ValueError(
+                    "deux variables portent la meme cle de sensibilite %r "
+                    "(%s et %s) : Digital Structure ne rendrait qu'un gradient "
+                    "pour les deux." % (cle, self._cles[cle], p))
+            self._cles[cle] = p
         self.global_size = global_size
         self.geo_min_approx = geo_min_approx
         #: borne haute du mailleur. None = suit `global_size`. Voir
@@ -313,11 +334,12 @@ class SolveurDS:
 
     def _cle_vers_param(self, cle):
         """Mappe une cle de sensibilite Digital Structure vers un nom de
-        variable. Correspondance EXACTE 'param:region_key', comme l'original."""
-        for p, sens in zip(self.params_names, self.regions):
-            if cle == sens['param'] + ':' + sens['region_key']:
-                return p
-        return None
+        variable. Correspondance EXACTE 'param:region_key', comme l'original.
+
+        Le dictionnaire est construit une fois, a l'ouverture : c'est la que
+        l'unicite des cles est verifiee.
+        """
+        return self._cles.get(cle)
 
     # ------------------------------------------------------------------ #
     def evaluer(self, valeurs, sensibilite=True, etiquette=None) -> Evaluation:
@@ -401,6 +423,21 @@ class SolveurDS:
                 if all(g is not None for g in trouve):
                     break
             grad_x = tuple(trouve)
+            # LE MESSAGE DOIT DESIGNER LE COUPABLE. Sans ces lignes, une
+            # `region_key` qui ne correspond pas a ce que rend le solveur
+            # laisse TOUS les gradients a None, et la chaine annonce « le
+            # solveur n'a rendu aucun gradient » -- ce qui accuse le solveur
+            # alors que le calcul a reussi et que l'erreur est dans la table
+            # des variables de l'etude.
+            manquants = [n for n, g in zip(self.params_names, trouve)
+                         if g is None]
+            if manquants:
+                print("[SENSIBILITE] aucun gradient pour %s.\n"
+                      "    cles rendues par le solveur : %s\n"
+                      "    cles attendues (param:region_key) : %s"
+                      % (", ".join(manquants),
+                         ", ".join(sorted(info['Sensitivity'])) or "(aucune)",
+                         ", ".join(sorted(self._cles))), flush=True)
 
         if self.archiver:
             self.archiver_sorties(path, etiquette or "appel_%03d" % self._appels)
