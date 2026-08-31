@@ -326,8 +326,8 @@ if __name__ == '__main__':
     
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    n_rebars = len(re.findall(r'REBAR\(', _cad_txt))
-    rebar_names = [f"HA{i+1}" for i in range(n_rebars)]
+    rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
+    n_rebars = len(rebar_names)
     PARAM_CONFIG_CAD = {
         'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"], "region_key": "fc"},
                'loi': loi_fc, 'args': (48, 0.12)},
