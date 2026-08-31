@@ -126,8 +126,21 @@ class _Resultat:
         return self._u
 
 
-def test_la_coupe_la_plus_parlante_rend_des_int():
+def _form_ou_saute():
+    """`_reliability/form.py` importe OpenTURNS au premier niveau.
+
+    Les trois temoins qui suivent doivent donc SAUTER quand il est absent,
+    pas echouer : le reste de ce fichier ne tient qu'a numpy et tourne
+    partout, y compris sur le runner d'integration continue qui n'installe
+    que la couche noyau.
+    """
+    pytest.importorskip("openturns")
     import form as _form
+    return _form
+
+
+def test_la_coupe_la_plus_parlante_rend_des_int():
+    _form = _form_ou_saute()
     sd = _form.coupe_la_plus_parlante(
         _Resultat([0.3, 0.6, 0.1], [-1.0, -2.0, -3.0]), 3, (0, 1, {}))
     assert isinstance(sd[0], int) and not isinstance(sd[0], np.integer)
@@ -136,7 +149,7 @@ def test_la_coupe_la_plus_parlante_rend_des_int():
 
 def test_la_coupe_la_plus_parlante_passe_dans_un_cache(tmp_path):
     """Le vrai test : elle traverse la meme mise en forme que les caches."""
-    import form as _form
+    _form = _form_ou_saute()
     sd = _form.coupe_la_plus_parlante(
         _Resultat([0.3, 0.6, 0.1], [-1.0, -2.0, -3.0]), 3, (0, 1, {}))
     f = str(tmp_path / "hf.json")
@@ -148,7 +161,7 @@ def test_la_coupe_la_plus_parlante_passe_dans_un_cache(tmp_path):
 def test_a_deux_variables_elle_donne_la_coupe_codee_en_dur():
     """La flexion pure ecrivait `(0, 1, {})` a la main. C'est ce que le
     mecanisme general donne -- quel que soit l'ordre d'importance."""
-    import form as _form
+    _form = _form_ou_saute()
     for imp in ([0.7, 0.3], [0.3, 0.7]):
         sd = _form.coupe_la_plus_parlante(_Resultat(imp, [-1.0, -2.0]), 2,
                                           (0, 1, {}))

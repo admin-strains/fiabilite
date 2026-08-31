@@ -138,7 +138,19 @@ def test_le_noyau_ne_depend_que_de_numpy_et_scipy():
 def test_chaque_test_qui_exige_la_couche_etudes_le_declare():
     """Un fichier de test qui importe matplotlib, OpenTURNS ou scikit-learn
     au niveau module DOIT le faire par `pytest.importorskip`, sinon il
-    interrompt la collecte de toute la suite sur un poste minimal."""
+    interrompt la collecte de toute la suite sur un poste minimal.
+
+    CE TEMOIN NE SUFFIT PAS, ET IL FAUT LE SAVOIR
+    ----------------------------------------------
+    Il ne voit que l'import DIRECT. Le 31/08/2026, trois fichiers cassaient
+    la collecte sans qu'il bronche : ils n'importaient pas OpenTURNS, ils
+    importaient `plan`, `evaluation`, `grille` et `figurer` -- des modules
+    du depot qui, eux, l'importent. La sonde regardait une forme de
+    surface, pas le mecanisme.
+
+    C'est `test_la_suite_se_collecte_sans_la_couche_etudes` qui tient
+    reellement la propriete. Celui-ci reste parce qu'il est instantane et
+    que son message designe le coupable en clair."""
     import re
     fautifs = []
     for chemin in _fichiers({".py"}):
@@ -153,3 +165,84 @@ def test_chaque_test_qui_exige_la_couche_etudes_le_declare():
                 fautifs.append("%s importe %s sans importorskip"
                                % (os.path.relpath(chemin, REPO), nom))
     assert not fautifs, "\n  ".join([""] + fautifs)
+
+
+# --------------------------------------------------------------------- #
+# la propriete elle-meme, pas un indice de la propriete
+# --------------------------------------------------------------------- #
+#: Ce que `requirements/core.txt` n'installe PAS. Le job `noyau` de
+#: l'integration continue tourne exactement avec cette absence, sur quatre
+#: combinaisons OS x version de Python.
+#: NOM DISTINCT DE `COUCHE_ETUDES` (l. 104), et ce n'est pas un detail : les
+#: deux listes ne servent pas la meme chose. Celle-ci enumere ce que
+#: `requirements/core.txt` n'installe PAS, pour fabriquer l'absence ; l'autre
+#: enumere ce que `_lib/` n'a pas le droit d'importer. Les confondre ferait
+#: silencieusement changer de perimetre au controle du noyau.
+ABSENT_SANS_LA_COUCHE_ETUDES = ("openturns", "smt", "matplotlib", "sklearn",
+                                "autograd", "ndsplines", "psutil", "STRAINS")
+
+_SOUS_PROCESSUS = '''
+import sys
+
+class _Absent:
+    """Rend introuvables les modules de la couche etudes.
+
+    `ModuleNotFoundError` et NON `ImportError` : c'est ce que leve Python
+    quand un module est reellement absent, et un `except ModuleNotFoundError`
+    quelque part dans la chaine ne verrait pas passer le second. Teste le
+    31/08/2026 -- la version `ImportError` declarait 22 fichiers fautifs la
+    ou un environnement reellement minimal n'en compte aucun.
+    """
+    def find_module(self, nom, chemin=None):
+        return self.find_spec(nom, chemin)
+
+    def find_spec(self, nom, chemin=None, cible=None):
+        if nom.split(".")[0] in %r:
+            raise ModuleNotFoundError("No module named %%r" %% nom, name=nom)
+        return None
+
+sys.meta_path.insert(0, _Absent())
+
+import pytest
+sys.exit(pytest.main(["--collect-only", "-q", "--no-header",
+                      "-p", "no:cacheprovider", "-p", "no:randomly"]))
+'''
+
+
+def test_la_suite_se_collecte_sans_la_couche_etudes():
+    r"""Sans OpenTURNS ni matplotlib, la suite doit SAUTER, pas s'interrompre.
+
+    POURQUOI C'EST UNE PROPRIETE, ET PAS UN DETAIL
+    -----------------------------------------------
+    Un fichier qui importe OpenTURNS hors d'un `importorskip` ne fait pas
+    echouer ses propres tests : il fait echouer la COLLECTE, et pytest
+    interrompt alors la suite ENTIERE. Trois fichiers verts en local
+    suffisent a rendre rouge un runner qui n'a que la couche noyau -- 808
+    tests qui ne tournent plus, pour une ligne d'import.
+
+    C'est ce qui est arrive : `test_106`, `test_108` et `test_110`
+    importaient des modules du depot qui importent OpenTURNS. Corrige le
+    31/08/2026.
+
+    ON N'EMULE PAS L'ABSENCE, ON LA FABRIQUE. Un second environnement n'est
+    pas necessaire : un `meta_path` qui refuse ces noms dans un
+    sous-processus donne exactement le meme verdict que le venv minimal
+    verifie le meme jour -- 833 collectes, zero erreur.
+    """
+    import subprocess
+    import sys
+
+    p = subprocess.run([sys.executable, "-c", _SOUS_PROCESSUS % (ABSENT_SANS_LA_COUCHE_ETUDES,)],
+                       capture_output=True, text=True, cwd=REPO)
+    if p.returncode != 0:
+        fautifs = [l for l in (p.stdout or "").splitlines()
+                   if l.startswith("ERROR ")]
+        raise AssertionError(
+            "la collecte s'interrompt sans la couche etudes (code %d).\n"
+            "Sur le runner d'integration continue, c'est TOUTE la suite qui "
+            "ne tourne pas.\n  %s\n\n"
+            "Corriger en placant `pytest.importorskip(\"openturns\")` AVANT "
+            "les imports du depot dans ces fichiers -- le module importe "
+            "peut etre du depot et tirer OpenTURNS sans le nommer.\n%s"
+            % (p.returncode, "\n  ".join(fautifs) or "(aucune ligne ERROR)",
+               (p.stdout or "")[-1500:]))

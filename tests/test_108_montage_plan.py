@@ -39,6 +39,11 @@ for _p in (os.path.join(_REPO, "_cache"), os.path.join(_REPO, "_doe")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+# AVANT les imports du depot : `_doe/plan.py` importe OpenTURNS au premier
+# niveau. Sans cette ligne, son absence casse la COLLECTE, pas ce seul
+# fichier -- et pytest interrompt la suite ENTIERE. Voir `test_05`.
+pytest.importorskip("openturns")
+
 import doe as _cache_doe                               # noqa: E402
 import plan as _plan                                   # noqa: E402
 

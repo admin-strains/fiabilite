@@ -44,6 +44,13 @@ for _p in (os.path.join(_REPO, "_etapes"),):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+# AVANT les imports du depot : `_etapes/figurer.py` importe OpenTURNS et
+# matplotlib au premier niveau. Sans ces lignes, leur absence casse la
+# COLLECTE, pas ce seul fichier -- et pytest interrompt la suite ENTIERE.
+# Voir `test_05`.
+pytest.importorskip("openturns")
+pytest.importorskip("matplotlib")
+
 import grille as _grille                               # noqa: E402
 import figurer as _figurer                             # noqa: E402
 

@@ -1,0 +1,87 @@
+# Fiabilite structurale par calcul a la rupture -- metadonnees du projet.
+#
+# CE QUE CE FICHIER FAIT, ET CE QU'IL NE FAIT PAS
+# ================================================
+# Il fait : `pip install -e .` installe les dependances en UNE commande, et
+# expose une commande `fiabilite` a la place de `python launcher.py`. C'est
+# la premiere heure de qui arrive sur ce depot.
+#
+# Il ne fait PAS de ce depot un paquet importable. Les 45 modules
+# s'importent par leur nom nu -- `import plan`, `import schema` -- ce qui ne
+# marche que parce que `launcher.py` insere chaque dossier dans `sys.path`.
+# Les transformer en paquet demanderait de reecrire 192 lignes d'import dans
+# 80 fichiers, dont 102 dans `tests/`, c'est-a-dire dans le filet lui-meme.
+# Mesure du 31/08/2026. Ce n'est pas fait ici parce que le gain est de
+# l'hygiene d'import, pas une capacite.
+#
+# ET SURTOUT : empaqueter n'affranchit PAS du lanceur. OpenTURNS doit etre
+# importe AVANT que les repertoires de DLL de Digital Structure n'entrent
+# dans le chemin de recherche -- trois DLL portent le meme nom des deux
+# cotes avec des contenus differents (`libblas`, `liblapack`, `zlib1`). Un
+# `import` direct de la chaine echoue sur `liblapack.dll`. Voir l'en-tete de
+# `launcher.py`. La commande `fiabilite` passe donc par le meme chemin que
+# `python launcher.py` : c'est le meme code, pas un raccourci.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fiabilite"
+version = "0.1.0"
+description = "Probabilite de defaillance d'un ouvrage par calcul a la rupture (g = alpha - 1)"
+readme = "README.md"
+requires-python = ">=3.9"
+
+# CE PLANCHER N'EST PAS CELUI DES ETUDES. La couche noyau -- metamodeles et
+# harness -- tourne a partir de 3.9, sans Digital Structure ni licence. Les
+# ETUDES, elles, exigent 3.10 EXACTEMENT : les modules compiles de Digital
+# Structure sont lies a `python310.dll`, et `launcher.check_python` refuse
+# tout autre interpreteur avec un message qui le dit. Un plancher a 3.10 ici
+# fermerait la couche noyau a des postes ou elle marche.
+
+# --- couche NOYAU : ni Digital Structure, ni OpenTURNS, ni licence, ni GPU.
+# C'est la couche ou vit l'essentiel du code. Doit rester installable
+# partout : c'est ce qui permet aux 1 143 tests de tourner en integration
+# continue, sur une machine qui n'a pas le solveur.
+dependencies = [
+    "numpy>=2.1",
+    "scipy>=1.15",
+    "threadpoolctl>=3.6",                    # bride le sur-abonnement BLAS
+    "tomli>=2.0; python_version < '3.11'",   # lecture des fichiers d'etude
+]
+
+[project.optional-dependencies]
+# --- couche ETUDES : ce qu'il faut pour piloter le solveur.
+# `nlopt` n'en fait PAS partie, contrairement a ce que laissait croire le
+# code : NLopt est utilise via `ot.NLopt`, fourni par OpenTURNS.
+#
+#   pip install -e ".[etudes]"
+etudes = [
+    "openturns>=1.27",     # FORM, tirage d'importance, lois, NLopt
+    "smt>=2.12",           # GEKPLS -- krigeage gradient-enhanced de reference
+    "autograd>=1.8",       # gradients de l'etat limite analytique
+    "scikit-learn>=1.7",   # DBSCAN -- separation des modes de defaillance
+    "matplotlib>=3.10",
+    "ndsplines>=0.3",
+    "psutil>=7.0",         # supervision des workers DOE paralleles
+]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+# `fiabilite --check <etude>` valide l'installation ET l'etude sans payer un
+# seul appel solveur. A lancer avant tout run : sur le Moulin Blanc un point
+# coute 466 s, et un nom de parametre absent du modele ne se voyait qu'a ce
+# moment-la.
+fiabilite = "launcher:_console"
+
+[tool.setuptools]
+# Modules de premier niveau seulement. Les dossiers `_lib/`, `_doe/`, ... ne
+# sont PAS declares : ce ne sont pas des paquets (aucun `__init__.py`), et
+# `launcher.setup` les met sur `sys.path`. Voir l'en-tete.
+py-modules = ["launcher"]
+
+# PAS de `[tool.pytest.ini_options]` ici : `pytest.ini` existe et porte deja
+# `testpaths`, `norecursedirs`, `addopts` et quatre marqueurs. Quand les deux
+# coexistent, pytest lit `pytest.ini` et IGNORE cette section -- une
+# configuration morte que personne ne verrait mourir.

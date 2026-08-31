@@ -209,9 +209,14 @@ def main(argv):
         argv.remove("--garder-cwd")
 
     if len(argv) < 2:
+        # Le nom REELLEMENT tape : `python launcher.py`, ou la commande
+        # `fiabilite` installee par `pyproject.toml`. Un message qui nomme
+        # l'autre envoie le lecteur essayer une commande qu'il n'a pas.
+        moi = os.path.basename(argv[0])
+        moi = "fiabilite" if moi.startswith("fiabilite") else "python " + moi
         raise SystemExit(
-            "usage : python launcher.py [--garder-cwd] <etude.py>\n"
-            "        python launcher.py --check [etude.py]")
+            "usage : %s [--garder-cwd] <etude.py>\n"
+            "        %s --check [etude.py]" % (moi, moi))
 
     check_python()
     ds_root = find_ds_root()
@@ -228,7 +233,17 @@ def main(argv):
     run(argv[1], argv[2:], garder_cwd=garder_cwd)
 
 
-if __name__ == "__main__":
+def _console():
+    """Point d'entree de la commande `fiabilite` (voir `pyproject.toml`).
+
+    Meme chemin que `python launcher.py`, au nom pres : `freeze_support`
+    d'abord -- les workers DOE paralleles sont lances en `spawn` sous
+    Windows, et sans lui chaque worker relancerait le programme entier.
+    """
     import multiprocessing as mp
-    mp.freeze_support()     # workers DOE paralleles : spawn Windows
+    mp.freeze_support()
     main(sys.argv)
+
+
+if __name__ == "__main__":
+    _console()

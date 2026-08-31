@@ -39,6 +39,12 @@ for _p in (os.path.join(_REPO, "_doe"),):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+# AVANT les imports du depot, pas apres : `_doe/plan.py` et
+# `_doe/evaluation.py` importent OpenTURNS au premier niveau. Sans cette
+# ligne, l'absence d'OpenTURNS ne fait pas SAUTER ce fichier, elle casse la
+# COLLECTE -- et pytest interrompt la suite ENTIERE. Voir `test_05`.
+pytest.importorskip("openturns")
+
 import evaluation as _evaluation                       # noqa: E402
 import plan as _plan                                   # noqa: E402
 
