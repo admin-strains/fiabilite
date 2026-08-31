@@ -89,6 +89,9 @@ def _construire(tmp_path, cfg=None, executer_plan=_sol_complet,
         fichier_cache=fichier, signature={"solveur": "papier"},
         executer_plan=executer_plan,
         executer_en_parallele=executer_en_parallele,
+        # une moisson NEUTRE : ce fichier eprouve l'enchainement, pas la
+        # recuperation d'un run parallele interrompu (cf. test_101).
+        moissonner=lambda SOL, noms: {},
         journaliser=journaliser, tracer=(tracer or (lambda m: None)))
 
 

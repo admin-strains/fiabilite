@@ -433,11 +433,6 @@ if __name__ == '__main__':
         return _obtenir_evaluateur().evaluer_en_U(u)
 
 
-
-
-
-
-
     # --- DOE PARALLELE ---
     def run_DOE_parallel(base_modelname, SOL, params_names, n_workers):
         """Le plan d'experiences reparti. Tout est dans `_doe/parallele.py`."""
@@ -531,7 +526,6 @@ if __name__ == '__main__':
     def build_starting_points():
         """Les points de depart du FORM multimodal. ZERO appel solveur."""
         return _plan.tirer_points_de_depart(n_sp, eff_bounds_min, eff_bounds_max)
-
 
 
     # --------------------------------------------------------------------------- #
@@ -699,9 +693,6 @@ if __name__ == '__main__':
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
 
 
-
-
-
     _HF_FULL_CACHE_FILE = os.path.join(_path_ds, "hf_grid_full_cache.json")
 
     # La grille haute fidelite -- geometrie, cache signe, reprise apres
@@ -723,16 +714,7 @@ if __name__ == '__main__':
         marquer_phase=_JOURNAL.marquer)
 
 
-
     # --- HF GRILLE FULL (n_var-D) ---
-
-
-
-
-
-
-
-
 
 
     def fond_hf_pour_figures(sd=None, cache=None, finale=False):
@@ -787,7 +769,6 @@ if __name__ == '__main__':
                                         sous_titre=_figees.strip())
 
 
-
     def erreur_FOSM(best_result, g_ot):
         """L'ecart FOSM. 27 lignes sont dans `_reliability/controle.py`.
 
@@ -835,8 +816,6 @@ if __name__ == '__main__':
             modes_figes=best_sol_modes_fixed, gradients_figes=grad_sp_fixed,
             trajectoires=traj_runs_fixed, surcouche=None,
             legende=legende)
-
-
 
 
     def grille_3D():

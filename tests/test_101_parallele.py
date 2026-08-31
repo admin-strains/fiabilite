@@ -506,3 +506,112 @@ def test_le_controle_de_completude_porte_sur_le_plan_ENTIER(tmp_path):
             _points_dont_deja(5, [0, 1, 2]), PARAMS, storage, nom, 6,
             script_etude="etude.py", repo=_REPO,
             lancer=_lanceur(muet=True), tracer=lambda _m: None)
+
+
+# --------------------------------------------------------------------- #
+# LA MOISSON : ce qu'un plan parallele INTERROMPU avait deja paye
+#
+# DEFAUT n°14, MESURE LE 29/08/2026. Le filet de reprise du plan
+# (`save_doe_cache_incremental`, ecrit apres CHAQUE point) s'execute DANS le
+# worker, donc dans SA copie du `.ds`. Le pere ne relit que le sien.
+# Interruption apres 3 points sur 5 :
+#
+#     voie sequentielle   filet chez le pere : oui   3 points repris
+#     voie parallele      filet chez le pere : non   0 point repris
+#                         (le fichier etait dans _doe_workers/doew0.ds/)
+#
+# Sur le Moulin Blanc -- n0 = 5, six workers -- jusqu'a cinq appels solveur,
+# environ 39 minutes.
+#
+# ON VERIFIE, ON NE SUPPOSE PAS. Une sortie de worker ne porte que
+# `{idx: {g, dg_*}}` : la greffer sur le seul indice serait exactement le
+# defaut du cache de points libres, ou des valeurs se retrouvaient appariees a
+# de mauvaises coordonnees. Le fichier de TACHE est a cote et porte les
+# parametres ; on compare les deux.
+# --------------------------------------------------------------------- #
+def _run_interrompu(tmp_path, faits, total=5):
+    """Un run parallele dont `faits` indices sont alles au bout."""
+    storage, nom = _modele(tmp_path)
+    points = _points(total)
+    base = os.path.join(storage, nom + ".ds")
+    for k, i in enumerate(faits):
+        wds = os.path.join(base, "_doe_workers", "doew%d.ds" % k)
+        os.makedirs(wds, exist_ok=True)
+        json.dump({"points": [dict({"idx": i}, **points[i])]},
+                  open(os.path.join(wds, "_doe_task.json"), "w"))
+        json.dump({str(i): {"g": 10.0 + i, "dg_fc": 1.0, "dg_fy": 2.0}},
+                  open(os.path.join(wds, "_doe_out.json"), "w"))
+    return storage, nom, points
+
+
+def test_les_points_menes_au_bout_sont_recuperes(tmp_path):
+    storage, nom, points = _run_interrompu(tmp_path, [0, 2])
+    recolte = _parallele.moissonner_sorties(points, PARAMS, storage, nom,
+                                            tracer=lambda _m: None)
+    assert sorted(recolte) == [0, 2]
+    assert recolte[0]["g"] == 10.0 and recolte[2]["g"] == 12.0
+
+
+def test_sans_dossier_de_workers_la_moisson_est_vide(tmp_path):
+    storage, nom = _modele(tmp_path)
+    assert _parallele.moissonner_sorties(_points(3), PARAMS, storage, nom,
+                                         tracer=lambda _m: None) == {}
+
+
+def test_un_worker_sans_sortie_n_apporte_rien(tmp_path):
+    """Il n'etait pas alle au bout : c'est le cas normal a une interruption."""
+    storage, nom, points = _run_interrompu(tmp_path, [1])
+    os.remove(os.path.join(storage, nom + ".ds", "_doe_workers",
+                           "doew0.ds", "_doe_out.json"))
+    assert _parallele.moissonner_sorties(points, PARAMS, storage, nom,
+                                         tracer=lambda _m: None) == {}
+
+
+def test_une_sortie_dont_les_COORDONNEES_diffrent_est_ECARTEE(tmp_path):
+    """Le controle qui fait toute la difference.
+
+    `preparer_worker` efface la sortie d'un run precedent precisement parce
+    qu'elle serait relue comme celle-ci. La moisson, elle, va la chercher : il
+    lui faut donc son propre controle, sinon elle rouvre le trou.
+    """
+    storage, nom, points = _run_interrompu(tmp_path, [0, 1])
+    points[1]["fc"] = 999.0            # le plan courant n'est plus le meme
+    recolte = _parallele.moissonner_sorties(points, PARAMS, storage, nom,
+                                            tracer=lambda _m: None)
+    assert sorted(recolte) == [0], (
+        "un point d'un AUTRE tirage a ete greffe : %s" % sorted(recolte))
+
+
+def test_la_moisson_dit_ce_qu_elle_recupere_et_ce_qu_elle_ecarte(tmp_path):
+    storage, nom, points = _run_interrompu(tmp_path, [0, 1])
+    points[1]["fy"] = 999.0
+    messages = []
+    _parallele.moissonner_sorties(points, PARAMS, storage, nom,
+                                  tracer=messages.append)
+    assert any("1 point(s) recuperes" in m and "1 ecarte" in m
+               for m in messages), messages
+
+
+def test_une_sortie_illisible_est_ignoree_en_le_DISANT(tmp_path):
+    storage, nom, points = _run_interrompu(tmp_path, [0])
+    chemin = os.path.join(storage, nom + ".ds", "_doe_workers",
+                          "doew0.ds", "_doe_out.json")
+    open(chemin, "w").write("{ ceci n'est pas du JSON")
+    messages = []
+    assert _parallele.moissonner_sorties(points, PARAMS, storage, nom,
+                                         tracer=messages.append) == {}
+    assert any("illisible" in m for m in messages), messages
+
+
+def test_la_moisson_et_le_saut_du_pool_se_completent(tmp_path):
+    """Bout a bout : ce qui est moissonne ne repart pas au solveur."""
+    storage, nom, points = _run_interrompu(tmp_path, [0, 2])
+    for i, rendu in _parallele.moissonner_sorties(
+            points, PARAMS, storage, nom, tracer=lambda _m: None).items():
+        points[i].update(rendu)
+    lancer = _lanceur()
+    _parallele.evaluer_en_parallele(points, PARAMS, storage, nom, 6,
+                                    script_etude="etude.py", repo=_REPO,
+                                    lancer=lancer, tracer=lambda _m: None)
+    envoyes = sorted(p["idx"] for t in lancer.trace for p in t["points"])
+    assert envoyes == [1, 3, 4], envoyes

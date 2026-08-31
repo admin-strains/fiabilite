@@ -29,10 +29,13 @@ DEUX DEFAUTS QUE CES FONCTIONS PORTENT DANS LEUR HISTOIRE
    ce point, ce que le metamodele ajusterait.
 """
 
+import os
+
 import numpy as np
 import openturns as ot
 
 import doe as _cache_doe
+import parallele as _parallele
 
 
 def _ecrire(message):
@@ -201,13 +204,34 @@ def journaliser_plan(yt, all_grad, tracer=_ecrire):
     tracer("]")
 
 
+def _moisson_par_defaut(fichier_cache, tracer):
+    """Ou chercher ce qu'un run parallele interrompu avait deja paye.
+
+    Les workers ecrivent dans `<modele>.ds/_doe_workers/` -- et le cache du
+    plan, lui, est `<modele>.ds/doe_cache.json`. Le dossier du modele est donc
+    deja connu ici, et l'etude n'a rien a recabler : elle passerait deux lignes
+    identiques de chaque cote, ce qui est precisement ce qu'on retire.
+
+    `moissonner` reste surchargeable -- les tests s'en servent.
+    """
+    dossier = os.path.dirname(os.path.abspath(fichier_cache))
+    base = os.path.basename(dossier)
+    racine = os.path.dirname(dossier)
+    nom = base[:-3] if base.endswith(".ds") else base
+
+    def moissonner(SOL, params_names):
+        return _parallele.moissonner_sorties(SOL, params_names, racine, nom,
+                                             tracer=tracer)
+    return moissonner
+
+
 # --------------------------------------------------------------------------- #
 # L'ENCHAINEMENT COMPLET : du tirage au plan pret a nourrir un metamodele     #
 # --------------------------------------------------------------------------- #
 def construire_plan_initial(cfg, n_doe, *, dist_jointe, params_names,
                             bornes_min, bornes_max, fichier_cache, signature,
                             executer_plan, executer_en_parallele=None,
-                            journaliser=None, tracer=_ecrire):
+                            moissonner=None, journaliser=None, tracer=_ecrire):
     """Le plan d'experiences initial : `n_doe` appels solveur, ou zero.
 
     C'etait `build_DOE`, cinquante-deux lignes ecrites dans les DEUX etudes.
@@ -234,6 +258,8 @@ def construire_plan_initial(cfg, n_doe, *, dist_jointe, params_names,
       la fonction sort aussitot ;
     * le cache PARTIEL (`charger_doe_partiel`) rend les points d'un plan
       INTERROMPU, greffes dans `SOL` pour que le solveur ne les repaie pas.
+      Sur la voie PARALLELE ce filet-la est ecrit par les workers, dans LEUR
+      copie du `.ds` : `moissonner(SOL)` va l'y chercher.
       Il verifie les coordonnees qu'il rend (`xt_attendu`) : sans cela, un
       plan retire d'ailleurs serait apparie aux mauvais points.
 
@@ -275,6 +301,14 @@ def construire_plan_initial(cfg, n_doe, *, dist_jointe, params_names,
             params_names)
 
     if cfg.n_workers_DOE and cfg.n_workers_DOE > 1:
+        # Le filet du parallele : les sorties des workers qu'un run precedent
+        # avait menes au bout. Le leur est ecrit dans LEUR copie du `.ds`, que
+        # le pere ne relit pas -- d'ou cette moisson, verifiee coordonnee par
+        # coordonnee. Le pool saute ensuite ce qui porte deja `g`.
+        if cfg.config_is_identical:
+            recolte = (moissonner or _moisson_par_defaut(fichier_cache, tracer))
+            for i, rendu in recolte(SOL, params_names).items():
+                SOL[i].update(rendu)
         SOL = executer_en_parallele(SOL, cfg.n_workers_DOE)
     else:
         SOL = executer_plan(SOL)

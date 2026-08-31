@@ -85,6 +85,76 @@ def preparer_worker(storage, base_ds, nom_worker, points, params_names):
     return wds, fichier_tache, fichier_sortie
 
 
+def moissonner_sorties(points, params_names, storage, base_modelname,
+                       sous_dossier="_doe_workers", tolerance=1e-9,
+                       tracer=_ecrire):
+    """Les points qu'un run parallele INTERROMPU avait deja payes.
+
+    Retourne `{indice: resultat}`, a greffer dans `points` avant de relancer
+    le pool -- qui saute alors ce qui porte deja `g`.
+
+    LE DEFAUT QUE CELA FERME -- 29/08/2026
+    ---------------------------------------
+    Le filet de reprise du plan (`save_doe_cache_incremental`, ecrit apres
+    CHAQUE point) s'execute DANS le worker, donc dans SA copie du `.ds`. Le
+    pere, lui, ne relit que le sien. Mesure, interruption apres 3 points sur
+    5 :
+
+        voie sequentielle   filet chez le pere : oui   3 points repris
+        voie parallele      filet chez le pere : non   0 point repris
+                            (le fichier etait dans _doe_workers/doew0.ds/)
+
+    Sur le Moulin Blanc -- `n0 = 5`, six workers -- une interruption du plan
+    coutait donc jusqu'a cinq appels solveur, environ 39 minutes.
+
+    ON VERIFIE, ON NE SUPPOSE PAS
+    ------------------------------
+    Une sortie de worker ne porte que `{idx: {g, dg_*}}` : la greffer sur le
+    seul indice serait exactement le defaut du cache de points libres, ou des
+    valeurs se retrouvaient appariees a de mauvaises coordonnees. Le fichier
+    de tache, lui, est a cote et porte les PARAMETRES de chaque indice. On
+    compare donc les deux, parametre par parametre, et on ne greffe que ce
+    qui coincide.
+
+    C'est aussi ce qui rend la moisson sure malgre le menage de
+    `preparer_worker` : une sortie d'un autre run n'a aucune raison de porter
+    les memes coordonnees, et sera ecartee ici -- avec une ligne pour le dire.
+    """
+    dossier = os.path.join(storage, base_modelname + ".ds", sous_dossier)
+    if not os.path.isdir(dossier):
+        return {}
+    recoltes, ecartes = {}, 0
+    for nom in sorted(os.listdir(dossier)):
+        wds = os.path.join(dossier, nom)
+        sortie = os.path.join(wds, "_doe_out.json")
+        tache = os.path.join(wds, "_doe_task.json")
+        if not (os.path.exists(sortie) and os.path.exists(tache)):
+            continue
+        try:
+            rendus = json.load(open(sortie))
+            attendus = {p["idx"]: p for p in json.load(open(tache))["points"]}
+        except Exception as e:
+            tracer("  [MOISSON] %s illisible (%s: %s) -> ignore"
+                   % (nom, type(e).__name__, e))
+            continue
+        for i_str, rendu in rendus.items():
+            i = int(i_str)
+            attendu = attendus.get(i)
+            if attendu is None or i >= len(points):
+                ecartes += 1
+                continue
+            if any(abs(float(attendu[p]) - float(points[i][p])) > tolerance
+                   for p in params_names):
+                ecartes += 1
+                continue
+            recoltes[i] = rendu
+    if recoltes or ecartes:
+        tracer("  [MOISSON] %d point(s) recuperes d'un run parallele "
+               "interrompu, %d ecarte(s) (coordonnees differentes)"
+               % (len(recoltes), ecartes))
+    return recoltes
+
+
 def evaluer_en_parallele(points, params_names, storage, base_modelname,
                          n_workers, script_etude, repo,
                          sous_dossier="_doe_workers", prefixe="doew",
