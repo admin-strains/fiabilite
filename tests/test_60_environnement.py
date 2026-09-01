@@ -180,3 +180,87 @@ def test_ds_root_invalide_donne_un_message_utile(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as exc:
         launcher.find_ds_root()
     assert "STRAINS" in str(exc.value) and "front" in str(exc.value)
+
+
+# --------------------------------------------------------------------- #
+# Digital Structure absent : ce qui doit encore marcher
+#
+# Le 31/08/2026, `test_103_grille_bout_en_bout` produisait cinq erreurs sur
+# le runner d'integration continue :
+#
+#     Failed: l'etude a echoue (code 1) :
+#     Digital Structure introuvable. Cherche dans : ...
+#
+# L'etude en cause est `pure_flexion`, qui tourne sur le solveur ANALYTIQUE
+# et ne touche pas une ligne de Digital Structure. C'est le lanceur qui
+# exigeait DS avant meme de savoir quelle etude on lui demandait.
+# --------------------------------------------------------------------- #
+def _lanceur():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_lanceur_sous_test", os.path.join(ROOT, "launcher.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_un_run_tolere_l_absence_de_Digital_Structure(monkeypatch, capsys):
+    """Introuvable et non obligatoire : None, et un message qui le DIT.
+
+    L'absence ne doit pas devenir silencieuse -- une etude qui a vraiment
+    besoin de DS doit pouvoir etre diagnostiquee. Ce qui disparait, c'est le
+    refus PREALABLE, qui condamnait aussi ce qui n'en depend pas.
+    """
+    lanceur = _lanceur()
+    monkeypatch.delenv("DS_ROOT", raising=False)
+    monkeypatch.setattr(os.path, "isdir", lambda _p: False)
+
+    assert lanceur.find_ds_root(obligatoire=False) is None
+    trace = capsys.readouterr().err
+    assert "Digital Structure introuvable" in trace, trace
+    assert "on continue SANS" in trace, trace
+
+
+def test_check_exige_toujours_Digital_Structure(monkeypatch):
+    """`--check` repond a « mon installation est-elle bonne ? ».
+
+    Lui, doit refuser net : sans cela il repondrait « tout va bien » sur un
+    poste ou aucune etude de production ne peut tourner.
+    """
+    lanceur = _lanceur()
+    monkeypatch.delenv("DS_ROOT", raising=False)
+    monkeypatch.setattr(os.path, "isdir", lambda _p: False)
+
+    with pytest.raises(SystemExit) as sortie:
+        lanceur.find_ds_root(obligatoire=True)
+    assert "Digital Structure introuvable" in str(sortie.value)
+
+
+def test_sans_DS_la_contrainte_python_310_tombe(monkeypatch):
+    """Elle porte sur l'ABI de .pyd qu'on ne chargera pas.
+
+    Sans cette levee, le run analytique resterait interdit sur les runners
+    3.11+ pour une raison qui ne le concerne pas.
+    """
+    lanceur = _lanceur()
+    monkeypatch.setattr(lanceur.sys, "version_info", (3, 13, 0, "final", 0))
+    lanceur.check_python(ds_root=None)          # ne doit rien lever
+    with pytest.raises(SystemExit):
+        lanceur.check_python(ds_root=r"C:\un\chemin")
+
+
+def test_sans_DS_aucun_None_ne_se_glisse_dans_sys_path(monkeypatch):
+    """`ds_root` a None etait insere tel quel : chaque import suivant levait.
+
+    Le genre de defaut qui ne se voit que sur la machine ou DS manque --
+    c'est-a-dire jamais sur le poste de developpement.
+    """
+    lanceur = _lanceur()
+    pytest.importorskip("openturns")
+    avant = list(sys.path)
+    try:
+        lanceur.setup(None)
+        assert None not in sys.path
+        assert all(isinstance(p, str) for p in sys.path)
+    finally:
+        sys.path[:] = avant

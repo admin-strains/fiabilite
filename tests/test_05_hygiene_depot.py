@@ -246,3 +246,39 @@ def test_la_suite_se_collecte_sans_la_couche_etudes():
             "peut etre du depot et tirer OpenTURNS sans le nommer.\n%s"
             % (p.returncode, "\n  ".join(fautifs) or "(aucune ligne ERROR)",
                (p.stdout or "")[-1500:]))
+
+
+def test_le_BLAS_tourne_sur_un_thread():
+    r"""Le bridage de `conftest.py` mord-il VRAIMENT ?
+
+    POURQUOI CE TEMOIN EXISTE
+    --------------------------
+    La premiere version bridait par `threadpoolctl.threadpool_limits(1)`
+    depuis `pytest_configure`. Elle ne bridait que les bibliotheques DEJA
+    CHARGEES : l'OpenBLAS que scipy charge ensuite restait a 7 threads. La
+    suite est restee VERTE, les goldens ont continue de passer, et le
+    bridage ne servait a rien. Un bridage qu'on croit actif est pire que pas
+    de bridage : on regenere des goldens en croyant les avoir rendus
+    portables.
+
+    Ce test regarde ce que les bibliotheques DECLARENT, apres coup. numpy et
+    scipy embarquent chacun le leur -- deux OpenBLAS distincts sur ce poste.
+    """
+    threadpoolctl = pytest.importorskip("threadpoolctl")
+    import numpy   # noqa: F401  -- charge l'OpenBLAS de numpy
+    import scipy.linalg   # noqa: F401  -- et celui de scipy, qui est un AUTRE
+
+    bavardes = [(i.get("internal_api"), i.get("filepath"), i.get("num_threads"))
+                for i in threadpoolctl.threadpool_info()
+                if i.get("num_threads") != 1]
+    assert not bavardes, (
+        "%d bibliotheque(s) d'algebre lineaire tournent sur plusieurs "
+        "threads pendant les tests :\n  %s\n\n"
+        "Les goldens figent alors le nombre de coeurs de la machine, pas le "
+        "code : a 7 threads contre 1, theta passe de [0.010000, 6.548512] a "
+        "[0.341149, 6.244649] sur `flexion/PCK`.\n"
+        "Le bridage est en tete de `tests/conftest.py` et doit rester AVANT "
+        "`import numpy` -- OpenBLAS lit ces variables au chargement."
+        % (len(bavardes),
+           "\n  ".join("%s (%s) : %s threads" % (a, os.path.basename(b or "?"), c)
+                       for a, b, c in bavardes)))

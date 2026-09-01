@@ -60,12 +60,36 @@ DLL_SUBDIRS = (
 )
 
 
-def find_ds_root():
-    """Racine contenant le paquet STRAINS : DS_ROOT, sinon detection."""
+def find_ds_root(obligatoire=True):
+    """Racine contenant le paquet STRAINS : DS_ROOT, sinon detection.
+
+    `obligatoire=False` rend None au lieu de sortir quand Digital Structure
+    est introuvable.
+
+    POURQUOI CETTE OPTION EXISTE
+    -----------------------------
+    Toutes les etudes n'ont pas besoin de Digital Structure : celles qui
+    tournent sur le solveur ANALYTIQUE n'en touchent pas une ligne. Or ce
+    lanceur exigeait DS avant meme de savoir quelle etude on lui demandait,
+    et sortait en code 1. Consequence mesuree le 31/08/2026 : le run
+    bout-en-bout de `pure_flexion` -- pourtant analytique -- ne pouvait pas
+    tourner en integration continue, et `test_103_grille_bout_en_bout` y
+    produisait cinq erreurs.
+
+    Le defaut n'etait pas rattrapable cote test : c'est le lanceur qui
+    posait la condition.
+
+    L'ABSENCE RESTE BRUYANTE. On ne fait pas semblant que DS est la : le
+    lanceur l'annonce, et une etude qui en a reellement besoin echouera a
+    l'import de `STRAINS` avec le message de Python. Ce qui disparait, c'est
+    le refus PREALABLE, qui condamnait aussi ce qui n'en depend pas.
+    """
     env = os.environ.get("DS_ROOT")
     if env:
         if os.path.isdir(os.path.join(env, "STRAINS")):
             return os.path.abspath(env)
+        # Un DS_ROOT pose EXPRES et faux reste une erreur, meme en mode
+        # tolerant : c'est une intention explicite qui n'aboutit pas.
         raise SystemExit(
             "DS_ROOT vaut %r mais ne contient pas de dossier STRAINS.\n"
             "Attendu : le dossier 'front' du workspace Digital Structure." % env)
@@ -81,15 +105,27 @@ def find_ds_root():
         if os.path.isdir(os.path.join(c, "STRAINS")):
             return os.path.abspath(c)
 
-    raise SystemExit(
-        "Digital Structure introuvable. Cherche dans :\n  "
-        + "\n  ".join(candidats)
-        + "\n\nDefinir DS_ROOT sur le dossier 'front' du workspace :\n"
-          "  set DS_ROOT=C:\\workspace\\front")
+    message = ("Digital Structure introuvable. Cherche dans :\n  "
+               + "\n  ".join(candidats)
+               + "\n\nDefinir DS_ROOT sur le dossier 'front' du workspace :\n"
+                 "  set DS_ROOT=C:\\workspace\\front")
+    if obligatoire:
+        raise SystemExit(message)
+    print("[launcher] " + message.replace("\n", "\n[launcher] "), file=sys.stderr)
+    print("[launcher] --> on continue SANS : une etude sur solveur analytique "
+          "n'en a pas besoin.", file=sys.stderr)
+    return None
 
 
-def check_python():
-    """Les .pyd de DS sont lies a python310.dll : 3.10 obligatoire."""
+def check_python(ds_root=True):
+    """Les .pyd de DS sont lies a python310.dll : 3.10 obligatoire.
+
+    `ds_root` falsy = Digital Structure n'est pas la. La contrainte tombe
+    alors, puisqu'elle porte sur des modules compiles qu'on ne chargera
+    pas : une etude analytique tourne sous n'importe quel Python 3.9+.
+    """
+    if not ds_root:
+        return
     if sys.version_info[:2] != (3, 10):
         raise SystemExit(
             "Python %d.%d detecte, or les modules compiles de Digital Structure\n"
@@ -108,9 +144,9 @@ def setup(ds_root):
             "OpenTURNS est introuvable : %s\n"
             "  python -m pip install -r requirements/studies.txt" % exc)
 
-    # 2. seulement ensuite, les DLL de Digital Structure
+    # 2. seulement ensuite, les DLL de Digital Structure -- s'il est la
     manquants = []
-    for sub in DLL_SUBDIRS:
+    for sub in (DLL_SUBDIRS if ds_root else ()):
         d = os.path.join(ds_root, sub)
         if os.path.isdir(d):
             os.add_dll_directory(d)
@@ -121,8 +157,11 @@ def setup(ds_root):
         for d in manquants:
             print("           " + d, file=sys.stderr)
 
-    # 3. chemins d'import : DS, puis les modules du depot
-    for p in (ds_root, REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
+    # 3. chemins d'import : DS s'il est la, puis les modules du depot.
+    # `ds_root` a None quand DS est absent -- l'inserer tel quel poserait
+    # None dans sys.path, ou il fait lever chaque import suivant.
+    for p in ((ds_root,) if ds_root else ()) + (
+              REPO, os.path.join(REPO, "_lib"), os.path.join(REPO, "_model"),
               os.path.join(REPO, "_cache"),
               os.path.join(REPO, "_reliability"),
               os.path.join(REPO, "_config"),
@@ -218,10 +257,17 @@ def main(argv):
             "usage : %s [--garder-cwd] <etude.py>\n"
             "        %s --check [etude.py]" % (moi, moi))
 
-    check_python()
-    ds_root = find_ds_root()
+    # `--check` repond a la question « mon installation est-elle bonne ? » :
+    # il exige donc Digital Structure et refuse net s'il manque. Un RUN, lui,
+    # tolere son absence -- une etude sur solveur analytique n'en a pas
+    # besoin, et le refus prealable interdisait de la jouer en integration
+    # continue. Voir `find_ds_root`.
+    strict = argv[1] == "--check"
+    ds_root = find_ds_root(obligatoire=strict)
+    check_python(ds_root)
     print("[launcher] depot  : %s" % REPO, flush=True)
-    print("[launcher] DS     : %s" % ds_root, flush=True)
+    print("[launcher] DS     : %s" % (ds_root or "ABSENT (etudes analytiques "
+                                                 "seulement)"), flush=True)
 
     if argv[1] == "--check":
         setup(ds_root)
