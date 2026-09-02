@@ -26,7 +26,14 @@ import pytest
 import harness
 
 GOLDEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'golden')
-CASES = ['flexion', 'linear']
+#: `console` a rejoint les deux autres le 02/09/2026. Il apporte ce qui
+#: manquait : TROIS variables -- la Gram augmentee de GEPCK y porte trois
+#: blocs de derivees au lieu de deux, et `theta` trois longueurs de
+#: correlation -- et un regime ou la tendance PCE NE SUFFIT PAS, donc ou
+#: `theta` compte. Mesure a 24 points : LOO 4,48e-04 en PCK contre 1,27e-09
+#: sur `flexion`, et `sigma^2` a 1,29e-04 -- loin du plancher d'annulation de
+#: `linear` (1e-24). Voir `tests/reference/limit_states.ConsoleLS`.
+CASES = ['flexion', 'linear', 'console']
 KINDS = ['PCK', 'GEPCK']
 
 pytestmark = pytest.mark.golden
@@ -54,8 +61,9 @@ def test_doe_du_golden_est_toujours_celui_du_harness():
     """Garde-fou : si make_doe change, tous les goldens deviennent caducs."""
     for case in CASES:
         ref = _load(case)
-        assert np.allclose(harness.make_doe(ref['n_doe'], 2), np.asarray(ref['doe']),
-                           atol=0, rtol=0), \
+        attendu = np.asarray(ref['doe'])
+        assert np.allclose(harness.make_doe(ref['n_doe'], attendu.shape[1]),
+                           attendu, atol=0, rtol=0), \
             f'{case} : make_doe a change, les goldens ne sont plus comparables'
 
 
@@ -217,3 +225,50 @@ def test_variance_predictive_positive(kind, fitted):
     s = sigma(U)
     assert np.all(np.isfinite(s))
     assert np.all(s >= 0.0)
+
+
+# --------------------------------------------------------------------------- #
+# LE GENERATEUR DOIT POUVOIR PRODUIRE UN GOLDEN QUE CE FICHIER ACCEPTE         #
+# --------------------------------------------------------------------------- #
+def test_le_generateur_bride_le_BLAS_comme_la_suite():
+    r"""`tests/conftest.py` bride le BLAS a un thread avant d'importer numpy.
+    `tests/make_golden.py` n'est PAS un test : `conftest` ne s'y applique pas,
+    et il produisait donc ses goldens a sept threads pour une suite qui les
+    compare a un.
+
+    Mesure du 02/09/2026 sur `console`, meme machine, meme plan :
+
+        LOO GEPCK   4,403651e-06 (7 threads)   contre   4,403640e-06 (1)
+        beta_pce    0,35408452                 contre   0,35408472
+
+    soit 2,5e-06 et 5,6e-07 -- au-dessus de la tolerance de 1e-06 de ce
+    fichier, qui refusait donc un golden tout juste ecrit. Les deux premiers
+    cas sont insensibles au nombre de threads (goldens bit-a-bit identiques a
+    un et sept threads) : seul le troisieme l'a montre.
+
+    Un generateur qui ne peut pas produire un golden acceptable est un piege
+    -- il ferait croire a une regression du code.
+    """
+    chemin = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'make_golden.py')
+    with open(chemin, encoding='utf-8', errors='replace') as fh:
+        source = fh.read()
+    tete = source[:source.index('import numpy')]
+    for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+        assert var in tete, (
+            "make_golden.py ne bride pas %s AVANT `import numpy` : il "
+            "produira des goldens que ce fichier refuse." % var)
+
+
+def test_le_generateur_sait_ecrire_UN_seul_cas():
+    """Ajouter un cas de reference ne doit pas obliger a reecrire les goldens
+    des autres. Ecraser un golden efface la memoire de ce que le code faisait
+    avant -- le faire par effet de bord d'un ajout serait exactement ce que
+    `CONTRIBUTING.md` interdit."""
+    import inspect
+    import make_golden
+    assert 'demandes' in inspect.signature(make_golden.main).parameters, (
+        "`make_golden.main` n'accepte plus de filtre : un ajout de cas "
+        "reecrirait tous les goldens.")
+    with pytest.raises(SystemExit, match='inconnu'):
+        make_golden.main(('ce_cas_n_existe_pas',))

@@ -147,3 +147,29 @@ PROBE = np.array([[0.0, 0.0],
                   [-2.0, 0.5],
                   [0.25, 2.75],
                   [-3.0, -3.0]])
+
+#: Les memes cinq points, en trois variables. Ils gardent la meme intention :
+#: le centre, un point courant, un point excentre, un point loin sur une seule
+#: variable, et un coin. Le troisieme cas de reference (`console`) a trois
+#: variables -- voir `tests/reference/limit_states.ConsoleLS`.
+PROBE_3 = np.array([[0.0, 0.0, 0.0],
+                    [1.0, -1.0, 0.5],
+                    [-2.0, 0.5, 1.5],
+                    [0.25, 2.75, -0.75],
+                    [-3.0, -3.0, -3.0]])
+
+
+def probe(n_var):
+    """Les points sonde du cas, choisis par sa dimension.
+
+    Les goldens PORTENT leur propre sonde (`ref['probe']`) : ce choix ne sert
+    qu'a la GENERATION. Un golden reste donc lisible meme si cette table
+    change, et `test_doe_du_golden_est_toujours_celui_du_harness` verifie que
+    le plan, lui, n'a pas bouge.
+    """
+    if n_var == 2:
+        return PROBE
+    if n_var == 3:
+        return PROBE_3
+    raise ValueError("aucun jeu de points sonde fige pour %d variables : en "
+                     "ajouter un ici plutot que d'en tirer au hasard" % n_var)

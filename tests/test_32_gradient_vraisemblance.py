@@ -232,9 +232,16 @@ def _captures(case="flexion", kind="PCK", combien=6):
 
 
 @pytest.mark.parametrize("kind", ["PCK", "GEPCK"])
-@pytest.mark.parametrize("case", ["flexion", "linear"])
+@pytest.mark.parametrize("case", ["flexion", "linear", "console"])
 def test_grad_J_coincide_avec_les_differences_finies(case, kind):
     """LE temoin du correctif.
+
+    `console` a rejoint les deux autres le 02/09/2026. Il apporte le seul
+    regime que ni l'un ni l'autre ne montrait : TROIS longueurs de
+    correlation a ajuster, et une tendance PCE qui NE SUFFIT PAS -- donc un
+    `sigma^2` loin du plancher d'annulation (1,3e-04 contre 1e-24 sur
+    `linear`) et un `theta` reellement identifiable. C'est la que le gradient
+    doit etre juste, puisque c'est la qu'il sert.
 
     On prend le MEILLEUR des pas utiles, et non un pas fixe : quand le
     gradient est petit devant le bruit de J, un pas donne peut etre domine

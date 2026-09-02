@@ -55,7 +55,7 @@ La distinction `test_30` / `test_40` est le point important :
 
 ## Les oracles (`tests/reference/`)
 
-N'importent rien de `_lib/`. Deux etats limites en espace standard :
+N'importent rien de `_lib/`. **Trois** etats limites en espace standard :
 
 - **`LinearLS`** -- `g(u) = beta_ref - a.u/||a||`, hyperplan : `beta` exact
   par construction. Invariant le plus dur : tout metamodele contenant le
@@ -65,10 +65,35 @@ N'importent rien de `_lib/`. Deux etats limites en espace standard :
   l.1191-1230) : `fc` lognormale, `fy` normale, `M_R = A.fy + B.fy^2/fc`.
   Valeurs : `beta = 3.4722741272`, `u* = (-0.243905, -3.463697)`.
 
+- **`ConsoleLS`** -- fleche en bout d'une poutre console, limitee a L/250 :
+  `delta = 4 F L^3 / (E b h^3)`, `g = 1 - delta/delta_lim`. **Trois**
+  variables (`F` et `E` lognormales, `h` normale), et une non-linearite
+  franche non polynomiale (`h^-3`, `1/E`).
+  Valeurs : `beta = 3.660021`, `u* = (2.8223, -1.4216, -1.8465)`.
+
+  Ajoute le 02/09/2026, pour deux raisons chiffrees. La Gram AUGMENTEE de
+  GEPCK y porte **trois** blocs de derivees au lieu de deux, et `theta` trois
+  longueurs de correlation. Et surtout, c'est le seul cas ou la tendance PCE
+  NE SUFFIT PAS : `LOO` 4,5e-04 en PCK contre 1,3e-09 sur `flexion`,
+  `sigma^2` a 1,3e-04 contre le plancher d'annulation de `linear` (1e-24).
+  C'est donc le seul cas ou `theta` compte vraiment -- et ou l'apport du
+  gradient enrichi se voit :
+
+  | plan | ecart sur `beta` PCK | GEPCK | rapport |
+  |---|---|---|---|
+  | 24 points | 2,24 % | 0,97 % | 2,3 |
+  | 40 points | 1,65 % | 0,55 % | 3,0 |
+  | 60 points | 1,56 % | 0,39 % | 4,0 |
+
+  GEPCK dispose des gradients en plus : il devrait toujours etre meilleur.
+  Sur `flexion` la comparaison ne tranchait pas (les deux a 1e-05 de
+  l'exact) ; ici elle tranche, et `test_40` le fige.
+
 `beta` y est obtenu par **deux chemins independants** qui se recoupent a
-4e-15 : minimisation scalaire sur la courbe `g=0` parametree, et HL-RF
-(`reference/form.py`). Un oracle isole serait invérifiable ; deux qui
-concordent le sont.
+4e-15, et 2e-15 sur `console` : minimisation sur `g=0` parametre -- une courbe
+pour `FlexionLS`, une SURFACE pour `ConsoleLS`, par L-BFGS-B a gradient
+analytique -- et HL-RF (`reference/form.py`). Un oracle isole serait
+invérifiable ; deux qui concordent le sont.
 
 ## Etat mesure sur `cleaning` (25/08/2026)
 

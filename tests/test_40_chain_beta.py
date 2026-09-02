@@ -98,3 +98,95 @@ def test_form_converge_depuis_tous_les_points_de_depart(kind, fitted):
     g_hat, grad_hat, _ = harness.predictors(kind, fitted[kind])
     ok = [hlrf(g_hat, grad_hat, u0)['converged'] for u0 in STARTS]
     assert sum(ok) >= len(STARTS) // 2, f'{kind} : {sum(ok)}/{len(STARTS)} convergences'
+
+
+# --------------------------------------------------------------------------- #
+# LE TROISIEME CAS : DUR, ET C'EST LE POINT                                    #
+# --------------------------------------------------------------------------- #
+#: TOLERANCES MESUREES, ET POURQUOI ELLES SONT CENT FOIS PLUS LARGES
+#:
+#: `console` (trois variables, `g` en `h^-3`) est le premier cas du depot que
+#: le metamodele ne resout PAS a la virgule. Mesure du 02/09/2026, meme plan
+#: de 24 points, HL-RF multistart depuis cinq points :
+#:
+#:     n    PCK              GEPCK
+#:     24   2,24 %           0,97 %
+#:     40   1,65 %           0,55 %
+#:     60   1,56 %           0,39 %
+#:
+#: contre 0,0017 % et 0,0072 % sur `flexion`. Ce n'est pas un defaut : c'est
+#: ce que vaut un metamodele a 24 points sur un etat limite fortement non
+#: polynomial. Le figer ici donne au depot son premier cas OU LA METHODE
+#: TRAVAILLE, et ou une degradation serait visible.
+TOL_BETA_CONSOLE = {'PCK': 0.030, 'GEPCK': 0.013}
+
+#: Cinq points de depart en trois variables. Le dernier vise deja la zone du
+#: point de conception : sans lui, HL-RF depuis l'origine seule peut s'arreter
+#: sur un autre bassin d'un etat limite courbe.
+STARTS_3 = np.array([[0.0, 0.0, 0.0], [2.0, -2.0, 0.0], [-2.0, 2.0, 0.0],
+                     [1.0, 1.0, 1.0], [3.0, -1.0, -2.0]])
+
+
+@pytest.fixture(scope='module')
+def console_ajuste():
+    """Le troisieme cas, ajuste une fois pour ce fichier."""
+    import warnings
+    from reference.limit_states import ConsoleLS
+    ls = ConsoleLS()
+    X = harness.make_doe(24, ls.n_var)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return ls, {k: harness.fit(k, X, ls, max_degree=3)
+                    for k in ('PCK', 'GEPCK')}
+
+
+@pytest.mark.parametrize('kind', ['PCK', 'GEPCK'])
+def test_beta_du_metamodele_sur_le_cas_console(kind, console_ajuste):
+    ls, modeles = console_ajuste
+    g_hat, grad_hat, _ = harness.predictors(kind, modeles[kind])
+    r = multistart_hlrf(g_hat, grad_hat, STARTS_3)
+    assert r is not None, f'{kind} : FORM n a converge depuis aucun depart'
+    beta_ref = ls.beta_exact()
+    ecart = abs(r['beta'] - beta_ref) / beta_ref
+    assert ecart < TOL_BETA_CONSOLE[kind], (
+        f'{kind} : beta = {r["beta"]:.6f} contre {beta_ref:.6f} attendu '
+        f'({100 * ecart:.2f} % > {100 * TOL_BETA_CONSOLE[kind]:.2f} %)')
+
+
+def test_sur_un_cas_DUR_le_gradient_enrichi_gagne_vraiment(console_ajuste):
+    """CE QUE CE CAS APPORTE, ET QU'AUCUN AUTRE NE MONTRAIT.
+
+    GEPCK dispose des gradients en plus de PCK : il devrait toujours etre
+    meilleur. Sur `flexion` la comparaison ne tranche pas -- les deux sont
+    a 1e-05 pres de l'exact, et l'ecart entre eux est du bruit d'ajustement
+    (0,0017 % contre 0,0072 %, PCK devant). Sur `linear`, les deux sont
+    exacts.
+
+    Ici la question a une reponse. Mesure du 02/09/2026 :
+
+        n    PCK      GEPCK    rapport
+        24   2,24 %   0,97 %   2,3
+        40   1,65 %   0,55 %   3,0
+        60   1,56 %   0,39 %   4,0
+
+    L'avantage du gradient enrichi est donc REEL et CROISSANT avec la taille
+    du plan, la ou personne ne pouvait le montrer. C'est l'argument de la
+    methode, et il est desormais tenu par un test.
+
+    Le seuil de 1,5 laisse de la marge sous le 2,3 mesure : ce qui est fige,
+    c'est l'ORDRE des deux, pas sa valeur exacte.
+    """
+    ls, modeles = console_ajuste
+    beta_ref = ls.beta_exact()
+    ecarts = {}
+    for kind in ('PCK', 'GEPCK'):
+        g_hat, grad_hat, _ = harness.predictors(kind, modeles[kind])
+        r = multistart_hlrf(g_hat, grad_hat, STARTS_3)
+        ecarts[kind] = abs(r['beta'] - beta_ref) / beta_ref
+    assert ecarts['GEPCK'] < ecarts['PCK'] / 1.5, (
+        'GEPCK (%.4f %%) ne gagne plus nettement sur PCK (%.4f %%) : rapport '
+        '%.2f, mesure a 2,3 le 02/09/2026. GEPCK dispose des gradients en '
+        'plus -- s il ne fait pas mieux sur un cas DUR, c est qu il ne les '
+        'exploite pas.'
+        % (100 * ecarts['GEPCK'], 100 * ecarts['PCK'],
+           ecarts['PCK'] / max(ecarts['GEPCK'], 1e-30)))

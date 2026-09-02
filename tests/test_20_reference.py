@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from reference.form import hlrf
-from reference.limit_states import FlexionLS, LinearLS
+from reference.limit_states import ConsoleLS, FlexionLS, LinearLS
 
 pytestmark = pytest.mark.oracle
 
@@ -43,11 +43,22 @@ def test_point_de_conception_est_sur_letat_limite(flexion_ls):
     assert abs(flexion_ls.g([u])[0]) < 1e-12
 
 
-@pytest.mark.parametrize('cls', [LinearLS, FlexionLS])
+@pytest.mark.parametrize('cls', [LinearLS, FlexionLS, ConsoleLS])
 def test_form_reference_retrouve_beta_exact(cls):
-    """HL-RF (oracle 2) doit retrouver le beta de l'oracle 1 a 1e-10 pres."""
+    """HL-RF (oracle 2) doit retrouver le beta de l'oracle 1 a 1e-10 pres.
+
+    C'est la validation croisee des oracles : deux algorithmes qui n'ont rien
+    en commun doivent tomber sur le meme point. `LinearLS` a une solution en
+    forme close, `FlexionLS` minimise `||u||` sur une courbe parametree par
+    Brent, `ConsoleLS` la minimise sur une SURFACE par L-BFGS-B a gradient
+    analytique. HL-RF, lui, itere sur les gradients de `g`.
+
+    `np.zeros(ls.n_var)` et non `np.zeros(2)` : le troisieme cas a trois
+    variables, et un point de depart a deux composantes aurait fait lever
+    HL-RF sur une forme dont la cause aurait ete illisible.
+    """
     ls = cls()
-    r = hlrf(ls.g, ls.grad, np.zeros(2))
+    r = hlrf(ls.g, ls.grad, np.zeros(ls.n_var))
     assert r['converged'], f'{ls.name} : HL-RF de reference n a pas converge'
     assert r['beta'] == pytest.approx(ls.beta_exact(), abs=1e-10)
     assert np.allclose(r['u_star'], ls.u_star_exact(), atol=1e-8)

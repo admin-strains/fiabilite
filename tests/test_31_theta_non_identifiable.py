@@ -304,6 +304,44 @@ def test_sur_le_cas_lineaire_il_n_y_a_vraiment_rien_a_identifier():
         "exactement, et l'argument de degenerescence tombe." % loo)
 
 
+def test_et_le_cas_CONSOLE_montre_le_contraire():
+    """LE CONTRE-EXEMPLE, sans lequel le raisonnement precedent ne vaut rien.
+
+    « `theta` n'a pas de valeur vraie » n'est une explication que si l'on
+    peut montrer un cas ou il en a une. Sinon c'est une propriete du code,
+    pas du probleme -- et c'est exactement la confusion que j'ai commise le
+    01/09 en concluant, sur le seul cas `linear`, que `theta` n'etait
+    determine par rien.
+
+    Le troisieme cas de reference (`console`, trois variables, `g` en
+    `h^-3`) est dans le regime inverse : la tendance PCE ne suffit pas, le
+    residu que le krigeage explique est reel, et `sigma^2` reste a six ordres
+    au-dessus du plancher d'annulation. Mesure du 02/09/2026 a 24 points :
+
+        cas        LOO PCK      sigma^2 PCK    theta identifiable
+        linear     2,0e-25      ~1e-24         non
+        flexion    1,3e-09      2,8e-12        oui, mais deux bassins
+        console    4,5e-04      1,3e-04        oui
+    """
+    import json
+    from reference.limit_states import CASES
+    with open(os.path.join(_REPO, "tests", "golden", "console.json"),
+              encoding="utf-8") as fh:
+        ref = json.load(fh)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fm = harness.fit("PCK", np.asarray(ref["doe"]), CASES["console"](),
+                         max_degree=ref["max_degree"])
+    loo = float(fm["Error"][0]["LOO"])
+    sigma2 = float(np.atleast_1d(fm["Kriging"][0]["sigmaSQ"]).ravel()[0])
+    assert loo > 1e-06, (
+        "LOO = %.3e : la PCE suffit desormais sur `console` aussi, et le "
+        "depot n'a plus AUCUN cas ou `theta` compte. En construire un." % loo)
+    assert sigma2 > 1e-12, (
+        "sigma^2 = %.3e : au plancher d'annulation, comme `linear`. Le "
+        "contre-exemple a disparu." % sigma2)
+
+
 # --------------------------------------------------------------------- #
 # 4. LE DEFAUT EST D'ORIGINE -- et le nettoyage l'a REVELE, pas cree
 # --------------------------------------------------------------------- #
