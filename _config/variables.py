@@ -55,6 +55,21 @@ CE QUI EST GAGNE, AU-DELA DE LA FORME
   `_model/selection.py`.
 """
 
+#: LES LOIS DECLARABLES, PAR LEUR NOM SEUL.
+#:
+#: POURQUOI CETTE LISTE EST ICI ET NON LUE SUR `_model/lois.py`
+#: `Configuration.valider()` doit refuser une loi inconnue AU CHARGEMENT.
+#: Lire le registre `lois.LOIS` pour cela ferait dependre `_config/` de
+#: `_model/lois.py`, qui importe OpenTURNS -- et la couche NOYAU n'a pas
+#: OpenTURNS. Mesure du 02/09/2026 : les quatre jobs `noyau` de l'integration
+#: continue sont tombes en `ModuleNotFoundError: openturns` des que la
+#: validation a touche le registre.
+#:
+#: Un NOM est une donnee ; la fonction est du code. La liste vit donc ici, et
+#: `test_134` verifie qu'elle coincide EXACTEMENT avec `lois.LOIS` -- une
+#: duplication sans temoin serait une divergence en attente.
+LOIS_DECLARABLES = ("fy", "fc", "F_permanente", "F_exploitation", "uni_approx")
+
 #: Les clefs de designation, du fichier d'etude vers celles que le solveur
 #: attend dans `sens`. Le TOML est la surface utilisateur, donc en francais ;
 #: les noms internes restent ceux de Digital Structure.

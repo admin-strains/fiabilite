@@ -580,7 +580,10 @@ class Configuration:
         Rendu comme une LISTE, jointe aux autres problemes : un fichier
         d'etude avec trois fautes doit les montrer toutes, pas la premiere.
         """
-        from lois import LOIS                                # noqa: PLC0415
+        # Les NOMS, pas le registre : le registre vit dans `_model/lois.py`,
+        # qui importe OpenTURNS -- absent de la couche noyau. Voir
+        # `_config/variables.LOIS_DECLARABLES`.
+        from variables import LOIS_DECLARABLES as LOIS       # noqa: PLC0415
         mauvais = []
         if not isinstance(self.variables, dict):
             return ["variables : attendu des tables `[variables.<nom>]`, "

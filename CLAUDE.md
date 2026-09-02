@@ -25,7 +25,27 @@ commencer.
 
 ---
 
-## Les cinq pieges qui ont deja coute du temps
+## Les six pieges qui ont deja coute du temps
+
+### 0. DEUX environnements, et la CI a le PLUS PAUVRE
+
+`C:	mpenv_fiab310` a tout ; `C:	mpenv_ci` n'a que
+`requirements/core.txt` -- numpy, scipy, pytest, tomli. **Les quatre jobs
+`noyau` de l'integration continue tournent avec le second.** Un import
+d'OpenTURNS ajoute dans `_lib/`, `_config/` ou `_cache/` y casse tout, et
+passe inapercu en local.
+
+Avant de pousser, les DEUX :
+
+```bash
+PYTHONPATH= C:/tmp/venv_fiab310/Scripts/python.exe -m pytest tests/ -q
+PYTHONPATH= C:/tmp/venv_ci/Scripts/python.exe -m pytest tests/ -q
+```
+
+Mesure du 02/09/2026 : 1 264 verts avec la couche complete, 885 verts et 48
+sautes avec le noyau seul. J'ai casse les quatre jobs `noyau` en faisant
+valider la configuration contre le registre des lois, qui importe OpenTURNS
+-- une commande de plus l'aurait dit avant le push.
 
 ### 1. `PYTHONPATH` global eclipse les environnements virtuels
 

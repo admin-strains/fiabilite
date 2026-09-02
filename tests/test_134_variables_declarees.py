@@ -158,6 +158,29 @@ def _config(**variables):
     return schema.Configuration(modelname="x", variables=variables)
 
 
+def test_les_noms_declarables_coincident_avec_le_REGISTRE():
+    """LA duplication, et son temoin.
+
+    `_config/variables.LOIS_DECLARABLES` porte les NOMS ; `_model/lois.LOIS`
+    porte les fonctions. Les deux existent separement parce que
+    `Configuration.valider()` doit refuser une loi inconnue au chargement, et
+    que `_config/` ne peut pas dependre de `_model/lois.py` -- qui importe
+    OpenTURNS, absent de la couche noyau. Mesure du 02/09/2026 : les quatre
+    jobs `noyau` de l'integration continue sont tombes en
+    `ModuleNotFoundError: openturns` des que la validation a touche le
+    registre.
+
+    Une duplication sans temoin est une divergence en attente : ajouter une
+    loi dans `LOIS` sans la nommer dans `LOIS_DECLARABLES` la rendrait
+    inutilisable, et l'inverse ferait passer la validation puis lever a la
+    construction.
+    """
+    from lois import LOIS                                     # noqa: PLC0415
+    assert set(_variables.LOIS_DECLARABLES) == set(LOIS), (
+        "declarables=%s contre registre=%s"
+        % (sorted(_variables.LOIS_DECLARABLES), sorted(LOIS)))
+
+
 def test_une_loi_inconnue_est_refusee_AU_CHARGEMENT():
     """Et non au premier tirage. Le message liste les choix."""
     cfg = _config(fy={"loi": "fyd", "args": [550], "param": "P"})
