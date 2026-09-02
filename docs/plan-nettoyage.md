@@ -409,7 +409,7 @@ scripts AC fonctionnels pendant la transition.
 
 *Sortie : 0 golden modifie.*
 
-### Phase 3 — Extraire le noyau hors de `main` · 5 a 8 j
+### Phase 3 — Extraire le noyau hors de `main` · FAIT pour les cinq points
 
 Le gros morceau. Dans l'ordre, du moins couple au plus couple :
 
@@ -431,6 +431,34 @@ fiabilite elle-meme.
 *Sortie : les 61 fonctions communes aux deux AC existent en un seul
 exemplaire, importables et testees.*
 
+**Etat au 02/09/2026 au soir.** Les cinq points sont faits. Ce qui reste dans
+les deux scripts, mesure :
+
+| | flexion pure | Moulin Blanc |
+|---|---|---|
+| lignes | 1 080 | 949 |
+| fonctions imbriquees | 28 | 26 |
+| dont PURS DELEGUES (un seul `return` vers un module) | 18 | 18 |
+
+Les 18 delegues portent les **memes 18 noms** des deux cotes. Ils ne
+contiennent plus de logique : ce sont les etapes NOMMEES du deroule
+(`build_DOE`, `run_EFF`, `run_IS`, `print_visu`), et les retirer rendrait
+`main` moins lisible, pas plus. La duplication qu'ils representaient, en
+revanche, est fermee — voir le classement des 20 ecarts restants dans
+`tests/test_111_flux_des_etudes.py`.
+
+Trois pas de plus, le 02/09 au soir :
+
+* **la boucle EFF construit ses collaborateurs** au lieu de les recevoir. Le
+  critere EFF, l'encadrement, le choix du batch, le tirage de repli et la loi
+  jointe ne dependaient que de `cfg`, `n_var` et du predicteur : cinq
+  delegues et cinq injections de moins dans chaque etude ;
+* **les 45 copies locales `x = CFG.x`** sont parties. Aucune n'etait morte —
+  c'etait plus insidieux : une copie peut etre REAFFECTEE quand `CFG` est
+  immuable et imprime au journal. Trois l'etaient ;
+* **les variables aleatoires se declarent** dans le `.toml` (phase 4bis
+  ci-dessous).
+
 ### Phase 4 — Configuration declarative · FAIT
 
 Les 57 variables de `main` deviennent un schema valide (dataclass + fichier
@@ -446,6 +474,45 @@ configuration et un runner commun ». Le bloc de liaison
 (`n0 = CFG.n0`, ...) subsiste tant que les 2 700 lignes suivantes lisent des
 variables globales — il tombe avec la phase 5, quand `CFG` sera passe en
 argument.
+
+### Phase 4bis — Les VARIABLES declaratives · FAIT le 02/09/2026
+
+La phase 4 avait sorti les 57 reglages. Restait le catalogue des variables
+aleatoires -- sept lignes de Python, mais les seules qui nommaient encore
+`fc` et `fy`, et le dernier verrou pour qu'un collegue ecrive une etude sans
+toucher au code.
+
+**Arbitrage d'Agnes, option B'** : un NOM est une donnee et va dans le TOML ;
+une SELECTION (« les armatures de nuance fyd1 », 13 858 noms) est une
+propriete du modele et reste du code, dans `_model/selection.py`.
+
+    [variables.fy]
+    loi   = "fy"                  # un nom du registre `_model/lois.LOIS`
+    args  = [550]
+    param = "YIELD_STRENGTH"
+
+    # et dans l'etude, la seule ligne de Python qui reste :
+    group1 = _selection.armatures(cad, grade="fyd1")
+
+Ce que cela ferme :
+
+* `region_key` n'est plus declarable, il VAUT le nom de la variable -- le
+  doublon devient impossible ;
+* `_selection` REFUSE une selection vide, la ou `re.findall` rendait `[]` :
+  region de sensibilite vide, gradient nul, indiscernable d'une insensibilite
+  physique ;
+* une loi mal orthographiee, un `args` qui n'est pas une liste, une clef
+  inconnue : refusees au CHARGEMENT, et toutes d'un coup ;
+* `print_ana` devient `CFG.ana_actif`, une valeur derivee comme `eff_actif` :
+  l'intention dans le champ, l'effet dans la propriete.
+
+**Equivalence verifiee** : meme ordre, `sens` identique clef par clef, meme
+fonction de loi, et loi jointe identique AU BIT sur les quantiles. Run de
+bout en bout : `beta` inchange.
+
+`tests/test_135_ecrire_une_etude_en_toml.py` ecrit un `.toml` neuf, le fait
+tourner, et verifie qu'une valeur declaree change vraiment le resultat -- une
+declaration decorative serait pire qu'aucune.
 
 ### Phase 5 — Isoler Digital Structure · FAIT
 
@@ -665,17 +732,41 @@ branche `moulin_blanc` : ils partiront avec la convergence des branches
 
 ## 5. Ordre de grandeur
 
-| Phase | Charge | Nature |
-|---|---|---|
-| 1 — convergence des branches | — | decision (Semia + Mohamad) |
-| 2 — renommage | 1 j | mecanique, risque nul |
-| 3 — extraction du noyau | 5-8 j | le coeur du chantier |
-| 4 — configuration | 2 j | structurant |
-| 5 — isolation Digital Structure | 3 j | debloque la CI |
-| 6 — defauts | 3-5 j | qualite numerique |
-| 7 — performance | 2-4 j | mesure avant-apres |
-| 8 — doc et CI | 2 j | perennite |
-| | **18-25 j** | hors phase 1 |
+| Phase | Charge | Nature | Etat |
+|---|---|---|---|
+| 1 — convergence des branches | — | decision (Semia + Mohamad) | **a arbitrer** |
+| 2 — renommage | 1 j | mecanique, risque nul | fait |
+| 3 — extraction du noyau | 5-8 j | le coeur du chantier | fait |
+| 4 — configuration | 2 j | structurant | fait |
+| 4bis — variables declaratives | — | option B' | fait le 02/09 |
+| 5 — isolation Digital Structure | 3 j | debloque la CI | fait |
+| 6 — defauts | 3-5 j | qualite numerique | fait |
+| 7 — performance | 2-4 j | mesure avant-apres | fait |
+| 8 — doc et CI | 2 j | perennite | fait, CI verte |
+| | **18-25 j** | hors phase 1 | |
+
+**Seule la phase 1 reste**, et ce n'est pas une tache technique : c'est un
+arbitrage sur ce qu'on garde des branches de Semia et de Mohamad.
+
+### Ce qui reste ouvert, et qui appartient a Agnes
+
+Deux questions, chiffrees, qu'aucun code ne tranchera :
+
+1. **Le domaine `eff_bound` a +/- 6,0 coupe un second mode de ruine** du
+   Moulin Blanc, a `beta = 6,2755` en `u* = [-6,274 ; -0,114]` -- il passe a
+   0,274 de la borne. Il pese 0,110 % de la probabilite de defaillance, donc
+   rien numeriquement ; mais c'est un mode PHYSIQUE que le domaine, tel qu'il
+   est borne, ne sait pas representer. L'arbitrage du 26/08 opposait
+   « contenir le point de conception » a « garder les cones conditionnes »,
+   et les quatre coins ont finalement rendu la main a un rapport de 7,7.
+2. **L'optimisation de `theta` s'arrete sur un optimum LOCAL.** Mesure du
+   02/09 : 22 des 64 departs froids trouvent `J = -314,012` la ou la chaine
+   converge a `-311,235`, avec un LOO 2,5 fois meilleur en PCK et 7 fois en
+   GEPCK. Chercher plus largement deplacerait tous les goldens et `beta` --
+   classe « phase 6 ». Et une reserve mesuree va dans l'autre sens : sur
+   GEPCK, l'erreur aux points sonde se DEGRADE. Les deux criteres divergent,
+   et il faut choisir lequel suivre avant de toucher a quoi que ce soit.
+   Detail : `docs/diagnostic-optimisation-theta.md`.
 
 ---
 
