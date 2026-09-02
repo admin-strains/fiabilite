@@ -76,9 +76,10 @@ CONFIG = {"fc": {"loi": lois.loi_fc, "args": (48, 0.12)},
 def etude():
     cfg = schema.charger(os.path.join(_REPO, "studies",
                                       "pure_flexion_analytique.toml"))
-    chemin = os.path.join(cfg.storage, cfg.modelname + ".ds")
+    chemin = cfg.chemin_ds        # jamais recalcule, cf. test_128
     if not os.path.isdir(chemin):
-        pytest.skip("le modele de la flexion pure n'est pas sur ce poste")
+        pytest.skip("le modele de la flexion pure n'est ni dans le storage "
+                    "ni dans `modeles/` du depot")
     from fabrique import solveur as fabriquer
     sol = fabriquer(cfg.solveur, chemin_ds=chemin,
                     dossier_etude=os.path.join(_REPO, "pure_flexion"),
@@ -120,8 +121,7 @@ def _enrichir(cfg, sol, n_tours=5):
     xt, yt, ag = _plan.construire_plan_initial(
         cfg, cfg.n0, dist_jointe=_dist, params_names=PARAMS,
         bornes_min=bmin, bornes_max=bmax,
-        fichier_cache=os.path.join(cfg.storage, cfg.modelname + ".ds",
-                                   "_test130.json"),
+        fichier_cache=os.path.join(cfg.chemin_ds, "_test130.json"),
         signature={"test": 130}, executer_plan=evaluer_plan,
         moissonner=lambda SOL, noms: {}, tracer=lambda m: None)
 

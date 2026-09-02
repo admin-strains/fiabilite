@@ -49,6 +49,7 @@ import evaluation as _evaluation
 import plan as _plan
 import parallele as _parallele
 import schema as _schema
+import coherence as _coherence
 from fabrique import solveur as _fabriquer_solveur
 
 
@@ -74,7 +75,6 @@ if __name__ == '__main__':
     # (C:\_workingDir\_SF\test flexion\Moulinblanc), sans meme la variable
     # `path_dir` que l'etude de flexion pure utilisait.
     path_dir = os.path.dirname(os.path.abspath(__file__))
-    storage = CFG.storage
 
     # --- liaison aux noms attendus par la suite du script --------------------
     modele              = CFG.modele
@@ -132,6 +132,7 @@ if __name__ == '__main__':
     # nom lui est impose par le processus pere, pas par le fichier d'etude.
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or CFG.modelname
     _path_ds = CFG.chemin_ds     # UN SEUL endroit le calcule, cf. schema.py
+    storage = os.path.dirname(_path_ds)   # cf. _doe/parallele.py : dossier_modeles
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
@@ -339,9 +340,7 @@ if __name__ == '__main__':
     PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
     params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
     n_var = len(params_names)
-    _rk = [PARAM_CONFIG[p]['sens'].get('region_key') for p in params_names]
-    assert all(_rk), f"region_key manquant dans PARAM_CONFIG : {[p for p, r in zip(params_names, _rk) if not r]}"
-    assert len(set(_rk)) == len(_rk), f"region_key dupliques : {_rk}"
+    _coherence.verifier(PARAM_CONFIG, params_names, _path_ds)  # 0,36 s vs 466 s
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = None
 

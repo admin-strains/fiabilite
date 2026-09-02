@@ -44,11 +44,15 @@ pytest.importorskip("smt", reason="la couche etudes n'est pas installee")
 
 
 def _dossier_du_modele():
-    """Le `.ds` de l'etude, ou None si le modele n'est pas sur ce poste."""
+    """Le `.ds` de l'etude, ou None s'il n'est nulle part."""
     sys.path.insert(0, os.path.join(_REPO, "_config"))
     import schema
     cfg = schema.charger(ETUDE)
-    dossier = os.path.join(cfg.storage, cfg.modelname + ".ds")
+    # `cfg.chemin_ds` et non `join(storage, ...)` : sur une machine sans le
+    # storage du poste, le modele est celui du depot -- recalculer le chemin
+    # ici faisait sauter ce test en integration continue en annoncant un
+    # modele « absent » qui est pourtant versionne.
+    dossier = cfg.chemin_ds
     return dossier if os.path.isdir(dossier) else None
 
 
@@ -134,7 +138,7 @@ def test_aucun_second_fichier_de_cache_n_est_ecrit(journal):
     """
     dossier = _dossier_du_modele()
     if dossier is None:
-        pytest.skip("modele absent de ce poste")
+        pytest.skip("modele ni dans le storage ni dans `modeles/` du depot")
     final = os.path.join(dossier, "hf_grid_cache_final.json")
     assert not os.path.exists(final), (
         "%s existe : une SECONDE grille a ete calculee pour la meme coupe."

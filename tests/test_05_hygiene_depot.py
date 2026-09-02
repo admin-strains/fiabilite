@@ -17,8 +17,15 @@ import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+#: `_travail` : les copies ecrivables des modeles de reference, creees quand
+#: le `storage` du poste est absent (cf. `Configuration.chemin_ds`). Ce sont
+#: des donnees de RUN, pas du depot -- git les ignore, et les regles
+#: d'hygiene qui portent sur le contenu versionne n'ont pas a les voir. Sans
+#: cette ligne, la premiere execution sous repli faisait tomber
+#: `test_pas_de_fichier_texte_volumineux` sur le `dsCad.txt` du Moulin Blanc,
+#: 9,65 Mo -- une copie de la donnee deja exemptee sous `modeles`.
 IGNORES = {".git", "__pycache__", ".pytest_cache", "historique", "baselines",
-           ".vs", "output"}
+           ".vs", "output", "_travail"}
 
 
 def _fichiers(extensions):

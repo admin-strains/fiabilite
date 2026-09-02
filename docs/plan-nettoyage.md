@@ -627,9 +627,29 @@ Verifie : **276 verts / 9 sautes** avec la seule couche noyau, 312 avec la
 couche complete.
 
 Quatre combinaisons en CI (Linux et Windows, Python 3.10 et 3.13) pour le
-noyau, plus un job pour la couche des etudes. Ne peuvent PAS y tourner :
-Digital Structure (pas un paquet pip, licence) et le run de bout en bout sur
-l'etat limite analytique (il lit sa geometrie dans un `.ds` hors depot).
+noyau, plus un job pour la couche des etudes. Seul Digital Structure ne peut
+pas y tourner : ce n'est pas un paquet pip, et il demande une licence.
+
+**Le run de bout en bout sur l'etat limite analytique, lui, y tourne depuis le
+02/09/2026.** Il lisait sa geometrie dans un `.ds` hors depot ; les deux
+modeles sont maintenant versionnes dans `modeles/`, et `chemin_ds` y retombe
+quand le `storage` du poste est absent. Ce repli a coute deux corrections que
+la mesure seule a rendues visibles :
+
+* le chemin du modele se recalculait a CINQ endroits -- deux etudes,
+  `_doe/parallele.py`, et trois fichiers de tests. Chacun divergeait du vrai
+  chemin des que le repli jouait ; dans les tests, cela faisait sauter NEUF
+  verifications sur les cinq jobs, avec le message « le modele n'est pas sur
+  ce poste » alors qu'il est versionne ;
+* le repli rendait `modeles/` DIRECTEMENT, alors qu'un run ECRIT dans le
+  dossier du modele -- `patch_params` y reecrit `dsCad.txt` a chaque
+  evaluation, et le solveur y depose 36 fichiers. Un run aurait donc reecrit
+  un dossier suivi par git, et le run analytique de la CI y deposait deja ses
+  caches. Le repli rend maintenant une COPIE, sous `_travail/`.
+
+**La CI est verte sur les cinq jobs depuis le 02/09/2026** -- premier succes
+apres 33 echecs consecutifs que personne ne regardait. Detail des quatre
+marches dans le message du commit `9ed88aa` et les suivants.
 
 **Nettoyage du depot.** `C:tmpform_out.txt` et ses 3,7 Mo avaient deja ete
 retires en phase 3b (`3fa528b`), et `test_05` empeche le prochain fichier

@@ -496,9 +496,9 @@ def test_chemin_du_modele(etude):
         assert cfg.storage in cfg.chemin_ds, (
             "le storage existe : c'est lui qui doit servir, pas le repli.")
     else:
-        assert os.path.basename(os.path.dirname(cfg.chemin_ds)) == "modeles", (
-            "storage %r absent : le chemin devrait retomber sur `modeles/` du "
-            "depot, il vaut %r" % (cfg.storage, cfg.chemin_ds))
+        assert os.path.basename(os.path.dirname(cfg.chemin_ds)) == "_travail", (
+            "storage %r absent : le chemin devrait designer la COPIE de "
+            "travail, il vaut %r" % (cfg.storage, cfg.chemin_ds))
 
 
 # --------------------------------------------------------------------------- #
@@ -764,8 +764,12 @@ def test_une_etude_est_jouable_sans_le_storage_de_son_auteur(capsys):
                                storage=r"D:\ce\chemin\n\existe\pas")
     chemin = cfg.chemin_ds
     assert os.path.isdir(chemin), chemin
-    assert os.path.basename(os.path.dirname(chemin)) == "modeles", (
-        "le repli devrait designer `modeles/` du depot, il rend %r" % chemin)
+    assert os.path.basename(os.path.dirname(chemin)) == "_travail", (
+        "le repli devrait designer une COPIE du modele du depot, il rend %r"
+        % chemin)
+    assert os.path.isfile(os.path.join(chemin, "dsCad.txt")), (
+        "la copie de travail ne porte pas le modele : %s"
+        % os.listdir(chemin))
 
 
 def test_le_repli_sur_le_depot_s_ANNONCE(capsys):
@@ -778,11 +782,77 @@ def test_le_repli_sur_le_depot_s_ANNONCE(capsys):
     """
     cfg = Configuration(modelname="test_pure_flexion",
                                storage=r"D:\ce\chemin\n\existe\pas")
+    # L'annonce n'est faite QU'UNE FOIS par copie (`_REPLIS_ANNONCES`) :
+    # un run interroge `chemin_ds` trois fois, et le journal n'a pas a le
+    # repeter. Un test qui l'ignore passe ou tombe selon son ORDRE.
+    import schema as _s
+    _s._REPLIS_ANNONCES.clear()
     capsys.readouterr()
     _ = cfg.chemin_ds
     trace = capsys.readouterr().err
     assert "storage introuvable" in trace, trace
-    assert "modele repris du depot" in trace, trace
+    assert "modele de reference du depot" in trace, trace
+    assert "copie de travail" in trace, trace
+
+
+def test_le_repli_n_ECRIT_JAMAIS_dans_le_modele_de_reference():
+    r"""Le defaut du 02/09/2026 au matin, rendu impossible.
+
+    Le repli rendait `modeles/<nom>.ds` DIRECTEMENT. Or un run ECRIT dans le
+    dossier du modele : `patch_params` y reecrit `dsCad.txt` et `dsLoad.txt`
+    a chaque evaluation, et le solveur y depose maillages, caches et
+    journaux -- 36 fichiers mesures dans le dossier de travail du Moulin
+    Blanc. Le repli faisait donc ecrire un run dans un dossier VERSIONNE, et
+    rien ne le disait : en integration continue, le run analytique de la
+    flexion pure y deposait deja ses caches.
+
+    Ce temoin ecrit dans ce que `chemin_ds` rend, puis verifie que la
+    reference n'a pas bouge -- ni son contenu, ni sa liste de fichiers.
+    """
+    reference = os.path.join(REPO, "modeles", "test_pure_flexion.ds")
+    if not os.path.isdir(reference):
+        pytest.skip("le modele de reference n'est pas dans ce depot")
+    avant = {n: io.open(os.path.join(reference, n), "rb").read()
+             for n in sorted(os.listdir(reference))}
+
+    cfg = Configuration(modelname="test_pure_flexion",
+                        storage=r"D:\ce\chemin\n\existe\pas")
+    chemin = cfg.chemin_ds
+    assert os.path.abspath(chemin) != os.path.abspath(reference), (
+        "`chemin_ds` rend la reference elle-meme : un run la reecrirait.")
+
+    # ce que fait `patch_params` a chaque evaluation, et ce que depose le solveur
+    io.open(os.path.join(chemin, "dsCad.txt"), "a", encoding="utf-8").write(
+        os.linesep + "# ecriture de test" + os.linesep)
+    io.open(os.path.join(chemin, "_temoin_85.json"), "w", encoding="utf-8").write("{}")
+    try:
+        apres = {n: io.open(os.path.join(reference, n), "rb").read()
+                 for n in sorted(os.listdir(reference))}
+        assert set(apres) == set(avant), (
+            "le run a ajoute ou retire des fichiers dans le modele de "
+            "reference : %s" % (set(apres) ^ set(avant)))
+        modifies = [n for n in avant if avant[n] != apres[n]]
+        assert not modifies, (
+            "le modele de reference a ete REECRIT : %s. C'est un dossier "
+            "versionne." % ", ".join(modifies))
+    finally:
+        # la copie de travail est jetable, mais un `dsCad.txt` allonge fausserait
+        # les runs suivants : on le remet dans l'etat de la reference.
+        io.open(os.path.join(chemin, "dsCad.txt"), "wb").write(avant["dsCad.txt"])
+        p_temoin = os.path.join(chemin, "_temoin_85.json")
+        if os.path.exists(p_temoin):
+            os.remove(p_temoin)
+
+
+def test_la_copie_de_travail_est_ignoree_par_git():
+    """Une copie ecrivable posee dans le depot sans etre ignoree ferait
+    apparaitre 13 Mo de modele en fichiers non suivis -- et le prochain
+    `git add -A` les commiterait."""
+    ignore = io.open(os.path.join(REPO, ".gitignore"),
+                     encoding="utf-8", errors="replace").read()
+    assert "_travail/" in ignore, (
+        "`_travail/` n'est pas dans .gitignore : les copies de travail "
+        "apparaitraient comme fichiers non suivis.")
 
 
 def test_un_storage_present_est_TOUJOURS_prefere():

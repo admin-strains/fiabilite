@@ -26,6 +26,20 @@ Il etait de surcroit RECOPIE quatre fois : `run_DOE_parallel` et
 qui ne differaient que par le nom des sous-dossiers et la facon de ranger le
 resultat. Le tronc commun est ici, et il est testable : le lanceur de
 processus est un argument.
+
+`dossier_modeles` : LE DOSSIER QUI CONTIENT LE `.ds`, PAS LE `storage`
+----------------------------------------------------------------------
+Ce parametre s'appelait `storage`, et les etudes lui donnaient `CFG.storage`.
+Les deux coincidaient tant que le modele vivait dans le storage du poste. Ils
+ont cesse de coincider le 02/09/2026, quand `Configuration.chemin_ds` a recu
+un repli sur les modeles du depot : le run travaille alors ailleurs, et ces
+fonctions auraient continue de placer leurs workers dans un dossier absent --
+un cinquieme endroit ou le chemin du modele se recalculait, invisible au
+temoin `test_aucune_etude_ne_recalcule_le_chemin_du_modele`, qui ne regarde
+que les etudes.
+
+Le nom dit maintenant ce qui est attendu, et les etudes le derivent du chemin
+du modele : `os.path.dirname(_path_ds)`.
 """
 
 import json
@@ -61,14 +75,14 @@ def repartir(n_points, n_workers):
     return lots
 
 
-def preparer_worker(storage, base_ds, nom_worker, points, params_names):
+def preparer_worker(dossier_modeles, base_ds, nom_worker, points, params_names):
     """La copie isolee du modele, et la tache a y executer.
 
     Seuls `dsCad.txt` et `dsLoad.txt` sont copies : ce sont les deux fichiers
     que le solveur reecrit. Le reste du `.ds` (STEP, resultats) est relu
     depuis le modele principal, transmis par `_DOE_MAIN_DS`.
     """
-    wds = os.path.join(storage, nom_worker + ".ds")
+    wds = os.path.join(dossier_modeles, nom_worker + ".ds")
     os.makedirs(wds, exist_ok=True)
     for fichier in ("dsCad.txt", "dsLoad.txt"):
         shutil.copy2(os.path.join(base_ds, fichier), os.path.join(wds, fichier))
@@ -85,7 +99,7 @@ def preparer_worker(storage, base_ds, nom_worker, points, params_names):
     return wds, fichier_tache, fichier_sortie
 
 
-def moissonner_sorties(points, params_names, storage, base_modelname,
+def moissonner_sorties(points, params_names, dossier_modeles, base_modelname,
                        sous_dossier="_doe_workers", tolerance=1e-9,
                        tracer=_ecrire):
     """Les points qu'un run parallele INTERROMPU avait deja payes.
@@ -120,7 +134,7 @@ def moissonner_sorties(points, params_names, storage, base_modelname,
     `preparer_worker` : une sortie d'un autre run n'a aucune raison de porter
     les memes coordonnees, et sera ecartee ici -- avec une ligne pour le dire.
     """
-    dossier = os.path.join(storage, base_modelname + ".ds", sous_dossier)
+    dossier = os.path.join(dossier_modeles, base_modelname + ".ds", sous_dossier)
     if not os.path.isdir(dossier):
         return {}
     recoltes, ecartes = {}, 0
@@ -155,7 +169,7 @@ def moissonner_sorties(points, params_names, storage, base_modelname,
     return recoltes
 
 
-def evaluer_en_parallele(points, params_names, storage, base_modelname,
+def evaluer_en_parallele(points, params_names, dossier_modeles, base_modelname,
                          n_workers, script_etude, repo,
                          sous_dossier="_doe_workers", prefixe="doew",
                          nom_journal="_doe_worker.log", etiquette="DOE PARALLELE",
@@ -186,7 +200,7 @@ def evaluer_en_parallele(points, params_names, storage, base_modelname,
     ecriture, peuvent enfin etre verifiees.
     """
     lancer = lancer or _lancer_sous_processus
-    base_ds = os.path.join(storage, base_modelname + ".ds")
+    base_ds = os.path.join(dossier_modeles, base_modelname + ".ds")
     n_points = len(points)
 
     # Ce qui est deja paye ne repart pas au solveur. On garde les INDICES
@@ -215,7 +229,7 @@ def evaluer_en_parallele(points, params_names, storage, base_modelname,
         nom_worker = os.path.join(base_modelname + ".ds", sous_dossier,
                                   "%s%d" % (prefixe, w))
         wds, _tache, sortie = preparer_worker(
-            storage, base_ds, nom_worker,
+            dossier_modeles, base_ds, nom_worker,
             {i: points[i] for i in idxs}, params_names)
         env = dict(os.environ,
                    _DOE_WORKER=os.path.join(wds, "_doe_task.json"),
@@ -279,7 +293,7 @@ def _lancer_sous_processus(argv, env, cwd, chemin_journal):
     return _ProcessusJournalise(argv, env, cwd, chemin_journal)
 
 
-def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
+def evaluer_plan_en_parallele(SOL, params_names, dossier_modeles, base_modelname,
                               n_workers, script_etude, repo, lancer=None):
     """Un plan d'experiences reparti, puis RECOPIE dans `SOL`.
 
@@ -298,7 +312,7 @@ def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
     `_doe/plan.assembler_plan` decide ensuite quoi en faire, selon
     `exclure_points_sans_gradient`.
     """
-    resultats = evaluer_en_parallele(SOL, params_names, storage,
+    resultats = evaluer_en_parallele(SOL, params_names, dossier_modeles,
                                      base_modelname, n_workers,
                                      script_etude=script_etude, repo=repo,
                                      lancer=lancer)
@@ -309,7 +323,7 @@ def evaluer_plan_en_parallele(SOL, params_names, storage, base_modelname,
     return SOL
 
 
-def evaluer_points_en_parallele(u_points, dist, params_names, storage,
+def evaluer_points_en_parallele(u_points, dist, params_names, dossier_modeles,
                                 modelname, n_workers, script_etude, repo,
                                 lancer=None, config_identique=False):
     """Des points de l'espace STANDARD, repartis sur plusieurs solveurs.
@@ -347,12 +361,12 @@ def evaluer_points_en_parallele(u_points, dist, params_names, storage,
         points.append({p: float(x[j]) for j, p in enumerate(params_names)})
     if config_identique:
         # Greffe : le pool saute ensuite ce qui porte deja `g`.
-        for i, rendu in moissonner_sorties(points, params_names, storage,
+        for i, rendu in moissonner_sorties(points, params_names, dossier_modeles,
                                            modelname,
                                            sous_dossier="_hf_workers").items():
             points[i].update(rendu)
     resultats = evaluer_en_parallele(
-        points, params_names, storage, modelname, n_workers,
+        points, params_names, dossier_modeles, modelname, n_workers,
         script_etude=script_etude, repo=repo,
         sous_dossier="_hf_workers", prefixe="hfw",
         nom_journal="_hf_worker.log", etiquette="HF GRID PARALLELE",

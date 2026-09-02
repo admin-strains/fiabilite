@@ -106,6 +106,84 @@ SANS_EFFET = {
 }
 
 
+#: Les copies dont le repli a DEJA ete annonce, pour ne le dire qu'une fois.
+#:
+#: `chemin_ds` est une propriete, et un run l'interroge trois fois -- mesure
+#: le 02/09/2026 : le resume de configuration, la trace JSON, et l'etude
+#: elle-meme. Sans ce garde, un run affichait douze lignes de journal pour
+#: un seul fait. Les tests qui verifient l'annonce doivent le vider.
+_REPLIS_ANNONCES = set()
+
+
+def _copie_de_travail(reference, storage_absent, racine_travail):
+    """Copie ecrivable du modele de reference, sous `_travail/`.
+
+    POURQUOI UNE COPIE ET NON LA REFERENCE
+    ---------------------------------------
+    Voir `Configuration.chemin_ds`. En un mot : un run ECRIT dans le dossier
+    du modele, et `modeles/` est versionne.
+
+    La copie est rafraichie fichier par fichier depuis la reference des que
+    celle-ci est plus recente ou de taille differente. Jamais l'inverse : ce
+    qu'un run a ecrit dans la copie ne remonte pas dans le depot.
+
+    Les fichiers que le run AJOUTE -- maillages, caches, journaux -- sont
+    laisses en place d'un run a l'autre : c'est ce que fait aussi un
+    `storage` normal, et le cache de DOE n'a d'interet qu'a ce prix.
+
+    CE QUI RESTE DE L'ETAT DU RUN PRECEDENT, ET POURQUOI ON N'Y TOUCHE PAS
+    ----------------------------------------------------------------------
+    `dsCad.txt` garde donc les valeurs qu'y a laissees la derniere
+    evaluation. Le storage du poste est dans le meme etat -- mesure du
+    02/09/2026 : sa copie du modele de flexion pure porte
+    `fy = 412,5527620643` la ou la reference porte 550. Rafraichir a chaque
+    demarrage serait plus propre, mais `chemin_ds` est interroge par les
+    sous-processus des workers de DOE parallele, et une reecriture du modele
+    principal pendant que le parent en tire les copies de worker serait une
+    course. Le repli reproduit donc le comportement du storage, ni pire ni
+    meilleur.
+
+    Cet etat residuel est SANS EFFET aujourd'hui : ce que les solveurs lisent
+    du modele -- `b`, `h`, `L`, `phi`, `gamma_c`, `gamma_s`, `F` -- est
+    disjoint de ce que `patch_params` reecrit, `fc` et `fy`. Une etude qui
+    rendrait aleatoire une grandeur GEOMETRIQUE ferait tomber cette
+    disjonction, et un run lirait alors le nominal laisse par le precedent.
+    """
+    import shutil
+
+    copie = os.path.join(racine_travail, os.path.basename(reference))
+    dire = copie not in _REPLIS_ANNONCES
+    _REPLIS_ANNONCES.add(copie)
+    if dire:
+        print("[config] storage introuvable : %s" % storage_absent,
+              file=_sys.stderr)
+        print("[config] --> modele de reference du depot : %s" % reference,
+              file=_sys.stderr)
+
+    if not os.path.isdir(copie):
+        os.makedirs(copie, exist_ok=True)
+    neufs = []
+    for nom in sorted(os.listdir(reference)):
+        src = os.path.join(reference, nom)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(copie, nom)
+        if os.path.isfile(dst):
+            a, b = os.stat(src), os.stat(dst)
+            if a.st_size == b.st_size and a.st_mtime <= b.st_mtime:
+                continue
+        shutil.copy2(src, dst)
+        neufs.append(nom)
+
+    if dire:
+        print("[config] --> copie de travail : %s%s"
+              % (copie, " (%d fichier(s) rafraichi(s))" % len(neufs) if neufs
+                 else ""), file=_sys.stderr)
+        print("[config]     la reference du depot n'est PAS ecrite -- un run "
+              "reecrit dsCad.txt a chaque evaluation.", file=_sys.stderr)
+    return copie
+
+
 @dataclass(frozen=True)
 class Configuration:
     """Parametres d'une etude. Immuable : un run ne modifie pas sa configuration."""
@@ -394,18 +472,34 @@ class Configuration:
 
         Un repli SILENCIEUX serait pire que l'erreur : il ferait tourner un
         calcul sur un modele que l'utilisateur ne croit pas utiliser.
+
+        ET LE REPLI REND UNE COPIE, JAMAIS LA REFERENCE
+        -----------------------------------------------
+        Un run ECRIT dans le dossier du modele. `patch_params` y reecrit
+        `dsCad.txt` et `dsLoad.txt` A CHAQUE EVALUATION -- c'est la raison
+        pour laquelle le modele est sauvegarde avant un run -- et le solveur
+        y depose ses maillages et ses caches. Mesure du 02/09/2026 sur le
+        dossier de travail du Moulin Blanc : 36 fichiers, dont les deux du
+        modele lui-meme.
+
+        Rendre `modeles/` directement, comme ce repli le faisait depuis le
+        02/09/2026 au matin, revenait donc a faire ecrire un run dans un
+        dossier VERSIONNE. Le premier appel solveur aurait recrit un fichier
+        suivi par git, sans que rien ne le dise ; en integration continue, le
+        run analytique y deposait deja ses caches.
+
+        La reference reste donc intacte, et le run travaille sur une copie
+        sous `_travail/` -- ignoree par git. La copie est rafraichie depuis
+        la reference quand celle-ci est plus recente, jamais l'inverse.
         """
         vise = os.path.join(self.storage, self.modelname + ".ds")
         if os.path.isdir(vise):
             return vise
         _repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        secours = os.path.join(_repo, "modeles", self.modelname + ".ds")
-        if os.path.isdir(secours):
-            print("[config] storage introuvable : %s" % self.storage,
-                  file=_sys.stderr)
-            print("[config] --> modele repris du depot : %s" % secours,
-                  file=_sys.stderr)
-            return secours
+        reference = os.path.join(_repo, "modeles", self.modelname + ".ds")
+        if os.path.isdir(reference):
+            return _copie_de_travail(reference, self.storage,
+                                     os.path.join(_repo, "_travail"))
         return vise                      # inchange : l'erreur viendra apres
 
     @property

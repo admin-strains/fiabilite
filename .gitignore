@@ -45,3 +45,8 @@ baselines/*/run_*.jsonl
 
 # residus d installation editable (pip install -e .)
 *.egg-info/
+
+# Copies de travail des modeles de reference (voir `Configuration.chemin_ds`) :
+# quand le `storage` du poste est absent, un run travaille ici et non dans
+# `modeles/`, qui est versionne et qu'un run reecrirait.
+_travail/

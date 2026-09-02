@@ -10,7 +10,7 @@ silencieuses ou tardives :
 * un parametre absent du modele n'etait PAS ecrit par `patch_params`, et le
   solveur evaluait un point qui n'etait pas celui demande. Ferme le
   29/08/2026 -- mais le refus arrive au PREMIER appel solveur, soit 466 s sur
-  le Moulin Blanc. Ce fichier le dit en une seconde ;
+  le Moulin Blanc. C'est desormais dit en 0,36 s, cf. plus bas ;
 * la flexion pure FABRIQUAIT les noms d'armatures -- `[f"HA{i+1}" for i in
   range(n)]` -- au lieu de les lire, la ou le Moulin Blanc les lit. Les deux
   listes coincident sur le modele d'aujourd'hui (verifie : 24 noms, identiques
@@ -30,8 +30,20 @@ Une armature hors des deux groupes garderait sa limite d'elasticite nominale
 sans etre une variable aleatoire -- un trou de modelisation invisible dans les
 resultats.
 
-CES TESTS SE TAISENT SI LE MODELE N'EST PAS SUR LE POSTE. C'est le prix d'un
-controle qui porte sur des donnees, pas sur du code.
+LE CONTROLE DES VARIABLES A DEMENAGE DANS `_config/coherence.py`, appele en
+tete de chaque run et verifie par `tests/test_131_coherence_etude_modele.py`.
+Il y est plus fort : il lit le dictionnaire REELLEMENT construit, la ou ce
+fichier ne voit que ce qui est ECRIT dans le source. Le garder ici aussi
+aurait donne DEUX implementations de la meme regle, qui divergeraient.
+
+Ce qui reste ici ne se verifie que sur le SOURCE des etudes -- qu'un nom
+d'armature soit LU du modele et non fabrique -- ou sur le modele seul.
+
+CES TESTS PORTENT SUR DES DONNEES, PAS SUR DU CODE : ils ont besoin du `.ds`.
+Ils le prennent par `Configuration.chemin_ds`, qui retombe sur les modeles
+versionnes du depot quand le storage du poste est absent -- ils tournent donc
+aussi en integration continue. Ils ne se taisent que si le modele n'est ni
+dans le storage ni dans `modeles/`.
 """
 
 import ast
@@ -56,10 +68,16 @@ ETUDES = {
 
 
 def _modele(toml):
-    """Le dossier `.ds` de l'etude, ou None s'il n'est pas sur ce poste."""
+    """Le dossier `.ds` de l'etude, ou None s'il n'est nulle part."""
     import schema
     cfg = schema.charger(os.path.join(_REPO, toml))
-    dossier = os.path.join(cfg.storage, cfg.modelname + ".ds")
+    # `cfg.chemin_ds` et non `join(storage, ...)`. Mesure du 02/09/2026 :
+    # ce recalcul faisait sauter NEUF tests de ce fichier sur les cinq jobs
+    # d'integration continue, avec le message « le modele n'est pas sur ce
+    # poste » -- alors que les deux modeles sont versionnes dans `modeles/`
+    # et donnent exactement les memes reponses (15 346 armatures, 13 858 +
+    # 1 488, aucune orpheline).
+    dossier = cfg.chemin_ds
     return dossier if os.path.isdir(dossier) else None
 
 
@@ -98,42 +116,13 @@ def etude(request):
     script, toml = ETUDES[request.param]
     dossier = _modele(toml)
     if dossier is None:
-        pytest.skip("le modele de %s n'est pas sur ce poste" % request.param)
+        pytest.skip("le modele de %s n'est ni dans le storage ni dans "
+                    "`modeles/` du depot" % request.param)
     return request.param, script, dossier
 
 
 # --------------------------------------------------------------------------- #
-# 1. CHAQUE VARIABLE DECLAREE EXISTE DANS LE MODELE                            #
-# --------------------------------------------------------------------------- #
-def test_chaque_variable_est_un_parametre_du_modele(etude):
-    """La precondition de `patch_params`, verifiee en une seconde plutot
-    qu'au premier appel solveur -- 466 s sur le Moulin Blanc."""
-    nom, script, dossier = etude
-    declarees = _variables_declarees(script)
-    assert declarees, "aucune variable trouvee : l'analyse a rate sa cible"
-
-    texte = _lire(dossier, "dsCad.txt") + "\n" + _lire(dossier, "dsLoad.txt")
-    absentes = [v for v in declarees
-                if not re.search(r"(?m)^" + re.escape(v) + r"\s*=", texte)]
-    assert not absentes, (
-        "%s : %s declaree(s) dans PARAM_CONFIG et absente(s) du modele.\n"
-        "`patch_params` refuserait, mais seulement au premier appel solveur."
-        % (nom, ", ".join(absentes)))
-
-
-def test_aucune_variable_n_est_definie_deux_fois(etude):
-    """`patch_params` ne reecrit que la PREMIERE occurrence de chaque
-    fichier : deux definitions, et on ne sait pas laquelle le solveur lit."""
-    nom, script, dossier = etude
-    for fichier in ("dsCad.txt", "dsLoad.txt"):
-        texte = _lire(dossier, fichier)
-        for v in _variables_declarees(script):
-            n = len(re.findall(r"(?m)^" + re.escape(v) + r"\s*=", texte))
-            assert n <= 1, "%s : %s defini %d fois dans %s" % (nom, v, n, fichier)
-
-
-# --------------------------------------------------------------------------- #
-# 2. LES ARMATURES DESIGNEES EXISTENT                                          #
+# 1. LES ARMATURES DESIGNEES EXISTENT                                          #
 # --------------------------------------------------------------------------- #
 def test_les_noms_d_armatures_sont_LUS_et_non_fabriques(etude):
     """La flexion pure les fabriquait -- `[f"HA{i+1}" ...]`. Les deux listes
@@ -161,7 +150,7 @@ def test_le_modele_porte_bien_des_armatures_nommees(etude):
 
 
 # --------------------------------------------------------------------------- #
-# 3. LE MOULIN BLANC : LES DEUX GROUPES PARTITIONNENT LES ARMATURES            #
+# 2. LE MOULIN BLANC : LES DEUX GROUPES PARTITIONNENT LES ARMATURES            #
 # --------------------------------------------------------------------------- #
 def test_les_deux_groupes_d_acier_couvrent_TOUTES_les_armatures():
     """Une armature hors des deux groupes garderait sa limite nominale sans
@@ -172,7 +161,8 @@ def test_les_deux_groupes_d_acier_couvrent_TOUTES_les_armatures():
     """
     dossier = _modele("studies/moulin_blanc.toml")
     if dossier is None:
-        pytest.skip("le modele du Moulin Blanc n'est pas sur ce poste")
+        pytest.skip("le modele du Moulin Blanc n'est ni dans le storage ni "
+                    "dans `modeles/` du depot")
     texte = _lire(dossier, "dsCad.txt")
     tous = set(re.findall(r"REBAR\('([^']+)'", texte))
     g1 = set(re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", texte))

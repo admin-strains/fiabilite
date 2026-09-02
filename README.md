@@ -184,6 +184,8 @@ phase 8 un tel import interrompait la COLLECTE de pytest -- la suite entiere
 cessait de tourner au lieu de sauter un fichier.
 
 Digital Structure n'etant pas un paquet pip, les tests qui en dependent
-sautent proprement. Le run de bout en bout sur l'etat limite analytique ne
-peut pas tourner en CI non plus : il lit sa geometrie dans un modele `.ds`
-qui n'est pas dans le depot.
+sautent proprement. Le run de bout en bout sur l'etat limite analytique, lui,
+**tourne en CI** depuis le 02/09/2026 : les deux modeles sont versionnes dans
+`modeles/`, et `Configuration.chemin_ds` y retombe quand le `storage` du poste
+est absent. Le run travaille alors sur une COPIE, sous `_travail/` -- un run
+reecrit `dsCad.txt` a chaque evaluation, et `modeles/` est versionne.
