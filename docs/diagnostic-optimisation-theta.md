@@ -246,3 +246,38 @@ FORM), et elle tourne en **3,9 s** sans Digital Structure.
 Ce qui manquerait est un **second** cas GEPCK, différent : un seul cas peut
 cacher un défaut — `linear` et `flexion` se comportent d'ailleurs de façon
 opposée sur tout ce diagnostic.
+
+---
+
+## 8. Ce qui reste ouvert : le choix du bassin d'attraction
+
+Le gradient analytique a rendu `theta` reproductible **à bassin donné**. Il ne
+garantit pas *quel* bassin est atteint. Mesure du 02/09/2026 sur
+`flexion/PCK`, même code, même plan :
+
+| plateforme | θ | LOO |
+|---|---|---|
+| poste de référence (windows) | [0.3847 ; 100.0] | 1.265825e-09 |
+| runner ubuntu py3.10 | [0.3847 ; 100.0] | 1.265825e-09 |
+| runner windows py3.10 et py3.13 | [0.3847 ; 100.0] | 1.265825e-09 |
+| **runner ubuntu py3.13** | **[0.0100 ; 6.55]** | **3.171187e-09** |
+
+Quatre plateformes sur cinq trouvent le meilleur optimum, une trouve l'autre.
+Les deux sont d'excellents métamodèles — 1e-09 des deux côtés, un facteur 2,5
+entre eux — mais ce ne sont pas les mêmes.
+
+**Ce n'est ni une tolérance trop serrée ni un défaut de code.** C'est un choix
+discret, en amont de `theta` : il se joue dans `differential_evolution` ou
+dans la chaîne de warm-start LARS, avant que L-BFGS-B n'affine.
+
+`tests/test_30_surrogate_golden.py` le déclare
+(`BASSIN_DEPENDANT_DE_LA_MACHINE`) et vérifie sur ce cas la **qualité** du
+modèle — LOO sous 1e-8, ce qui est vrai des deux côtés — au lieu de le
+comparer au golden. Il ne tranche pas la question.
+
+### Ce qu'il faudrait mesurer pour la fermer
+
+Instrumenter la chaîne de warm-start sur `flexion/PCK` aux deux endroits, et
+voir **à quelle troncature LARS** les deux plateformes se séparent — comme
+cela a été fait le 02/09 pour le gradient. Si la séparation est déjà présente
+à la sortie de `differential_evolution`, c'est lui ; sinon c'est la chaîne.
