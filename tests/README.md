@@ -95,19 +95,34 @@ pour `FlexionLS`, une SURFACE pour `ConsoleLS`, par L-BFGS-B a gradient
 analytique -- et HL-RF (`reference/form.py`). Un oracle isole serait
 invérifiable ; deux qui concordent le sont.
 
-## Etat mesure sur `cleaning` (25/08/2026)
+## Etat mesure (02/09/2026)
 
 | | PCK | GEPCK |
 |---|---|---|
-| LOO (flexion, DOE 24) | 1.390e-09 | 1.587e-09 |
-| polynomes retenus | 9 | 7 |
-| ecart sur `beta` | **0.011 %** | **1.30 %** |
+| LOO (flexion, DOE 24) | 1.266e-09 | **7.619e-11** |
+| polynomes retenus | 9 | 9 |
+| ecart sur `beta` | 0.0027 % | 0.0072 % |
+| interpolation au DOE | 3.2e-13 | 2.8e-09 |
+
+### Ce que ce tableau disait le 25/08, et ce qui l'a change
+
+| | PCK | GEPCK |
+|---|---|---|
+| ecart sur `beta` | 0.011 % | **1.30 %** |
 | interpolation au DOE | 5.3e-07 | **3.0e-03** |
 
-GEPCK dispose de **plus** d'information que PCK (valeurs + gradients) et
-rend un resultat **cent fois moins precis**. Les deux lignes en gras sont
-tracees dans `test_50_known_defects.py`. A traiter dans le plan de
-nettoyage, pas en passant.
+« GEPCK dispose de PLUS d'information que PCK -- valeurs et gradients -- et
+rend un resultat CENT FOIS moins precis. » C'etait le defaut le plus voyant
+du depot, et il est ferme : **la pepite** (phase 6, `Nugget` de 0,0 a 1e-8)
+a divise l'erreur d'interpolation par un million, et le **gradient
+analytique de la vraisemblance** (02/09) a fait le reste. GEPCK interpole
+maintenant son plan a 2,8e-09 et son LOO est 17 fois meilleur que celui de
+PCK -- l'ordre attendu, puisqu'il en sait plus.
+
+Reste que sur `flexion` l'ecart sur `beta` est du meme ordre pour les deux
+(2,7e-05 contre 7,2e-05) : ce cas est trop facile pour departager. C'est
+`console`, le troisieme etat limite, qui tranche -- 2,24 % contre 0,97 % a
+24 points, et le rapport monte a 4,0 a 60 points. Voir plus haut.
 
 ## Regenerer un golden
 
