@@ -302,3 +302,131 @@ def test_sur_le_cas_lineaire_il_n_y_a_vraiment_rien_a_identifier():
     assert loo < 1e-20, (
         "LOO = %.3e sur le cas lineaire : la PCE ne le represente plus "
         "exactement, et l'argument de degenerescence tombe." % loo)
+
+
+# --------------------------------------------------------------------- #
+# 4. LE DEFAUT EST D'ORIGINE -- et le nettoyage l'a REVELE, pas cree
+# --------------------------------------------------------------------- #
+#: Ce que `branche3.py` portait a `8f6e229~1`, AVANT tout nettoyage. Verifie
+#: ligne a ligne le 02/09/2026 :
+#:
+#:   IDENTIQUE  `minimize(J, theta0, method='L-BFGS-B', bounds=...,
+#:              options={'maxiter': 400, 'ftol': 1e-12, 'gtol': 1e-8})`,
+#:              SANS `jac`.
+#:   IDENTIQUE  bornes [[0.01]*M, [100]*M], theta0 = moyenne geometrique.
+#:   CHANGE     la pepite : `'Nugget': 0.0` a l'origine, 1e-8 depuis la
+#:              phase 6 -- ajoutee pour corriger les defauts 2 et 3, avec
+#:              des criteres chiffres d'avance et tenus.
+PEPITE_D_ORIGINE = 0.0
+
+#: Mesure du 02/09/2026, mode `optimal`, appels a L-BFGS-B rendant leur point
+#: de depart INCHANGE :
+#:
+#:     cas              pepite 0.0      pepite 1e-8
+#:     flexion/PCK      8/9             3/9
+#:     flexion/GEPCK    9/9             2/9
+#:     linear/PCK       3/3             0/3
+#:     linear/GEPCK     3/3             3/3
+#:
+#: 23 appels sur 24 immobiles a l'origine, contre 8 sur 24 aujourd'hui. Et
+#: le conditionnement de R passe de 3.75e+14 a 2.40e+09, le bruit de J de
+#: 1.04e-03 a 3.05e-08.
+IMMOBILES_A_L_ORIGINE = 23
+IMMOBILES_SUR = 24
+
+
+def _immobiles(pepite, case="flexion", kind="PCK"):
+    """Combien d'appels a L-BFGS-B rendent leur point de depart inchange."""
+    import json
+    import kernels as _kern
+    import fit as _fit
+    import api as _api
+    import kriging as _kr
+    from scipy.optimize import minimize
+    from reference.limit_states import CASES
+
+    anciens = (_kern.PEPITE_PAR_DEFAUT, _fit.PEPITE_PAR_DEFAUT,
+               _api.PEPITE_PAR_DEFAUT)
+    vrai = _kr.kriging_optimize_theta
+    etats = []
+
+    def espion(params, theta0, bornes, method="gradbased"):
+        if method.lower() != "gradbased":
+            return vrai(params, theta0, bornes, method)
+        theta0 = np.asarray(theta0, float)
+        lb, ub = bornes[0, :], bornes[1, :]
+
+        def J(t):
+            return _kr.uq_Kriging_eval_J_of_theta_ML(t, params)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = minimize(J, theta0, method="L-BFGS-B",
+                           bounds=list(zip(lb, ub)),
+                           options={"maxiter": 400, "ftol": 1e-12,
+                                    "gtol": 1e-8})
+        etats.append(float(np.max(np.abs(res.x - theta0)
+                                  / np.maximum(np.abs(theta0), 1e-30))))
+        return res.x, res.fun, int(res.success)
+
+    _kern.PEPITE_PAR_DEFAUT = _fit.PEPITE_PAR_DEFAUT = pepite
+    _api.PEPITE_PAR_DEFAUT = pepite
+    _kr.kriging_optimize_theta = espion
+    _fit.kriging_optimize_theta = espion
+    try:
+        with open(os.path.join(_REPO, "tests", "golden", case + ".json"),
+                  encoding="utf-8") as fh:
+            ref = json.load(fh)
+        opts = {"Mode": "optimal",
+                "PCE": {"Degree": list(range(1, ref["max_degree"] + 1)),
+                        "Method": "LARS"}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            harness.fit(kind, np.asarray(ref["doe"]), CASES[case](), opts=opts)
+    finally:
+        _kern.PEPITE_PAR_DEFAUT, _fit.PEPITE_PAR_DEFAUT, _api.PEPITE_PAR_DEFAUT = anciens
+        _kr.kriging_optimize_theta = vrai
+        _fit.kriging_optimize_theta = vrai
+    return sum(1 for b in etats if b < 1e-12), len(etats)
+
+
+def test_a_l_origine_l_optimiseur_de_theta_ne_tournait_PAS():
+    """LE fait qui repond a « le bug est-il d'origine ? ».
+
+    Il l'est -- le code de l'optimiseur est identique au caractere pres. Mais
+    sa consequence etait INVISIBLE : avec la pepite d'origine (0.0), R est
+    conditionne a 3.75e+14, le bruit de J vaut 1.04e-03, le gradient au pas
+    de scipy vaut 7.8e+04 contre une pente de 8.4 -- et L-BFGS-B echoue
+    IMMEDIATEMENT a chaque appel.
+
+    Le mode `optimal` etait donc inerte : theta valait la sortie de
+    `differential_evolution`, traversant la chaine de warm-start sans etre
+    touchee. Deterministe, donc reproductible -- et jamais optimisee.
+
+    La pepite ajoutee en phase 6 pour corriger les defauts 2 et 3 a
+    partiellement REVEILLE l'optimiseur. C'est la que
+    l'irreproductibilite est apparue : le nettoyage n'a pas cree le defaut,
+    il a rendu vivant ce qui etait mort.
+    """
+    immobiles, total = _immobiles(PEPITE_D_ORIGINE)
+    assert total > 0
+    assert immobiles >= total - 1, (
+        "avec la pepite d'origine (0.0), %d appels sur %d bougent encore. La "
+        "mesure du 02/09/2026 en donnait au plus un. Si l'optimiseur s'est "
+        "mis a fonctionner, la lecture de tout ce fichier change."
+        % (total - immobiles, total))
+
+
+def test_aujourd_hui_l_optimiseur_bouge_vraiment():
+    """La contrepartie : avec la pepite actuelle, L-BFGS-B avance.
+
+    C'est un PROGRES -- un optimiseur qui optimise vaut mieux qu'un
+    optimiseur inerte -- et c'est aussi ce qui a rendu le resultat dependant
+    de la machine, puisqu'il avance en suivant un gradient qui est du bruit.
+    Les deux faits vont ensemble et doivent etre lus ensemble.
+    """
+    immobiles, total = _immobiles(1e-8)
+    assert total > 0
+    assert immobiles < total, (
+        "les %d appels sont immobiles avec la pepite actuelle : l'optimiseur "
+        "serait redevenu inerte comme a l'origine." % total)
