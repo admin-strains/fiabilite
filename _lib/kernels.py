@@ -814,3 +814,133 @@ def dR_dtheta(X, theta, options):
         # dh_i/dtheta_i = -h_i / theta_i
         sorties.append(der[:, :, i] * (-h[:, :, i] / theta[i]) * autres)
     return sorties
+
+
+# =============================================================================
+# Derivees de la matrice de Gram AUGMENTEE (GEPCK) par rapport a theta
+#
+# CE QUI REND CECI SUR
+# ---------------------
+# Le noyau est SEPARABLE : chaque bloc (der, dp) de R_tilde est un simple
+# PRODUIT sur les dimensions,
+#
+#     bloc(der, dp) = prod_j t_j,   avec pour chaque dimension j
+#         t_j = u                si j n'est ni `der` ni `dp`
+#         t_j = du/dx1           si j == der != dp
+#         t_j = du/dx2 = -du/dx1 si j == dp  != der
+#         t_j = d2u/dx1 dx2      si j == der == dp
+#
+# Donc  d(bloc)/dtheta_m = (dt_m/dtheta_m) * prod_{j != m} t_j.
+#
+# Il n'y a donc PAS douze formules par famille a deriver a la main, mais
+# QUATRE fonctions scalaires et leurs derivees, plus une regle de produit
+# unique. C'est ce qui rend la verification exhaustive possible : chaque
+# combinaison (der, dp, m) est comparee aux differences finies dans
+# `tests/test_33_gradient_gepck.py`.
+# =============================================================================
+
+def _termes_1d(delta, theta, famille):
+    """Les quatre `t` d'une dimension, et leurs derivees en theta.
+
+    Rend `(t0, t1, t11, d0, d1, d11)` :
+        t0  = u                    d0  = du/dtheta
+        t1  = du/dx1               d1  = d(du/dx1)/dtheta
+        t11 = d2u/dx1 dx2          d11 = d(d2u/dx1 dx2)/dtheta
+
+    `du/dx2 = -du/dx1` -- u ne depend que de `delta = x1 - x2` -- donc le
+    troisieme terme se deduit du deuxieme par un signe, et n'est pas
+    duplique ici.
+    """
+    f = famille.lower()
+    if f == 'matern-5_2':
+        r5 = np.sqrt(5.0)
+        a = r5 * np.abs(delta) / theta
+        e = np.exp(-a)
+        t0 = (1.0 + a + a ** 2 / 3.0) * e
+        t1 = -(5.0 / (3.0 * theta ** 2)) * delta * (1.0 + a) * e
+        t11 = (5.0 / (3.0 * theta ** 2)) * (1.0 + a - a ** 2) * e
+        d0 = (a ** 2 / (3.0 * theta)) * (1.0 + a) * e
+        d1 = -(5.0 / 3.0) * delta * e * (a ** 2 - 2.0 - 2.0 * a) / theta ** 3
+        d11 = -(5.0 / 3.0) * e * (a ** 3 - 5.0 * a ** 2 + 2.0 * a + 2.0) / theta ** 3
+        return t0, t1, t11, d0, d1, d11
+    if f == 'gaussian':
+        e = np.exp(-0.5 * (delta / theta) ** 2)
+        t0 = e
+        t1 = -(delta / theta ** 2) * e
+        t11 = (1.0 / theta ** 2 - delta ** 2 / theta ** 4) * e
+        d0 = (delta ** 2 / theta ** 3) * e
+        d1 = -delta * e * (delta ** 2 / theta ** 5 - 2.0 / theta ** 3)
+        d11 = ((-2.0 / theta ** 3 + 4.0 * delta ** 2 / theta ** 5) * e
+               + (1.0 / theta ** 2 - delta ** 2 / theta ** 4)
+               * (delta ** 2 / theta ** 3) * e)
+        return t0, t1, t11, d0, d1, d11
+    raise ValueError(
+        "derivee en theta non ecrite pour la famille %r. Familles couvertes : "
+        "%s." % (famille, ", ".join(FAMILLES_AVEC_DERIVEE_THETA)))
+
+
+def dRtilde_dtheta(X, theta, options):
+    """`dR_tilde/dtheta_m` pour chaque m, sur la Gram AUGMENTEE de GEPCK.
+
+    Rend une liste de M matrices `(n*(M+1), n*(M+1))`, dans le meme ordre de
+    blocs que `uq_assemble_global_Kernel` : dimension-major, `der = rb - 1`
+    pour le point-LIGNE, `dp = cb - 1` pour le point-COLONNE. Cette
+    convention a ete tranchee par differences finies le 26/08/2026 (defaut 4
+    du plan) ; on la SUIT, on ne la redevine pas.
+
+    La pepite et le `+1` de la diagonale ne dependent pas de theta et
+    n'apparaissent donc pas ici.
+    """
+    famille = options['Family']
+    if not isinstance(famille, str):
+        raise ValueError("dRtilde_dtheta : famille appelable non couverte")
+    if str(options.get('Type', 'separable')).lower() != 'separable':
+        raise ValueError("dRtilde_dtheta : seul le noyau separable est couvert")
+    if options.get('Isotropic'):
+        raise ValueError("dRtilde_dtheta : cas isotrope non couvert")
+
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    theta = np.asarray(theta, dtype=float).ravel()
+    n, M = X.shape
+    if theta.size != M:
+        raise ValueError("dRtilde_dtheta : theta de taille %d pour %d dimensions"
+                         % (theta.size, M))
+
+    delta = X[:, None, :] - X[None, :, :]                    # (n, n, M)
+    T0 = np.empty((n, n, M)); T1 = np.empty((n, n, M)); T11 = np.empty((n, n, M))
+    D0 = np.empty((n, n, M)); D1 = np.empty((n, n, M)); D11 = np.empty((n, n, M))
+    for j in range(M):
+        (T0[:, :, j], T1[:, :, j], T11[:, :, j],
+         D0[:, :, j], D1[:, :, j], D11[:, :, j]) = _termes_1d(
+            delta[:, :, j], theta[j], famille)
+
+    def terme(j, der, dp, derive):
+        """Le facteur de la dimension j pour le bloc (der, dp).
+
+        `derive` demande la version derivee en theta_j. Le signe negatif du
+        cas `dp` vient de `du/dx2 = -du/dx1`.
+        """
+        est_der = (der is not None and j == der)
+        est_dp = (dp is not None and j == dp)
+        if est_der and est_dp:
+            return (D11 if derive else T11)[:, :, j]
+        if est_der:
+            return (D1 if derive else T1)[:, :, j]
+        if est_dp:
+            return -(D1 if derive else T1)[:, :, j]
+        return (D0 if derive else T0)[:, :, j]
+
+    sorties = []
+    for m in range(M):
+        A = np.zeros((n * (M + 1), n * (M + 1)), dtype=float)
+        for rb in range(M + 1):
+            der = rb - 1 if rb > 0 else None
+            for cb in range(M + 1):
+                dp = cb - 1 if cb > 0 else None
+                bloc = terme(m, der, dp, True)
+                for j in range(M):
+                    if j != m:
+                        bloc = bloc * terme(j, der, dp, False)
+                A[rb * n:(rb + 1) * n, cb * n:(cb + 1) * n] = bloc
+        sorties.append(A)
+    return sorties

@@ -738,7 +738,7 @@ def grad_J_of_theta_ML(theta, KrgModelParameters):
     Un gradient faux serait pire que pas de gradient : il serait faux de
     facon confiante et reproductible.
     """
-    from kernels import dR_dtheta
+    from kernels import dR_dtheta, dRtilde_dtheta
 
     X = KrgModelParameters['X']
     Y = KrgModelParameters['Y']
@@ -748,17 +748,22 @@ def grad_J_of_theta_ML(theta, KrgModelParameters):
     if KrgModelParameters.get('IsRegression', False):
         return None
 
-    # GEPCK : la matrice de Gram est AUGMENTEE -- N*(M+1) lignes, car elle
-    # porte les blocs de derivees du noyau. 72x72 pour 24 points a deux
-    # variables. `dR_dtheta` construit la Gram SIMPLE : la formule ci-dessus
-    # ne s'y applique pas telle quelle, et il faudrait deriver en theta les
-    # blocs d/dx du noyau augmente -- un travail a part.
+    # PCK ou GEPCK ? La Gram de GEPCK est AUGMENTEE -- n*(M+1) lignes, car
+    # elle porte les blocs de derivees du noyau : 72x72 pour 24 points a deux
+    # variables. La FORMULE de dJ/dtheta est la meme dans les deux cas -- J a
+    # la meme forme, R est simplement plus grande -- seule la derivee de R
+    # change.
     #
-    # On le detecte par la seule chose qui les distingue sans ambiguite : en
-    # PCK, `N` est le nombre de points du plan ; en GEPCK il vaut N*(M+1)
-    # alors que `X` n'a toujours que N lignes.
-    if np.atleast_2d(np.asarray(X)).shape[0] != int(N):
-        return None
+    # On les distingue par la seule chose qui les separe sans ambiguite : en
+    # PCK, `N` est le nombre de points du plan ; en GEPCK il vaut n*(M+1)
+    # alors que `X` n'a toujours que n lignes.
+    _n, _M = np.atleast_2d(np.asarray(X)).shape
+    if _n == int(N):
+        _derivee_de_R = dR_dtheta                 # Gram simple
+    elif int(N) == _n * (_M + 1):
+        _derivee_de_R = dRtilde_dtheta            # Gram augmentee
+    else:
+        return None                               # forme non reconnue
 
     theta = np.asarray(theta, dtype=float).ravel()
     try:
@@ -767,7 +772,7 @@ def grad_J_of_theta_ML(theta, KrgModelParameters):
         cholR = am['cholR']
         if cholR is None:
             return None                      # J passe par la pseudo-inverse
-        derivees = dR_dtheta(X, theta, CorrOptions)
+        derivees = _derivee_de_R(X, theta, CorrOptions)
     except Exception:
         return None
 

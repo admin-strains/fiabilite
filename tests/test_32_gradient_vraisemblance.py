@@ -38,11 +38,21 @@ PCK, noyau separable anisotrope, familles `gaussian` et `matern-5_2` -- les
 seules que `kernel_deriv_factory` couvre deja, et les etudes n'emploient que
 `matern-5_2`.
 
-GEPCK n'est PAS couvert : sa matrice de Gram est augmentee (N*(M+1) lignes,
-72 pour 24 points a deux variables) et porte les blocs de derivees du noyau.
-Il faudrait deriver CEUX-LA en theta. `grad_J_of_theta_ML` le detecte et rend
-None ; l'optimiseur retombe alors sur des differences finies de pas RELATIF,
-degrade mais jamais faux -- et deja trois ordres meilleur que le defaut.
+GEPCK est couvert depuis le 02/09/2026, et c'est ce qui compte le plus : le
+Moulin Blanc tourne en GEPCK, comme le defaut du schema. Sa matrice de Gram
+est AUGMENTEE -- 72x72 pour 24 points a deux variables -- et porte les blocs
+de derivees du noyau. `kernels.dRtilde_dtheta` la derive.
+
+CE QUI A RENDU CETTE DERIVATION SURE : le noyau est SEPARABLE, donc chaque
+bloc est un PRODUIT sur les dimensions, et `d(produit)/dtheta_m` remplace un
+seul facteur. Ce ne sont donc pas douze formules par famille mais QUATRE
+fonctions scalaires -- u, du/dx1, d2u/dx1dx2, et leurs derivees en theta --
+plus une regle de produit unique. Chaque combinaison (der, dp, m) est
+comparee aux differences finies ci-dessous.
+
+Ce qui reste hors perimetre : les noyaux non separables, le cas isotrope, et
+les familles `exponential`, `linear`, `matern-3_2` -- qui n'ont de derivee
+ecrite ni en x ni en theta. Toutes LEVENT.
 """
 
 import json
@@ -221,8 +231,9 @@ def _captures(case="flexion", kind="PCK", combien=6):
     return capture
 
 
+@pytest.mark.parametrize("kind", ["PCK", "GEPCK"])
 @pytest.mark.parametrize("case", ["flexion", "linear"])
-def test_grad_J_coincide_avec_les_differences_finies(case):
+def test_grad_J_coincide_avec_les_differences_finies(case, kind):
     """LE temoin du correctif.
 
     On prend le MEILLEUR des pas utiles, et non un pas fixe : quand le
@@ -234,7 +245,7 @@ def test_grad_J_coincide_avec_les_differences_finies(case):
     """
     import kriging as _kr
 
-    captures = _captures(case=case)
+    captures = _captures(case=case, kind=kind)
     assert captures, "aucun appel gradbased capture"
 
     testes, ecartes = 0, 0
@@ -272,32 +283,77 @@ def test_grad_J_coincide_avec_les_differences_finies(case):
             "differences finies, au meilleur des pas %s -- et la reference "
             "FD, elle, est stable (dispersion %.1e). Le correctif repose "
             "ENTIEREMENT sur la justesse de ce gradient."
-            % (case, meilleur, PAS_UTILES, dispersion))
+            % (case + "/" + kind, meilleur, PAS_UTILES, dispersion))
 
     assert testes, (
         "aucun cas verifiable sur %r : soit le gradient analytique ne "
         "s'applique nulle part, soit tous les points ont un sigma^2 sous "
         "%.0e -- auquel cas c'est `J` qui n'est pas calculable, pas le "
-        "gradient qui est faux." % (case, SIGMA2_PLANCHER))
+        "gradient qui est faux." % (case + "/" + kind, SIGMA2_PLANCHER))
 
 
-def test_GEPCK_rend_None_plutot_qu_un_gradient_faux():
-    """La garde qui evite le pire.
+def test_la_Gram_AUGMENTEE_de_GEPCK_est_bien_reconnue():
+    """GEPCK est le chemin de l'ETUDE REELLE : le Moulin Blanc tourne en
+    GEPCK, comme le defaut du schema. Un gradient analytique qui ne
+    couvrirait que PCK ne corrigerait pas la production.
 
-    La matrice de Gram de GEPCK est AUGMENTEE -- N*(M+1) lignes -- et porte
-    les blocs de derivees du noyau. `dR_dtheta` construit la Gram simple : la
-    formule ne s'y applique pas. Sans cette garde, le calcul levait sur une
-    incompatibilite de dimensions (72x72 contre 24x24) ; avec une matrice qui
-    aurait par hasard la bonne taille, il aurait rendu un gradient FAUX.
+    Ce temoin verifie la RECONNAISSANCE de la forme augmentee -- `N` valant
+    n*(M+1) alors que `X` n'a que n lignes -- et non la justesse, qui est
+    mesuree par `test_grad_J_coincide_avec_les_differences_finies[GEPCK]`.
     """
     import kriging as _kr
     captures = _captures(case="flexion", kind="GEPCK", combien=3)
     assert captures, "aucun appel gradbased capture en GEPCK"
-    for params, theta0 in captures:
-        assert _kr.grad_J_of_theta_ML(theta0, params) is None, (
-            "grad_J_of_theta_ML rend un gradient pour GEPCK. Soit la derivee "
-            "du noyau augmente a ete ecrite -- et ce temoin est a mettre a "
-            "jour -- soit la garde a saute et le gradient est FAUX.")
+    params, theta0 = captures[0]
+    n = np.atleast_2d(np.asarray(params["X"])).shape[0]
+    M = np.atleast_2d(np.asarray(params["X"])).shape[1]
+    assert int(params["N"]) == n * (M + 1), (
+        "N = %s pour %d points et %d variables : la Gram n'est pas augmentee "
+        "comme attendu, et le dispatch de `grad_J_of_theta_ML` repose sur "
+        "cette forme." % (params["N"], n, M))
+    assert _kr.grad_J_of_theta_ML(theta0, params) is not None, (
+        "GEPCK n'est plus couvert par le gradient analytique : l'optimiseur "
+        "retombe sur les differences finies, et l'etude reelle perd le "
+        "correctif.")
+
+
+@pytest.mark.parametrize("famille", ["matern-5_2", "gaussian"])
+@pytest.mark.parametrize("n_var", [2, 3])
+def test_dRtilde_dtheta_coincide_avec_les_differences_finies(famille, n_var):
+    """La derivee de la Gram AUGMENTEE, bloc par bloc.
+
+    C'est la brique la plus a risque du correctif : la matrice porte
+    (M+1)^2 blocs de quatre types differents. La comparaison est faite sur la
+    matrice ENTIERE, donc chaque bloc y passe -- et sur trois echelles de
+    theta, car un correctif qui ne marcherait qu'a theta ~ 1 ne servirait a
+    rien. Mesure du 02/09/2026 : 5.62e-10 au pire.
+    """
+    from kernels import (uq_eval_global_Kernel, dRtilde_dtheta,
+                         PEPITE_PAR_DEFAUT)
+    rng = np.random.default_rng(11)
+    X = rng.uniform(-1, 1, (10, n_var))
+    opts = {"Handle": uq_eval_global_Kernel, "Family": famille,
+            "Type": "separable", "Isotropic": False,
+            "Nugget": PEPITE_PAR_DEFAUT, "IsGram": True}
+    for theta in (np.full(n_var, 1.0),
+                  np.linspace(0.4, 6.0, n_var),
+                  np.full(n_var, 0.08)):
+        analytique = dRtilde_dtheta(X, theta, opts)
+        for i in range(n_var):
+            h = 1e-5 * theta[i]
+            tp, tm = theta.copy(), theta.copy()
+            tp[i] += h
+            tm[i] -= h
+            fd = (uq_eval_global_Kernel(X, X, tp, opts)
+                  - uq_eval_global_Kernel(X, X, tm, opts)) / (2 * h)
+            echelle = max(float(np.max(np.abs(analytique[i]))), 1e-30)
+            ecart = float(np.max(np.abs(analytique[i] - fd))) / echelle
+            assert ecart < 1e-6, (
+                "%s, n_var=%d, theta=%s, composante %d : ecart %.2e sur la "
+                "Gram AUGMENTEE. Un bloc faux sur %d donnerait un gradient "
+                "faux avec assurance."
+                % (famille, n_var, np.array2string(theta, precision=3), i,
+                   ecart, (n_var + 1) ** 2))
 
 
 def test_le_repli_ne_rend_jamais_un_gradient_nul():
