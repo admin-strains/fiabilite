@@ -14,6 +14,23 @@
 # Mesure du 31/08/2026. Ce n'est pas fait ici parce que le gain est de
 # l'hygiene d'import, pas une capacite.
 #
+# EXERCE, ET NON SUPPOSE -- 02/09/2026
+# Dans un environnement virtuel NEUF, sans rien d'autre :
+#
+#   pip install -e ".[etudes,dev]"
+#   fiabilite pure_flexion/AC3_pure_flexion.py     (FIABILITE_ETUDE pose)
+#   -> beta = 4,6793   Pf = 1,4390e-06   u* = [-3,9529 ; -2,5041]
+#
+# soit exactement les valeurs figees par `test_103`. Sans argument, la
+# commande repond `usage : fiabilite ...` et sort en code 1 ; sans la couche
+# des etudes, elle dit quoi installer et sort en code 1 aussi.
+#
+# Au passage, une mesure sur les PLANCHERS : ce venv a resolu numpy 2.2.6,
+# scipy 1.15.3, openturns 1.27.post1 et smt 2.14.1, la ou
+# `constraints-reference.txt` epingle 2.2.3 / 1.15.3 / 1.27 / 2.12.0. Le
+# resultat est identique au chiffre pres -- les planchers ne sont donc pas
+# seulement declaratifs sur ce couple-la.
+#
 # ET SURTOUT : empaqueter n'affranchit PAS du lanceur. OpenTURNS doit etre
 # importe AVANT que les repertoires de DLL de Digital Structure n'entrent
 # dans le chemin de recherche -- trois DLL portent le meme nom des deux
