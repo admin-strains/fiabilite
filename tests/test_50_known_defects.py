@@ -1,14 +1,32 @@
 """
 Defauts connus, ecrits comme des specifications executables.
 
-Chaque test decrit le comportement ATTENDU (pas le comportement actuel) et
-porte xfail(strict=True). Consequence : la suite est verte aujourd'hui, et le
-jour ou quelqu'un corrige le defaut, le test passe -> xpass -> ECHEC, ce qui
-oblige a retirer le marqueur et a acter la correction. Aucun defaut ne peut
-etre corrige en silence, ni reapparaitre sans bruit.
+CE FICHIER A CHANGE DE ROLE, ET C'EST UNE BONNE NOUVELLE
+---------------------------------------------------------
+Il a ete ecrit comme un registre de defauts OUVERTS : chaque test decrivait
+le comportement ATTENDU -- pas le comportement d'alors -- et portait
+`xfail(strict=True)`. Le jour ou quelqu'un corrigeait le defaut, le test
+passait, donc `xpass`, donc ECHEC : il fallait retirer le marqueur et acter
+la correction. Aucun defaut ne pouvait etre corrige en silence.
 
-Ne rien mettre ici sans : symptome reproductible, localisation fichier:ligne,
-et effet concret sur la production.
+Le mecanisme a fonctionne jusqu'au bout : **il ne reste aucun `xfail` ici**,
+les douze tests passent. Ce fichier est devenu un registre de defauts FERMES,
+et chacun garde contre le retour du sien.
+
+    defaut 1     le metamodele ne s'evaluait pas sur son propre plan
+    defauts 2/3  GEPCK n'interpolait pas -- 3,0e-03 au plan, contre 2,8e-09
+                 aujourd'hui, apres la pepite (phase 6) et le gradient
+                 analytique de la vraisemblance (02/09)
+    defaut 5     une conversion tableau->scalaire depreciee par numpy
+
+Le seul defaut de cette semaine dont la consequence etait des CHIFFRES FAUX
+plutot qu'un cout -- `patch_params` ignorant en silence un parametre absent
+du modele -- est garde ailleurs, dans `test_125_patch_params.py`.
+
+Ne rien remettre ici sans : symptome reproductible, localisation
+fichier:ligne, et effet concret sur la production. Et si un defaut nouveau y
+entre, il entre en `xfail(strict=True)` -- c'est ce marqueur qui interdit de
+le corriger sans le dire.
 """
 
 import numpy as np

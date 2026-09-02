@@ -42,7 +42,7 @@ le harness devient un mensonge -- les maintenir ensemble.
 | `test_20_reference.py` | les oracles du harness sont-ils eux-memes justes ? | auto-controle |
 | `test_30_surrogate_golden.py` | les coefficients ont-ils bouge d'un iota ? | non-regression figee |
 | `test_40_chain_beta.py` | le beta final est-il toujours JUSTE ? | verite metier |
-| `test_50_known_defects.py` | les defauts connus sont-ils toujours la ? | dette tracee |
+| `test_50_known_defects.py` | les defauts connus sont-ils **revenus** ? | dette tracee, et soldee : plus aucun `xfail` |
 
 La distinction `test_30` / `test_40` est le point important :
 
@@ -144,6 +144,20 @@ reste verte, et le jour ou le defaut est corrige le test devient `xpass`,
 donc **rouge** : impossible de corriger en silence, impossible de regresser
 sans bruit. Exiger un symptome reproductible, une localisation
 `fichier:ligne`, et l'effet concret en production.
+
+Le mecanisme a fonctionne jusqu'au bout : au 02/09/2026, **il ne reste aucun
+`xfail` dans ce fichier**. Les douze tests passent, et chacun garde contre le
+retour de son defaut. Le registre est solde ; il redeviendra un registre de
+dette le jour ou l'on y remettra un defaut ouvert.
+
+Sept `xfail(strict)` subsistent ailleurs -- releves a l'EXECUTION, non par
+un `grep` sur le mot, qui compte aussi les commentaires. Ils ne decrivent pas
+des defauts de meme nature :
+
+| ou | combien | ce qu'ils mesurent |
+|---|---|---|
+| `test_91_ac_minces.py` | 6 | la CIBLE de la phase 0 -- « un AC tient en 250 lignes », « il n'importe aucune machinerie », « il ne definit presque plus de fonctions » -- sur les DEUX etudes. Ils mesurent la distance qui reste, et le plafond associe, lui, descend |
+| `test_10_legacy_unit.py` | 1 | une suite d'origine dont on a DEMONTRE qu'elle a tort (convention des derivees du noyau) ; on ne reecrit pas un temoin, on ecrit la demonstration a cote |
 
 ## Suites historiques (`tests/unit/`)
 
