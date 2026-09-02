@@ -15,7 +15,9 @@ silencieuses ou tardives :
   range(n)]` -- au lieu de les lire, la ou le Moulin Blanc les lit. Les deux
   listes coincident sur le modele d'aujourd'hui (verifie : 24 noms, identiques
   dans le meme ordre), mais rien ne le garantissait : renommer une armature
-  aurait fait designer au solveur des elements inexistants.
+  aurait fait designer au solveur des elements inexistants. Depuis le
+  02/09/2026 les deux etudes passent par `_model/selection.py`, qui REFUSE
+  une selection vide au lieu de rendre `[]`.
 
 CE QUI A ETE VERIFIE ET TROUVE SAIN
 ------------------------------------
@@ -131,10 +133,16 @@ def test_les_noms_d_armatures_sont_LUS_et_non_fabriques(etude):
     nom, script, _ = etude
     src = io.open(os.path.join(_REPO, script), encoding="utf-8",
                   errors="replace").read()
-    assert 'rebar_names = re.findall' in src, (
-        "%s : les noms d'armatures doivent etre LUS dans le modele" % nom)
+    assert '_selection.armatures(' in src, (
+        "%s : les noms d'armatures doivent etre LUS dans le modele, par "
+        "`_model/selection.py`" % nom)
     assert 'for i in range(n_rebars)' not in src, (
         "%s : des noms d'armatures sont fabriques" % nom)
+    assert 'REBAR' not in src.replace("REBAR('", "@"), (
+        "%s : une expression reguliere sur `REBAR` est revenue dans l'etude. "
+        "Elle rend `[]` en silence quand elle ne trouve rien -- region de "
+        "sensibilite vide, gradient nul, indiscernable d'une insensibilite "
+        "physique. Passer par `_selection.armatures`." % nom)
 
 
 def test_le_modele_porte_bien_des_armatures_nommees(etude):

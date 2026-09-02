@@ -24,7 +24,6 @@ _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_L
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 # `pyplot` n'est plus importe ici : l'etude ne dessine plus rien.
 # Le choix du backend, lui, doit rester AVANT tout import de figure.
-import re
 import math
 from datetime import datetime
 # fit_gepck/fit_pck sont partis avec le dispatch dans
@@ -34,6 +33,7 @@ from api import predict_gepck, predict_pck
 # en commentaire.
 from lois import loi_fc, loi_fy
 import lois as _lois
+import selection as _selection
 import doe as _cache_doe
 import journal_points as _journal_points
 import reprise as _reprise
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
+    rebar_names = _selection.armatures(_cad_txt)
     n_rebars = len(rebar_names)
     PARAM_CONFIG_CAD = {
         'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"], "region_key": "fc"},
@@ -536,7 +536,7 @@ if __name__ == '__main__':
             L   = _parse(_cad, 'L')
             phi = _parse(_cad, 'phi')
 
-            n_bars = len(re.findall(r'REBAR\(', _cad))
+            n_bars = len(_selection.armatures(_cad))
             As = n_bars * math.pi * (phi / 2e3) ** 2
 
             z_rebar = [float(v) for v in re.findall(

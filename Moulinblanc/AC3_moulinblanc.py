@@ -7,7 +7,6 @@ demandee par le fichier d'etude.
 """
 import os
 import json
-import re
 import sys                  # etait utilise SANS etre importe : il ne marchait
                             # que parce que le `import *` de Digital Structure
                             # le laissait fuiter dans les globales.
@@ -22,7 +21,6 @@ _HEADLESS = bool(os.environ.get("_IS_PARALLEL")) or bool(os.environ.get("_FIAB_L
 matplotlib.use('Agg' if _HEADLESS else 'TkAgg')
 # `pyplot` n'est plus importe ici : l'etude ne dessine plus rien.
 # Le choix du backend, lui, doit rester AVANT tout import de figure.
-import re
 from datetime import datetime
 # fit_gepck/fit_pck sont partis avec le dispatch dans
 # `_surrogate/ajuster.py` ; l'etude ne fait plus que PREDIRE.
@@ -31,6 +29,7 @@ from api import predict_gepck, predict_pck
 # par des lignes de PARAM_CONFIG mises en commentaire.
 from lois import loi_fy
 import lois as _lois
+import selection as _selection
 import doe as _cache_doe
 import journal_points as _journal_points
 import reprise as _reprise
@@ -52,9 +51,6 @@ import schema as _schema
 import coherence as _coherence
 from fabrique import solveur as _fabriquer_solveur
 
-
-def _parse(text, name):
-    return float(re.search(rf'(?m)^\s*{re.escape(name)}\s*=\s*([\d.]+)', text).group(1))
 
 if __name__ == '__main__':
     # ------------------------------------------------------------------------ #
@@ -108,10 +104,14 @@ if __name__ == '__main__':
 
     # --- Groupes d'aciers, lus dans le dsCad ---------------------------------
     # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
-    rebar_names = re.findall(r"REBAR\('([^']+)'", _cad_txt)
+    # Les deux groupes d'acier, un par nuance. `_model/selection.py` refuse
+    # une selection VIDE -- une nuance mal orthographiee donnait auparavant
+    # une region de sensibilite vide, donc un gradient nul, indiscernable
+    # d'une insensibilite physique.
+    rebar_names = _selection.armatures(_cad_txt)
     n_rebars = len(rebar_names)
-    group1_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd1,", _cad_txt)
-    group2_names = re.findall(r"REBAR\('([^']+)',[^\n]*GRADE=fyd2,", _cad_txt)
+    group1_names = _selection.armatures(_cad_txt, grade="fyd1")
+    group2_names = _selection.armatures(_cad_txt, grade="fyd2")
     print(f"[2-fy] groupe 1 (fyd1) : {len(group1_names)} aciers | groupe 2 (fyd2) : {len(group2_names)} aciers", flush=True)
 
     # --- Grille HF sur mesure ------------------------------------------------
