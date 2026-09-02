@@ -102,9 +102,24 @@ set FIABILITE_ETUDE=%CD%\studies\pure_flexion_analytique.toml
 python launcher.py pure_flexion\AC3_pure_flexion.py
 ```
 
-Resultat attendu : `beta_FORM = 4,7516` contre **4,77257** calcule sans
+Resultat attendu : `beta_FORM = 4,7527` contre **4,77257** calcule sans
 metamodele ni FORM, soit 0,42 %. Deux executions donnent des journaux
 identiques hors chronometrage.
+
+Ce chiffre valait `4,7516` jusqu'au 02/09/2026 : le gradient analytique de la
+vraisemblance a deplace `theta`, donc le metamodele, donc le resultat. Mesure
+sur la revision qui precede immediatement la correction (`ac6fb8a`) et sur
+`HEAD`, meme etude, meme modele :
+
+| | avant | apres | exact |
+|---|---|---|---|
+| `beta_FORM` | 4,7516 | **4,7527** | 4,77257 |
+| `u*` | [−2,797 ; −3,841] | [−2,793 ; −3,846] | — |
+| `beta_IS` | 4,6828 | 4,6721 | 4,77257 |
+| `Pf_IS` | 1,4147e-06 | 1,4903e-06 | — |
+
+L'ecart sur `beta_FORM` est de 0,023 %, et il va DANS LE BON SENS : l'erreur
+contre la valeur exacte passe de 0,0210 a 0,0199, soit 5,2 % de moins.
 
 ---
 

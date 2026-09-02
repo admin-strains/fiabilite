@@ -458,9 +458,13 @@ enrichissement EFF, FORM multimodal, tirage d'importance — tourne sur l'etat
 limite analytique, sans licence ni GPU, et retrouve `beta = 4,7527` contre
 `4,77257` exact (0,42 %).*
 
-Reste a faire pour boucler : porter ce run dans la CI, une fois la chaine
-assez rapide pour y tenir (elle prend quelques minutes, dominees par les
-iterations FORM+IS, pas par le solveur).
+**Boucle le 02/09/2026** : le run de bout en bout tourne en integration
+continue. Il n'a pas fallu accelerer la chaine mais lui donner une VARIANTE
+assez petite -- `studies/pure_flexion_grille.toml`, cinq secondes --, et
+mettre les deux modeles dans le depot pour qu'un runner puisse les lire. Son
+resultat y est desormais FIGE (`test_103`), ce qui manquait : la correction du
+gradient de la vraisemblance avait deplace le `beta` de la chaine analytique
+de 4,7516 a 4,7527 sans que rien ne le signale.
 
 ### Phase 6 — Corriger les defauts · FAIT
 

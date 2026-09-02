@@ -155,6 +155,70 @@ def test_l_etude_va_jusqu_au_resultat(journal):
         "l'etude n'a pas produit de probabilite de defaillance"
 
 
+#: LE RESULTAT DE LA CHAINE, FIGE -- ET POURQUOI IL A FALLU L'AJOUTER
+#:
+#: Ce fichier verifiait qu'un `beta` EXISTE, pas sa valeur. Consequence
+#: mesuree le 02/09/2026 : la correction du gradient de la vraisemblance a
+#: deplace le resultat de la chaine analytique -- `beta` de 4,7516 a 4,7527
+#: sur `studies/pure_flexion_analytique.toml` -- et RIEN ne l'a signale. Le
+#: commit de la correction a meme ecrit « beta inchange », ce qui etait vrai
+#: sur la baseline GEPCK (7,0e-07) et sur le Moulin Blanc, mais faux ici.
+#:
+#: La baseline (`test_70`) ne couvre pas ce trou : elle porte une AUTRE
+#: configuration -- GEPCK, 24 points, beta = 4,7749.
+#:
+#: Le run de ce fichier est deja paye. Y figer son resultat ne coute donc
+#: rien, et c'est le seul endroit du depot ou un `beta` de bout en bout est
+#: compare a une valeur.
+BETA_ATTENDU = 4.6793
+PF_ATTENDU = 1.4390e-06
+U_ETOILE_ATTENDU = (-3.9529, -2.5041)
+
+#: TOLERANCE, ET D'OU ELLE VIENT
+#:
+#: Deux executions de cette etude sur cette machine rendent des journaux
+#: identiques a tous les chiffres imprimes -- la chaine analytique est
+#: deterministe, contrairement a celle sur Digital Structure (12,3 %
+#: d'etendue sur `Pf_IS`).
+#:
+#: Il reste l'ecart ENTRE MACHINES, que `theta` porte : mesure a 2,4e-09
+#: (PCK) et 8,4e-08 (GEPCK) depuis le gradient analytique. 1e-5 laisse deux
+#: ordres au-dessus de ce bruit, et reste vingt fois plus fin que le
+#: deplacement qu'il doit attraper : le gradient analytique a bouge `beta` de
+#: 2,3e-04 en relatif.
+TOL_RESULTAT = 1e-5
+
+
+def test_le_resultat_de_la_chaine_est_celui_qu_on_a_fige(journal):
+    """Le seul `beta` de bout en bout compare a une valeur dans ce depot.
+
+    S'il tombe : ne pas remonter le chiffre avant d'avoir montre que le
+    nouveau comportement est MEILLEUR, pas seulement different. La procedure
+    est celle des goldens, dans `CONTRIBUTING.md`.
+    """
+    m = re.search(r"(?m)^beta         = ([\d.]+)", journal)
+    assert m, "le journal n'imprime pas `beta`"
+    beta = float(m.group(1))
+    assert beta == pytest.approx(BETA_ATTENDU, rel=TOL_RESULTAT), (
+        "beta = %.6f, fige a %.6f (tolerance %.0e).\n"
+        "Un resultat qui bouge n'est pas forcement faux -- mais il doit etre "
+        "explique et chiffre avant d'etre acte." % (beta, BETA_ATTENDU,
+                                                   TOL_RESULTAT))
+
+    m = re.search(r"(?m)^Pf           = ([\deE.+-]+)", journal)
+    assert m and float(m.group(1)) == pytest.approx(PF_ATTENDU,
+                                                    rel=TOL_RESULTAT), (
+        "Pf = %s, fige a %.4e" % (m and m.group(1), PF_ATTENDU))
+
+    m = re.search(r"(?m)^u\*           = \[([-\d., ]+)\]", journal)
+    assert m, "le journal n'imprime pas `u*`"
+    u = tuple(float(v) for v in m.group(1).split(","))
+    assert u == pytest.approx(U_ETOILE_ATTENDU, rel=1e-4), (
+        "u* = %s, fige a %s. Le point de conception est la grandeur qui s'est "
+        "revelee la plus STABLE a travers huit etapes de restructuration : "
+        "s'il bouge, ce n'est pas un detail." % (u, U_ETOILE_ATTENDU))
+
+
 def test_la_grille_sert_effectivement_de_fond(journal):
     """Payer la grille et ne pas s'en servir serait le meme gachis, sous une
     autre forme."""

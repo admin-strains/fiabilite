@@ -178,6 +178,12 @@ Pf_IS = 1.5071e-06     beta_IS = 4.6698
 Journaux **identiques hors chronometrage** (226 lignes). Et `beta_FORM =
 4,7527` contre `4,77257` calcule sans metamodele ni FORM : **0,42 %**.
 
+> Ces chiffres sont ceux de la phase 5. La phase 6 les a deplaces a
+> `4,7516 / 1,4147e-06 / 4,6828`, et le gradient analytique du 02/09/2026 les
+> a ramenes a `4,7527 / 1,4903e-06 / 4,6721` -- meme `beta_FORM` que la
+> phase 5 par coincidence de quatrieme chiffre, `Pf_IS` et `beta_IS`
+> differents. Voir les deux sections suivantes.
+
 C'est la sortie utile de la phase 5. Un ecart observe sur cette chaine-la est
 imputable au code, ce qui n'a jamais ete vrai sur Digital Structure.
 
@@ -200,6 +206,49 @@ quarante points, contre 0,0015 % apres. Voir `tools/mesure_pepite.py`.
 
 La baseline analytique, elle, passe de **0,0771 % a 0,0492 %** d'erreur sur
 `beta` contre le meme oracle exact.
+
+## Effet du gradient analytique de la vraisemblance (02/09/2026)
+
+La correction du gradient de `theta` -- `minimize` etait appele SANS `jac`,
+et le pas de differences finies par defaut, absolu a 1,49e-08, donnait un
+gradient 3 372 fois la vraie pente -- deplace `theta`, donc le metamodele,
+donc le resultat.
+
+Mesure sur la revision qui precede IMMEDIATEMENT la correction (`ac6fb8a`) et
+sur `HEAD`, meme etude (`studies/pure_flexion_analytique.toml`), meme modele,
+sur cette machine :
+
+| | avant | apres | exact |
+|---|---|---|---|
+| `beta_FORM` | 4,7516 | **4,7527** | 4,77257 |
+| `u*` | [−2,797 ; −3,841] | [−2,793 ; −3,846] | — |
+| `Pf_FORM` | 1,0089e-06 | 1,0038e-06 | — |
+| `beta_IS` | 4,6828 | 4,6721 | 4,77257 |
+| `Pf_IS` | 1,4147e-06 | 1,4903e-06 | — |
+
+L'ecart sur `beta_FORM` vaut **0,023 %**, et il va dans le bon sens : l'erreur
+contre la valeur exacte passe de 0,0210 a 0,0199, soit **5,2 % de moins**.
+La premiere divergence apparait des le PREMIER ajustement, sur le plan
+initial de cinq points : `theta = [7,68468473 ; 9,31307410]` contre
+`[7,68468409 ; 9,31307268]`, soit 1,5e-07 en relatif, pour un LOO identique a
+sept chiffres (6,279100e-01). L'enrichissement EFF amplifie ensuite l'ecart
+en placant ses points ailleurs.
+
+Au passage, cette mesure etablit quelque chose de plus fort sur tout ce qui
+separe la phase 7 du 26/08 de la correction du 02/09 -- la sortie de la
+boucle EFF des etudes, les criteres d'arret, les historiques, l'ecriture non
+destructrice, une quinzaine de commits : **la chaine analytique y rend des
+chiffres IDENTIQUES**, `4,7516 / 1,0089e-06 / 4,6828 / 1,4147e-06` et le meme
+`u*`, jusqu'au dernier chiffre imprime. Ces refactorisations n'ont deplace
+aucun resultat.
+
+**Ce deplacement n'avait ete ecrit nulle part.** Le commit du gradient
+(`29c2e3d`) mesurait l'effet sur `theta`, sur les quatre LOO et sur la
+reproductibilite, et notait `beta` INCHANGE -- ce qui etait vrai sur la
+baseline GEPCK a 24 points (7,0e-07) et sur le Moulin Blanc, mais pas sur
+cette chaine-ci. Aucun test ne fige le `beta` de la chaine analytique : la
+baseline porte une autre configuration, et `test_103` verifiait qu'un `beta`
+EXISTE, pas sa valeur. C'est corrige -- voir `test_103`.
 
 ## Effet de la phase 7 (26/08/2026)
 
