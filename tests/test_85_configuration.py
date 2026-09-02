@@ -477,9 +477,28 @@ def test_les_scripts_lisent_l_effet_et_non_l_intention(nom):
 
 
 def test_chemin_du_modele(etude):
+    """Le chemin designe TOUJOURS le modele de l'etude -- mais plus toujours
+    sous `storage`.
+
+    Ce test exigeait `cfg.storage in cfg.chemin_ds`. Il avait raison de
+    tomber le 02/09/2026 : le contrat a change. `chemin_ds` retombe desormais
+    sur `modeles/` du depot quand le `storage` configure n'existe pas, ce qui
+    rend les etudes rejouables ailleurs -- la promesse de `modeles/README.md`,
+    qui n'etait pas tenue.
+
+    L'ecart ne se voyait PAS sur le poste de reference, ou le storage existe
+    et ou le repli ne se declenche jamais. Il a fallu l'integration continue
+    pour le montrer, sur les cinq jobs a la fois.
+    """
     _, cfg, _ = etude
     assert cfg.chemin_ds.endswith(cfg.modelname + ".ds")
-    assert cfg.storage in cfg.chemin_ds
+    if os.path.isdir(cfg.storage):
+        assert cfg.storage in cfg.chemin_ds, (
+            "le storage existe : c'est lui qui doit servir, pas le repli.")
+    else:
+        assert os.path.basename(os.path.dirname(cfg.chemin_ds)) == "modeles", (
+            "storage %r absent : le chemin devrait retomber sur `modeles/` du "
+            "depot, il vaut %r" % (cfg.storage, cfg.chemin_ds))
 
 
 # --------------------------------------------------------------------------- #
