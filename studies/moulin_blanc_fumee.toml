@@ -169,3 +169,15 @@ save_history = false
 n_grid_hf = 2
 print_fullHF = false
 do_custom_hf = false
+
+# Memes variables aleatoires que `moulin_blanc.toml` : c'est le BUDGET du run
+# qui change, pas le probleme pose.
+[variables.fy1]
+loi   = "fy"
+args  = [235.0]
+param = "YIELD_STRENGTH"
+
+[variables.fy2]
+loi   = "fy"
+args  = [235.0]
+param = "YIELD_STRENGTH"

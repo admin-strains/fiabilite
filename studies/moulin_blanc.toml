@@ -148,3 +148,42 @@ save_history = false
 n_grid_hf = 15
 print_fullHF = false
 do_custom_hf = true
+
+# --------------------------------------------------------------------------- #
+# LES VARIABLES ALEATOIRES                                                    #
+# --------------------------------------------------------------------------- #
+# Deux groupes d'acier, un par nuance du modele : 13 858 armatures en fyd1 et
+# 1 488 en fyd2. Ces listes ne sont pas ici -- ce sont des SELECTIONS, que
+# l'etude calcule par `_selection.armatures(cad, grade="fyd1")`.
+#
+# `args = [235.0]` : la moyenne. L'ecart-type de la limite d'elasticite vient
+# du JCSS et vaut ~30,15 MPa (somme quadratique de 19, 22 et 8) -- il est dans
+# `_model/lois.py`, pas ici : ce n'est pas un choix d'etude.
+
+[variables.fy1]
+loi   = "fy"
+args  = [235.0]
+param = "YIELD_STRENGTH"
+
+[variables.fy2]
+loi   = "fy"
+args  = [235.0]
+param = "YIELD_STRENGTH"
+
+# UNE VARIABLE DE CHARGEMENT se declare de la meme facon. Cet exemple vivait
+# en code commente dans l'etude ; il se lit mieux ici, et il montre les deux
+# clefs propres au chargement : `cas_de_charge`, et `axe` quand la variable
+# est une POSITION plutot qu'une intensite.
+#
+#   [variables.s_convoi]
+#   loi           = "uni_approx"
+#   args          = [0.0, 1.0, 0.15]
+#   param         = "LIVE_LOAD"
+#   cas_de_charge = "LC_convoi"
+#   axe           = "position"
+#
+#   [variables.q]
+#   loi           = "F_permanente"
+#   args          = [0.2, 0.40]
+#   param         = "LIVE_LOAD"
+#   cas_de_charge = "LC_convoi"

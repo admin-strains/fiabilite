@@ -43,3 +43,16 @@ print_3D = false
 print_Pf = false
 do_custom_hf = false
 print_ana = false
+
+# Memes variables aleatoires que `pure_flexion.toml` : c'est le SOLVEUR qui
+# change, pas le probleme pose.
+[variables.fc]
+loi     = "fc"
+args    = [48, 0.12]
+param   = "COMPRESSIVE_STRENGTH"
+solides = ["Block1"]
+
+[variables.fy]
+loi   = "fy"
+args  = [550]
+param = "YIELD_STRENGTH"

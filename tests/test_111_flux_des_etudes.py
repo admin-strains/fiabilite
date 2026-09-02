@@ -49,8 +49,9 @@ import pytest
 
 _ICI = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(_ICI)
-if _ICI not in sys.path:
-    sys.path.insert(0, _ICI)
+for _p in (_ICI, os.path.join(_REPO, "_config"), os.path.join(_REPO, "_model")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from test_97_divergences_declarees import _SansDocstring   # noqa: E402
 
@@ -118,13 +119,14 @@ def test_le_flux_principal_ne_DIVERGE_pas_davantage(comparaison_du_flux):
     #:     2   le titre imprime en tete de journal
     #:     6   l'extraction des noms d'armatures : le Moulin Blanc en fait
     #:         DEUX groupes par nuance d'acier, la flexion pure les prend tous
-    #:     2   `PARAM_CONFIG_CAD` : les variables aleatoires elles-memes
     #:     2   `slice_def_final` : la flexion pure a un plan complet a deux
     #:         variables, le Moulin Blanc n'a pas de coupe finale
-    #:     1   `FY_MEAN = 235.0` (Moulin Blanc)
     #:     5   `Es`, `ecu`, `eud`, `gamma_c_fic`, `gamma_s_fic` : les
     #:         constantes de la surcouche analytique, propres a la flexion pure
-    #:     3   `print_ana`, sa liaison et sa condition -- meme raison
+    #:
+    #: SIX de ces ecarts ont disparu le 02/09/2026 au soir : les variables
+    #: aleatoires sont declarees dans `studies/*.toml`, `FY_MEAN` avec elles,
+    #: et le garde de la surcouche est devenu `Configuration.ana_actif`.
     #:
     #: Autrement dit LE FLUX A CONVERGE : le risque qui a motive tout ce
     #: travail -- deux copies d'une meme implementation qui derivent, et trois
@@ -190,16 +192,45 @@ def test_le_garde_de_la_surcouche_analytique_est_propre_a_la_flexion_pure():
 
     Le Moulin Blanc n'a pas de surcouche analytique : `print_ana` n'y existe
     meme pas. Il n'y a rien a desactiver, donc rien a corriger.
+
+    LE GARDE A QUITTE L'ETUDE -- 02/09/2026
+    ----------------------------------------
+    Il est devenu `Configuration.ana_actif`, une valeur DERIVEE, a cote de
+    `eff_actif` et `is_actif` : l'intention reste dans le champ `print_ana`,
+    l'effet est calcule. Trois gains sur la version d'avant :
+
+      * le refus s'ANNONCE, ce qu'il ne faisait pas -- le resume de
+        configuration imprimait `print_ana=True` et la figure sortait nue ;
+      * la condition ne depend plus d'un dictionnaire `PARAM_CONFIG_CAD` que
+        les etudes ne portent plus : elle se lit sur la declaration des
+        variables (`cas_de_charge`) ;
+      * l'etude n'a plus RIEN a corriger, donc quatre instructions de moins.
     """
     pf = io.open(os.path.join(_REPO, ETUDES[0]), encoding="utf-8",
                  errors="replace").read()
     mb = io.open(os.path.join(_REPO, ETUDES[1]), encoding="utf-8",
                  errors="replace").read()
-    assert "print_ana = False" in pf
-    assert "surcouche=_surcouche_analytique if print_ana else None" in pf
-    assert "print_ana" not in mb, (
-        "le Moulin Blanc a desormais une surcouche analytique : le garde de "
-        "`PARAM_CONFIG_CAD` devient pertinent pour lui aussi.")
+    assert "print_ana = False" not in pf, (
+        "l'etude corrige de nouveau `print_ana` a la main : c'est le role de "
+        "`Configuration.ana_actif`, qui rend la correction VISIBLE.")
+    assert "surcouche=_surcouche_analytique if CFG.ana_actif else None" in pf
+    assert "print_ana" not in mb and "ana_actif" not in mb, (
+        "le Moulin Blanc a desormais une surcouche analytique : le garde "
+        "devient pertinent pour lui aussi.")
+
+    from schema import Configuration                          # noqa: PLC0415
+    sans = Configuration(modelname="x", print_ana=True,
+                         variables={"fy": {"loi": "fy", "args": [550],
+                                           "param": "YIELD_STRENGTH"}})
+    avec = Configuration(modelname="x", print_ana=True,
+                         variables={"q": {"loi": "F_permanente",
+                                          "args": [1.0, 0.05],
+                                          "param": "LIVE_LOAD",
+                                          "cas_de_charge": "LC"}})
+    assert sans.ana_actif is True, "la surcouche est refusee sans raison"
+    assert avec.ana_actif is False, (
+        "une variable de chargement laisse la surcouche active : la courbe "
+        "de reference de la section cesse d'etre valide, et mentirait.")
 
 
 @pytest.mark.parametrize("script", ETUDES)

@@ -212,3 +212,41 @@ def dist_jointe(param_config, params_names):
     """
     return ot.JointDistribution([param_config[p]['loi'](*param_config[p]['args'])
                                  for p in params_names])
+
+
+# --------------------------------------------------------------------------- #
+# LES LOIS, PAR LEUR NOM                                                      #
+# --------------------------------------------------------------------------- #
+#: Ce que le fichier `.toml` d'une etude peut nommer dans `loi = "..."`.
+#:
+#: POURQUOI UN REGISTRE, ET PAS UN `getattr`
+#: Un `getattr(lois, "loi_" + nom)` accepterait n'importe quel nom de ce
+#: module -- `dist_jointe`, `SIGMA_ACIER_LOT` -- et rendrait un objet que le
+#: metamodele appellerait sans savoir ce qu'il est. Un registre dit
+#: exactement ce qui est declarable, et le refus peut lister les choix.
+#:
+#: `loi_F_intermittente` n'y figure pas : elle ne prend pas de moyenne mais
+#: un `usage`, et aucune etude ne l'emploie. L'ajouter quand une le fera.
+LOIS = {
+    "fy": loi_fy,
+    "fc": loi_fc,
+    "F_permanente": loi_F_permanente,
+    "F_exploitation": loi_F_exploitation,
+    "uni_approx": loi_uni_approx,
+}
+
+
+def loi_nommee(nom):
+    """La loi que designe `nom`, ou un refus qui dit les choix possibles.
+
+    C'est le point ou une faute de frappe dans un fichier d'etude doit
+    s'arreter. Sans lui, `loi = "fyd"` aurait passe la lecture du TOML et
+    plante -- ou pire, silencieusement fait autre chose -- au premier tirage.
+    """
+    if nom not in LOIS:
+        raise ValueError(
+            "loi %r inconnue. Declarables : %s.\n"
+            "Les lois vivent dans `_model/lois.py` ; en ajouter une consiste "
+            "a l'ecrire puis a la nommer dans `LOIS`."
+            % (nom, ", ".join(sorted(LOIS))))
+    return LOIS[nom]

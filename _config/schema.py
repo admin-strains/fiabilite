@@ -400,6 +400,31 @@ class Configuration:
     hf_2d_grid_fixed: Optional[list] = None
     hf_3d_grid_fixed: Optional[list] = None
 
+    # ------------------------------------------------ variables aleatoires
+    #: LES VARIABLES ALEATOIRES DE L'ETUDE, declarees en donnees.
+    #:
+    #: Une par table `[variables.<nom>]` du fichier d'etude :
+    #:
+    #:     [variables.fy]
+    #:     loi   = "fy"                  # nom d'une loi de _model/lois.py
+    #:     args  = [550]                 # ses parametres, dans l'ordre
+    #:     param = "YIELD_STRENGTH"      # le parametre que le solveur derive
+    #:
+    #: Ce qui n'y est PAS : la liste des elements du modele sur lesquels la
+    #: variable porte. C'est une SELECTION -- « les armatures de nuance fyd1 »,
+    #: 13 858 noms --, la seule part de la declaration qui ait besoin de code.
+    #: L'etude la calcule avec `_model/selection.py` et la passe a
+    #: `construire_param_config`. Arbitrage d'Agnes du 02/09/2026, option B'.
+    #:
+    #: Des noms LITTERAUX peuvent en revanche etre ecrits ici -- `solides =
+    #: ["Block1"]` --, parce qu'un nom est une donnee.
+    #:
+    #: `region_key` n'est pas declarable : il vaut le nom de la variable.
+    #: Les deux etudes l'ecrivaient a la main, identique au nom dans les
+    #: quatre cas, avec le risque d'un doublon que `coherence` devait
+    #: attraper. Le deriver rend le doublon impossible.
+    variables: dict = field(default_factory=dict)
+
     # =================================================================== #
     # Valeurs derivees : elles ne peuvent pas contredire les champs        #
     # =================================================================== #
@@ -445,6 +470,24 @@ class Configuration:
     def is_actif(self) -> bool:
         """Tirage d'importance reellement pratique -- meme raison."""
         return self.do_IS and not self.do_HF
+
+    @property
+    def ana_actif(self) -> bool:
+        """`print_ana` reellement pratique.
+
+        La surcouche analytique compare le metamodele a une forme fermee de
+        la SECTION : une variable de CHARGEMENT n'y entre pas. L'etude de
+        flexion pure corrigeait donc `print_ana` a la main, quinze lignes
+        apres l'avoir lu -- et le refus etait MUET jusqu'au 02/09/2026 : le
+        resume de configuration imprimait `print_ana=True` et la figure
+        sortait sans sa surcouche.
+
+        Meme dessin que `eff_actif` et `is_actif` : l'INTENTION reste dans le
+        champ, l'EFFET est ici. Ce qui rend la correction visible plutot que
+        cachee dans un script.
+        """
+        return self.print_ana and not any(
+            "cas_de_charge" in decl for decl in self.variables.values())
 
     @property
     def chemin_ds(self) -> str:
@@ -524,6 +567,52 @@ class Configuration:
         return os.path.join(base, "png EFF", "png_EFF_%s" % timestamp)
 
     # =================================================================== #
+    #: Ce qu'une table `[variables.<nom>]` peut porter.
+    CLEFS_VARIABLE = frozenset(("loi", "args", "param", "armatures",
+                                "solides", "cas_de_charge", "axe"))
+
+    #: Et ce qu'elle DOIT porter.
+    CLEFS_VARIABLE_OBLIGATOIRES = ("loi", "args", "param")
+
+    def _problemes_des_variables(self):
+        """Ce qui cloche dans la declaration des variables aleatoires.
+
+        Rendu comme une LISTE, jointe aux autres problemes : un fichier
+        d'etude avec trois fautes doit les montrer toutes, pas la premiere.
+        """
+        from lois import LOIS                                # noqa: PLC0415
+        mauvais = []
+        if not isinstance(self.variables, dict):
+            return ["variables : attendu des tables `[variables.<nom>]`, "
+                    "recu %s" % type(self.variables).__name__]
+        for nom, decl in self.variables.items():
+            ou = "variables.%s" % nom
+            if not isinstance(decl, dict):
+                mauvais.append("%s : attendu une table, recu %s"
+                               % (ou, type(decl).__name__))
+                continue
+            inconnues = sorted(set(decl) - self.CLEFS_VARIABLE)
+            if inconnues:
+                mauvais.append("%s : clef(s) inconnue(s) %s (attendu parmi %s)"
+                               % (ou, ", ".join(inconnues),
+                                  ", ".join(sorted(self.CLEFS_VARIABLE))))
+            manquantes = [k for k in self.CLEFS_VARIABLE_OBLIGATOIRES
+                          if k not in decl]
+            if manquantes:
+                mauvais.append("%s : clef(s) obligatoire(s) absente(s) : %s"
+                               % (ou, ", ".join(manquantes)))
+            if "loi" in decl and decl["loi"] not in LOIS:
+                mauvais.append("%s : loi %r inconnue (declarables : %s)"
+                               % (ou, decl["loi"], ", ".join(sorted(LOIS))))
+            if "args" in decl and not isinstance(decl["args"], list):
+                mauvais.append("%s : `args` doit etre une liste, meme a un "
+                               "element -- recu %s"
+                               % (ou, type(decl["args"]).__name__))
+            if "param" in decl and not isinstance(decl["param"], str):
+                mauvais.append("%s : `param` doit etre le nom du parametre "
+                               "solveur, une chaine" % ou)
+        return mauvais
+
     def valider(self) -> None:
         """Refuse une configuration incoherente, avec un message utilisable.
 
@@ -532,6 +621,7 @@ class Configuration:
         metamodele, sans un mot.
         """
         problemes = []
+        problemes += self._problemes_des_variables()
         if self.modele not in MODELES:
             problemes.append("modele=%r inconnu (attendu : %s)"
                              % (self.modele, ", ".join(MODELES)))
@@ -772,6 +862,8 @@ CATEGORIES = {
     "erreur_fosm": "sortie",
     "print_gepck_calls": "sortie", "do_custom_hf": "sortie",
     "hf_2d_grid_fixed": "sortie", "hf_3d_grid_fixed": "sortie",
+    # Les variables aleatoires DEFINISSENT le probleme pose.
+    "variables": "etude",
 
     # --- SANS EFFET ----------------------------------------------------------
     "reduc_PLS": "sans_effet", "do_analytic_grad": "sans_effet",

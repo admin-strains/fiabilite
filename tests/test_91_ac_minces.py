@@ -168,7 +168,7 @@ PROJET = {
 #: 28/08 (suite) : la couche d'acces au solveur -- un solveur par modele,
 #: memoise parce qu'il porte un compteur d'appels, et les deux
 #: adaptateurs paralleles (plan et points). 1380 -> 1346.
-PLAFOND_LIGNES = 1097
+PLAFOND_LIGNES = 1080
 PLAFOND_FONCTIONS = 31
 
 

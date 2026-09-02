@@ -25,9 +25,6 @@ from datetime import datetime
 # fit_gepck/fit_pck sont partis avec le dispatch dans
 # `_surrogate/ajuster.py` ; l'etude ne fait plus que PREDIRE.
 from api import predict_gepck, predict_pck
-# Seule `loi_fy` est utilisee ici : les trois autres ne survivaient que
-# par des lignes de PARAM_CONFIG mises en commentaire.
-from lois import loi_fy
 import lois as _lois
 import selection as _selection
 import doe as _cache_doe
@@ -49,6 +46,7 @@ import plan as _plan
 import parallele as _parallele
 import schema as _schema
 import coherence as _coherence
+import variables as _variables
 from fabrique import solveur as _fabriquer_solveur
 
 
@@ -103,7 +101,6 @@ if __name__ == '__main__':
     print("=" * 70)
 
     # --- Groupes d'aciers, lus dans le dsCad ---------------------------------
-    # params_names et n_var sont derives de PARAM_CONFIG_CAD/LOAD (definis apres les loi_*)
     # Les deux groupes d'acier, un par nuance. `_model/selection.py` refuse
     # une selection VIDE -- une nuance mal orthographiee donnait auparavant
     # une region de sensibilite vide, donc un gradient nul, indiscernable
@@ -282,29 +279,19 @@ if __name__ == '__main__':
     # --- DISTRIBUTIONS ---
     
 
-    # --- CONFIG DES VARIABLES ALEATOIRES (dicts) : tout en derive (lois, patch, sensibilites) ---
-    FY_MEAN = 235.0
-    PARAM_CONFIG_CAD = {
-        # transfert4 T4-1 (2026-07-06) : 'mean'/'cov' -> 'args' (tuple passe a la loi ;
-        # supporte des lois a signatures differentes, ex. loi_uni_approx(a, b, alpha)).
-        'fy1': {'sens': {"param": "YIELD_STRENGTH", "rebars": group1_names, "region_key": "fy1"},
-                'loi': loi_fy, 'args': (FY_MEAN, None)},
-        'fy2': {'sens': {"param": "YIELD_STRENGTH", "rebars": group2_names, "region_key": "fy2"},
-                'loi': loi_fy, 'args': (FY_MEAN, None)},
-    }
-
-    PARAM_CONFIG_LOAD = {}
-    # # --- PARAM_CONFIG : catalogue des variables aleatoires ---
-    # PARAM_CONFIG_CAD = {}
-    # PARAM_CONFIG_LOAD = {
-    #     's_convoi': {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi",
-    #                           "axis": "position", "region_key": "s_convoi"},
-    #                  'loi': loi_uni_approx, 'args': (0.0, 1.0, 0.15)},
-    #     'q':        {'sens': {"param": "LIVE_LOAD", "load_case": "LC_convoi", "region_key": "q"},
-    #                  'loi': loi_F_permanente, 'args': (0.2, 0.40)},
-    # }
-    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
-    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
+    # --- CONFIG DES VARIABLES ALEATOIRES ---
+    # Declarees en DONNEES dans `studies/*.toml`, section `[variables]` : leur
+    # loi, ses parametres, et le parametre solveur a deriver. Ne reste ici que
+    # la SELECTION des armatures de chaque nuance, faite plus haut.
+    #
+    # Une variable de CHARGEMENT se declare de la meme facon, avec un
+    # `cas_de_charge` et au besoin un `axe` -- l'exemple du convoi (`s_convoi`
+    # sur `LC_convoi`, axe `position`) vit desormais dans le fichier d'etude,
+    # ou il se lit sans etre du code en commentaire.
+    PARAM_CONFIG = _variables.construire(
+        CFG, elements={"fy1": {"armatures": group1_names},
+                       "fy2": {"armatures": group2_names}}, tracer=print)
+    params_names = list(PARAM_CONFIG)
     n_var = len(params_names)
     _coherence.verifier(PARAM_CONFIG, params_names, _path_ds)  # 0,36 s vs 466 s
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})

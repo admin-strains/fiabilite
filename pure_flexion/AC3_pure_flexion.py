@@ -31,7 +31,6 @@ from datetime import datetime
 from api import predict_gepck, predict_pck
 # `loi_F_permanente` ne survivait que par une ligne de PARAM_CONFIG mise
 # en commentaire.
-from lois import loi_fc, loi_fy
 import lois as _lois
 import selection as _selection
 import doe as _cache_doe
@@ -53,6 +52,7 @@ import plan as _plan
 import parallele as _parallele
 import schema as _schema
 import coherence as _coherence
+import variables as _variables
 from fabrique import solveur as _fabriquer_solveur
 
 
@@ -99,17 +99,17 @@ if __name__ == '__main__':
     # qui AGIT. Les 45 copies locales `x = CFG.x` sont parties le 02/09/2026 --
     # une copie qui peut etre reaffectee est un reglage qui peut mentir.
     #
-    # Ces trois-la restent des locaux parce qu'ils CHANGENT en cours de run, et
+    # Ces deux-la restent des locaux parce qu'ils CHANGENT en cours de run, et
     # chaque changement s'annonce :
     #   * `max_degree`   : une reprise le relit dans son dump ;
-    #   * `do_custom_hf` : retombe a False si le fichier de grille manque ;
-    #   * `print_ana`    : la surcouche analytique n'a de sens que si toutes les
-    #                      variables sont des parametres CAD.
+    #   * `do_custom_hf` : retombe a False si le fichier de grille manque.
+    # `print_ana` en est SORTI le 02/09/2026 : la correction qu'il subissait
+    # -- pas de surcouche analytique si une variable porte sur un chargement
+    # -- est devenue `CFG.ana_actif`, une valeur derivee, comme `eff_actif`.
     # `tol_all_modes` reste lie parce que `FORM_all_modes` a un PARAMETRE du
     # meme nom : le lire sur `CFG` a l'interieur changerait le sens du code.
     max_degree          = CFG.max_degree
     tol_all_modes       = CFG.tol_all_modes
-    print_ana           = CFG.print_ana
     do_custom_hf        = CFG.do_custom_hf
 
     # Un worker de DOE parallele travaille sur une copie isolee du modele : son
@@ -293,33 +293,16 @@ if __name__ == '__main__':
     
 
     # --- PARAM_CONFIG : catalogue des variables aleatoires ---
+    # Declare en DONNEES dans `studies/*.toml`, section `[variables]`. Ne
+    # reste ici que la SELECTION des elements du modele, seule part qui ait
+    # besoin de code -- cf. `_config/variables.py` et `_model/selection.py`.
     rebar_names = _selection.armatures(_cad_txt)
     n_rebars = len(rebar_names)
-    PARAM_CONFIG_CAD = {
-        'fc': {'sens': {"param": "COMPRESSIVE_STRENGTH", "solids": ["Block1"], "region_key": "fc"},
-               'loi': loi_fc, 'args': (48, 0.12)},
-        'fy': {'sens': {"param": "YIELD_STRENGTH", "rebars": rebar_names, "region_key": "fy"},
-               'loi': loi_fy, 'args': (550, None)},
-    }
-    PARAM_CONFIG_LOAD = {
-        # 'F':  {'sens': {"param": "LIVE_LOAD", "load_case": "Load_case0", "region_key": "F"},
-        #        'loi': loi_F_permanente, 'args': (1.0, 0.05)},
-    }
-    PARAM_CONFIG = {**PARAM_CONFIG_LOAD, **PARAM_CONFIG_CAD}
-    params_names = list(PARAM_CONFIG_LOAD.keys()) + list(PARAM_CONFIG_CAD.keys())
+    PARAM_CONFIG = _variables.construire(
+        CFG, elements={"fy": {"armatures": rebar_names}}, tracer=print)
+    params_names = list(PARAM_CONFIG)
     n_var = len(params_names)
     _coherence.verifier(PARAM_CONFIG, params_names, _path_ds)  # 0,36 s vs 466 s
-    if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
-        # La surcouche analytique compare le metamodele a une forme fermee de
-        # la section : elle n'a de sens que si toutes les variables sont des
-        # parametres CAD. Le refus etait MUET -- le resume de configuration
-        # imprimait `print_ana=True` et la figure sortait sans la surcouche.
-        if print_ana:
-            print("[config] print_ana demande, mais %s ne sont pas des "
-                  "parametres CAD : pas de surcouche analytique."
-                  % ", ".join(sorted(set(params_names)
-                                     - set(PARAM_CONFIG_CAD))), flush=True)
-        print_ana = False
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = (0, 1, {})           # 2 variables : pas de coupe, plan complet fy vs fc
 
@@ -840,7 +823,7 @@ if __name__ == '__main__':
         if CFG.print_HF:
             legende.append(dict(color='red', linestyle='--', linewidth=2,
                                 label='g=0 HF'))
-        if print_ana:
+        if CFG.ana_actif:
             legende.append(dict(color='green', linestyle='-.', linewidth=2,
                                 label='g=0 ana'))
 
@@ -849,7 +832,7 @@ if __name__ == '__main__':
             xt=xt, xt_eff=xt_eff, points_de_depart=best_sps,
             modes=modes if modes else ([best_result] if best_result is not None else []),
             modes_figes=best_sol_modes_fixed, gradients_figes=grad_sp_fixed,
-            trajectoires=traj_runs_fixed, surcouche=_surcouche_analytique if print_ana else None,
+            trajectoires=traj_runs_fixed, surcouche=_surcouche_analytique if CFG.ana_actif else None,
             legende=legende)
 
 
@@ -886,7 +869,7 @@ if __name__ == '__main__':
         return _figurer.relief(_DECOR, U1_hf, U2_hf, Z, CFG.n_grid_hf,
                                modes_figes=best_sol_modes_fixed,
                                gradients_figes=grad_sp_fixed,
-                               surcouche=_relief_analytique if print_ana else None)
+                               surcouche=_relief_analytique if CFG.ana_actif else None)
 
     def _relief_analytique(ax, plancher):
         """La surface analytique de reference, superposee en relief.

@@ -64,3 +64,27 @@ n_grid_hf = 7             # grille 7x7 = 49 appels solveur, suffisant en 2 varia
 print_fullHF = true
 do_custom_hf = false
 print_ana = false         # courbe analytique superposee (propre a cette etude)
+
+# --------------------------------------------------------------------------- #
+# LES VARIABLES ALEATOIRES                                                    #
+# --------------------------------------------------------------------------- #
+# `loi`   : une des lois de `_model/lois.py` -- voir le registre `LOIS`.
+# `args`  : ses parametres, dans l'ordre. Toujours une liste.
+# `param` : le parametre que le solveur doit deriver.
+#
+# Les ARMATURES ne sont pas ici : « toutes les armatures du modele » est une
+# selection, pas une donnee. L'etude la calcule avec `_model/selection.py`.
+# Un NOM, en revanche, est une donnee -- d'ou `solides = ["Block1"]`.
+#
+# `region_key` n'est pas declarable : il vaut le nom de la variable.
+
+[variables.fc]
+loi     = "fc"
+args    = [48, 0.12]
+param   = "COMPRESSIVE_STRENGTH"
+solides = ["Block1"]
+
+[variables.fy]
+loi   = "fy"
+args  = [550]
+param = "YIELD_STRENGTH"
