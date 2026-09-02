@@ -18,48 +18,21 @@ import copy
 import numpy as np
 
 #: L'optimiseur qui fournit `theta0` avant la boucle LARS du mode `optimal`.
+#: 'de' -- `differential_evolution`, seme a 42. Valeur historique, la seule
+#: en service.
 #:
-#: 'de' -- `differential_evolution`, seme a 42. Valeur HISTORIQUE, celle sous
-#: laquelle toutes les etudes ont tourne, et la seule en service.
+#: CE CHOIX N'EST PAS LA CAUSE DE L'IRREPRODUCTIBILITE, contrairement a ce
+#: que ce commentaire affirmait le 01/09/2026. Instrumentation du 02/09 :
+#: `differential_evolution` rend le MEME theta a 7 et a 1 thread, sur les
+#: quatre cas de reference. L'ecart apparait PLUS LOIN, dans la chaine de
+#: warm-start qui suit.
 #:
-#: POURQUOI CE CHOIX EST EXPOSE ICI PLUTOT QU'ECRIT DEUX FOIS EN LITTERAL
-#: -----------------------------------------------------------------------
-#: `'de'` est SEME, ce qui donne une illusion de determinisme : il ne tient
-#: que si l'arithmetique est identique au bit pres. DE progresse par
-#: COMPARAISONS de J entre membres d'une population ; sur une vraisemblance
-#: plate ces comparaisons se jouent au dernier bit, et l'ecart est amplifie a
-#: chaque generation. Mesure du 01/09/2026, meme poste, meme numpy, meme DOE,
-#: `linear/PCK` :
-#:
-#:     mode            7 threads              1 thread
-#:     sequential      [0.999989, 0.999989]   [1.000000, 1.000000]
-#:     optimal (DE)    [54.5629, 37.7713]     [31.5094, 100.0000]
-#:
-#: `sequential` n'appelle pas DE et ne bouge pas.
-#:
-#: CE QUI A ETE ESSAYE POUR FERMER CELA, ET MESURE INSUFFISANT
-#: -----------------------------------------------------------
-#: Remplacer DE par un multi-depart DETERMINISTE -- L-BFGS-B depuis une
-#: grille fixe, le meilleur gagne. Ecart relatif de theta entre 7 et 1
-#: thread, plus petit est meilleur :
-#:
-#:     cas              DE         multi-depart
-#:     flexion/PCK      9.71e-01   9.70e-01
-#:     flexion/GEPCK    3.54e-02   8.16e-02
-#:     linear/PCK       7.32e-01   2.78e-01
-#:     linear/GEPCK     0.00e+00   6.72e-02      <- DE etait EXACT ici
-#:
-#: Pas mieux, parfois pire, et 2 a 5 fois plus d'evaluations de J. Desserrer
-#: le depart d'ex aequo de 1e-12 a 1e-4 ne change RIEN (et empire a 1e-2) :
-#: l'instabilite n'est pas dans la selection entre optima, elle est dans
-#: CHAQUE L-BFGS-B. Sur un plateau, il s'arrete quand le gradient passe sous
-#: `gtol` ; le gradient etant minuscule partout, l'endroit ou il s'arrete est
-#: fixe par l'arrondi, pas par la fonction.
-#:
-#: CONCLUSION : `theta` n'est pas determine par les donnees. Aucun choix
-#: d'optimiseur ne le rendra reproductible d'une arithmetique a l'autre. La
-#: consequence a en tirer porte sur les GOLDENS -- ce qu'ils figent -- pas
-#: sur l'ajustement. Voir `tests/test_31_theta_non_identifiable.py`.
+#: LA CAUSE MESUREE EST AILLEURS -- voir `_lib/kriging.py`,
+#: `kriging_optimize_theta` : `minimize(...)` est appele SANS `jac`, donc
+#: scipy differencie J avec son pas par defaut de 1.49e-08 ABSOLU, alors que
+#: theta vit sur [0.01, 100] et que le bruit d'evaluation de J vaut 3.05e-08.
+#: Le gradient recu vaut donc ~2 la ou la vraie pente vaut 3e-04 : c'est du
+#: bruit. Detail et mesures dans `tests/test_31_theta_non_identifiable.py`.
 METHODE_INIT_THETA = 'de'
 
 

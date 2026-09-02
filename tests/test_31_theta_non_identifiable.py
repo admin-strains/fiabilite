@@ -1,34 +1,84 @@
-r"""`theta` n'est pas determine par les donnees -- la mesure, et ses limites.
+r"""Pourquoi `theta` differe d'une machine a l'autre -- la cause, mesuree.
 
-POURQUOI CE FICHIER EXISTE
----------------------------
-Le 31/08/2026, les cinq jobs d'integration continue rendaient cinq `theta`
-differents sur les memes goldens. La question « comment rendre cela
-reproductible ? » a recu trois reponses successives, et les deux premieres
-etaient fausses. Ce fichier fige la troisieme, pour que personne ne refasse
-le chemin.
+CE FICHIER A PORTE UNE CONCLUSION FAUSSE PENDANT UN JOUR
+---------------------------------------------------------
+Version du 01/09/2026 : « theta n'est pas determine par les donnees, aucun
+choix d'optimiseur ne le rendra reproductible ». C'etait faux, et le
+raisonnement qui y menait l'etait aussi : j'avais lu `sequential` rendant
+theta0 = [1, 1] comme LA PREUVE d'un plateau de vraisemblance. C'est en
+realite la preuve que L'OPTIMISEUR NE PEUT PAS BOUGER. Symptome pris pour
+cause, et recherche arretee trop tot.
 
-**Ce n'est pas Linux.** `noyau windows-latest py3.10` -- la configuration la
-plus proche du poste de reference -- reproduit les goldens EXACTEMENT depuis
-le bridage a un thread. Ce sont les autres qui divergent.
+Agnes, 02/09/2026 : « vise plus large que dernier bit, tu as un a priori ».
+Elle avait raison.
 
-**Ce n'est pas la version des bibliotheques.** Les goldens ont ete produits
-sous numpy 2.1.1 / scipy 1.15.2 et passent sous 2.2.6 / 1.15.3 sur la meme
-machine.
+LA CAUSE, INSTRUMENTEE
+-----------------------
+`_lib/kriging.py:kriging_optimize_theta` appelle
 
-**Ce n'est pas seulement le nombre de threads.** Le bridage a un thread a
-rendu VERT le job Windows/3.10 -- premier job vert de ce depot -- mais les
-quatre autres divergent toujours.
+    minimize(J, theta0, method='L-BFGS-B', bounds=...,
+             options={'maxiter': 400, 'ftol': 1e-12, 'gtol': 1e-8})
 
-**Et ce n'est pas l'optimiseur.** C'est la mesure qui a coute le plus a
-obtenir, et c'est elle qui ferme le sujet : voir ci-dessous.
+SANS `jac`. Scipy differencie donc J lui-meme, avec son pas par defaut
+`eps ~ 1.49e-08`, ABSOLU. Or theta vit sur [0.01, 100] et J passe par une
+factorisation de Cholesky dont le conditionnement mesure 2.4e+09.
 
-CE QUE CE FICHIER NE FAIT PAS
-------------------------------
-Il ne corrige rien et ne verifie aucune valeur de `theta`. Il enregistre une
-PROPRIETE du probleme -- l'optimum est un plateau -- et deux consequences
-verifiables : le mode qui n'optimise pas est stable, et le LOO ne bouge pas
-quand `theta` bouge de 97 %.
+Derivee de J par differences finies, a theta0 = [47.6737, 21.9981] :
+
+    pas h        dJ/dtheta_0       dJ/dtheta_1
+    1.49e-08     1.0283e+00        -1.6137e+00     <-- le pas de scipy
+    1.00e-06     1.5888e-02        -4.1327e-02
+    1.00e-04     3.0482e-04         4.8278e-04
+    1.00e-03     3.1950e-05         6.1622e-04
+
+Une derivee honnete a un plateau. Ici la valeur au pas de scipy vaut TROIS
+MILLE FOIS celle obtenue a 1e-04, et change de signe. Mesure du bruit :
+perturber theta au dernier bit deplace J de 3.05e-08 ; divise par 1.49e-08,
+cela donne un gradient parasite de 2.05 -- exactement l'ordre de ce que
+scipy calcule.
+
+LE GRADIENT RECU EST DONC DU BRUIT. Sa norme n'est pas une propriete de J,
+c'est le plancher de bruit de J divise par le pas.
+
+CE QUE LA TRACE MONTRE, EN CONSEQUENCE
+---------------------------------------
+Chaine de warm-start du mode `optimal`, `flexion/PCK` :
+
+    etape  theta @7 threads      theta @1 thread       arret
+    ii=1   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=3)
+    ii=3   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=0)
+    ii=4   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=0)
+    ii=5   [47.6737, 21.9981]    [ 6.5457,  6.1283]    ABNORMAL
+
+`ABNORMAL` est `ABNORMAL_TERMINATION_IN_LNSRCH` : la recherche lineaire
+echoue, ce qui est le symptome direct d'un gradient qui ne pointe pas vers
+le bas. A `nit = 0`, l'optimiseur n'a fait AUCUNE iteration.
+
+CE QUI RESTE VRAI DE LA VERSION FAUSSE
+---------------------------------------
+Sur le cas LINEAIRE seulement. L'etat limite y est represente EXACTEMENT par
+la PCE (LOO ~ 1e-25) : il ne reste aucun residu que le krigeage puisse
+expliquer, et une portee de correlation ajustee sur un residu nul n'a pas de
+valeur vraie. La, theta n'est effectivement pas identifiable -- et un pas
+correct ne le rend pas reproductible non plus.
+
+Sur la flexion, en revanche, J a une VRAIE pente : 3e-04, stable de 1e-04 a
+1e-01. Il n'y avait rien de fatal.
+
+CE QUI FERMERAIT LE SUJET, ET CE QUE CELA COUTE
+------------------------------------------------
+Reproductibilite entre 7 et 1 thread, trois parametrisations mesurees :
+
+    cas              defaut      pas relatif   log10(theta)
+    flexion/PCK      9.71e-01    1.65e-02      1.77e-11
+    flexion/GEPCK    3.54e-02    3.86e-06      0.00e+00
+    linear/PCK       7.32e-01    9.99e-01      3.46e-02
+    linear/GEPCK     0.00e+00    3.98e-03      5.55e-04
+
+Dix ordres de grandeur sur `flexion/PCK`, l'identite bit-a-bit sur
+`flexion/GEPCK`. Mais le changement DEPLACE DES RESULTATS -- sur
+`flexion/GEPCK`, le LOO passe de 7.62e-11 a 2.12e-09 -- et le plan de
+nettoyage interdit cela sans decision. Ce fichier MESURE ; il ne tranche pas.
 """
 
 import os
@@ -51,131 +101,204 @@ np = pytest.importorskip("numpy")
 import harness                                              # noqa: E402
 
 
-#: Releve du 01/09/2026, meme poste, meme numpy, meme DOE, `linear/PCK`.
-#: Seul le nombre de threads BLAS change entre les deux colonnes.
-_MESURE_DES_THREADS = """
-    mode            7 threads              1 thread
-    sequential      [0.999989, 0.999989]   [1.000000, 1.000000]
-    optimal (DE)    [54.5629, 37.7713]     [31.5094, 100.0000]
-"""
-
-#: Ce qui a ete essaye pour fermer le sujet, et mesure insuffisant : un
-#: multi-depart DETERMINISTE a la place de `differential_evolution`.
-#: Ecart relatif de theta entre 7 et 1 thread -- plus petit est meilleur.
-_MESURE_DU_MULTIDEPART = """
-    cas              DE         multi-depart
-    flexion/PCK      9.71e-01   9.70e-01
-    flexion/GEPCK    3.54e-02   8.16e-02
-    linear/PCK       7.32e-01   2.78e-01
-    linear/GEPCK     0.00e+00   6.72e-02      <- DE etait EXACT ici
-"""
+#: Le pas de differenciation que scipy emploie par defaut pour L-BFGS-B,
+#: quand aucun `jac` n'est fourni. ABSOLU, donc sans rapport avec l'echelle
+#: de theta.
+PAS_DE_SCIPY = 1.49e-8
 
 
-def _ajuster(mode, case="linear", kind="PCK"):
+def _params_et_theta0(case="flexion", kind="PCK"):
+    """Capture les entrees du PREMIER appel gradbased d'un vrai ajustement.
+
+    On ne fabrique pas un probleme de test : on prend celui que l'etude
+    resout reellement.
+    """
+    import json
+    import kriging as _kr
+    import fit as _fit
+    from reference.limit_states import CASES
+
+    capture = {}
+    vrai = _kr.kriging_optimize_theta
+
+    def espion(params, theta0, bornes, method="gradbased"):
+        if method.lower() == "gradbased" and "params" not in capture:
+            capture["params"] = params
+            capture["theta0"] = np.asarray(theta0, float).copy()
+        return vrai(params, theta0, bornes, method)
+
+    _kr.kriging_optimize_theta = espion
+    _fit.kriging_optimize_theta = espion
+    try:
+        with open(os.path.join(_REPO, "tests", "golden", case + ".json"),
+                  encoding="utf-8") as fh:
+            ref = json.load(fh)
+        opts = {"Mode": "optimal",
+                "PCE": {"Degree": list(range(1, ref["max_degree"] + 1)),
+                        "Method": "LARS"}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            harness.fit(kind, np.asarray(ref["doe"]), CASES[case](), opts=opts)
+    finally:
+        _kr.kriging_optimize_theta = vrai
+        _fit.kriging_optimize_theta = vrai
+
+    if "params" not in capture:
+        pytest.skip("aucun appel gradbased capture")
+    return capture["params"], capture["theta0"]
+
+
+# --------------------------------------------------------------------- #
+# 1. LE FAIT CENTRAL : le gradient recu est du bruit
+# --------------------------------------------------------------------- #
+def test_au_pas_de_scipy_le_gradient_est_du_bruit():
+    """La derivee au pas de scipy n'a rien a voir avec la vraie pente.
+
+    Une derivee saine a un PLATEAU en fonction du pas. On exige ici que la
+    valeur au pas de scipy soit au moins cent fois celle obtenue a 1e-4 --
+    mesure le 02/09/2026 : facteur 3 372 sur la premiere composante.
+
+    Si ce temoin tombe un jour parce que le rapport devient PETIT, c'est une
+    bonne nouvelle : le gradient serait devenu exploitable, et tout ce
+    fichier serait a relire.
+    """
+    import kriging as _kr
+    params, theta0 = _params_et_theta0()
+
+    def J(t):
+        return _kr.uq_Kriging_eval_J_of_theta_ML(np.asarray(t, float), params)
+
+    J0 = J(theta0)
+
+    def derivee(h, k):
+        tp = np.asarray(theta0, float).copy()
+        tp[k] += h
+        return (J(tp) - J0) / h
+
+    for k in range(len(theta0)):
+        au_pas_scipy = abs(derivee(PAS_DE_SCIPY, k))
+        vraie_pente = abs(derivee(1e-4, k))
+        assert au_pas_scipy > 100 * vraie_pente, (
+            "composante %d : |dJ| = %.3e au pas de scipy contre %.3e a 1e-4, "
+            "soit un facteur %.0f. Attendu : au moins 100. Un rapport devenu "
+            "petit voudrait dire que le gradient est redevenu exploitable."
+            % (k, au_pas_scipy, vraie_pente, au_pas_scipy / max(vraie_pente, 1e-300)))
+
+
+def test_le_bruit_de_J_explique_ce_gradient():
+    """Le chiffre qui ferme le raisonnement.
+
+    Perturber theta au dernier bit deplace J de ~3e-08. Divise par le pas de
+    scipy, cela donne un gradient parasite de l'ordre de 2 -- c'est-a-dire
+    l'ordre de ce que scipy calcule. Le « gradient » n'est donc pas une
+    propriete de J : c'est son plancher de bruit divise par le pas.
+    """
+    import kriging as _kr
+    params, theta0 = _params_et_theta0()
+
+    valeurs = [_kr.uq_Kriging_eval_J_of_theta_ML(
+        np.asarray(theta0, float) * (1.0 + k * np.finfo(float).eps), params)
+        for k in range(12)]
+    bruit = max(valeurs) - min(valeurs)
+    gradient_parasite = bruit / PAS_DE_SCIPY
+
+    assert bruit > 0.0, (
+        "J ne bouge plus du tout sous une perturbation au dernier bit : le "
+        "raisonnement de ce fichier suppose un bruit d'evaluation non nul.")
+    assert gradient_parasite > 1e-2, (
+        "gradient parasite %.3e, trop petit pour expliquer les valeurs "
+        "observees (~1). Le bruit mesure vaut %.3e." % (gradient_parasite, bruit))
+
+
+# --------------------------------------------------------------------- #
+# 2. LA CONSEQUENCE : l'optimiseur n'avance pas
+# --------------------------------------------------------------------- #
+def test_l_optimiseur_echoue_en_recherche_lineaire():
+    """`ABNORMAL_TERMINATION_IN_LNSRCH` -- le symptome direct.
+
+    Sur un vrai ajustement, une part notable des appels a L-BFGS-B se
+    termine par un echec de recherche lineaire, et certains sans avoir fait
+    UNE SEULE iteration. Un optimiseur qui recevrait un vrai gradient ne
+    ferait pas cela.
+    """
+    import json
+    import kriging as _kr
+    import fit as _fit
+    from scipy.optimize import minimize
+    from reference.limit_states import CASES
+
+    arrets = []
+    vrai = _kr.kriging_optimize_theta
+
+    def espion(params, theta0, bornes, method="gradbased"):
+        if method.lower() != "gradbased":
+            return vrai(params, theta0, bornes, method)
+        lb, ub = bornes[0, :], bornes[1, :]
+
+        def J(t):
+            return _kr.uq_Kriging_eval_J_of_theta_ML(t, params)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = minimize(J, theta0, method="L-BFGS-B",
+                           bounds=list(zip(lb, ub)),
+                           options={"maxiter": 400, "ftol": 1e-12,
+                                    "gtol": 1e-8})
+        arrets.append((str(res.message), int(res.nit)))
+        return res.x, res.fun, int(res.success)
+
+    _kr.kriging_optimize_theta = espion
+    _fit.kriging_optimize_theta = espion
+    try:
+        with open(os.path.join(_REPO, "tests", "golden", "flexion.json"),
+                  encoding="utf-8") as fh:
+            ref = json.load(fh)
+        opts = {"Mode": "optimal",
+                "PCE": {"Degree": list(range(1, ref["max_degree"] + 1)),
+                        "Method": "LARS"}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            harness.fit("PCK", np.asarray(ref["doe"]), CASES["flexion"](),
+                        opts=opts)
+    finally:
+        _kr.kriging_optimize_theta = vrai
+        _fit.kriging_optimize_theta = vrai
+
+    anormaux = [m for m, _ in arrets if "ABNORMAL" in m.upper()]
+    immobiles = [n for _, n in arrets if n == 0]
+    assert anormaux, (
+        "plus aucun echec de recherche lineaire sur %d appels. Si le gradient "
+        "a ete corrige, ce fichier est a relire entierement." % len(arrets))
+    assert immobiles or len(anormaux) >= 2, (
+        "un seul symptome sur %d appels : le diagnostic de ce fichier "
+        "s'appuie sur leur recurrence." % len(arrets))
+
+
+# --------------------------------------------------------------------- #
+# 3. CE QUI RESTE VRAI DE LA VERSION FAUSSE -- le cas degenere
+# --------------------------------------------------------------------- #
+def test_sur_le_cas_lineaire_il_n_y_a_vraiment_rien_a_identifier():
+    """La PCE represente l'etat limite EXACTEMENT : LOO ~ 1e-25.
+
+    Il ne reste aucun residu que le krigeage puisse expliquer. Une portee de
+    correlation ajustee sur un residu nul n'a pas de valeur vraie -- et,
+    mesure le 02/09, un pas de differenciation correct ne rend pas ce cas
+    reproductible non plus (3.46e-02 en log-theta, contre 1.77e-11 sur la
+    flexion). C'est la SEULE part de la conclusion du 01/09 qui survive.
+    """
     import json
     from reference.limit_states import CASES
-    with open(os.path.join(_REPO, "tests", "golden", case + ".json"),
+    with open(os.path.join(_REPO, "tests", "golden", "linear.json"),
               encoding="utf-8") as fh:
         ref = json.load(fh)
-    opts = {"Mode": mode, "PCE": {"Degree": list(range(1, ref["max_degree"] + 1)),
-                                  "Method": "LARS"}}
+    opts = {"Mode": "sequential",
+            "PCE": {"Degree": list(range(1, ref["max_degree"] + 1)),
+                    "Method": "LARS"}}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        fm = harness.fit(kind, np.asarray(ref["doe"]), CASES[case](), opts=opts)
-    return fm
-
-
-# --------------------------------------------------------------------- #
-# 1. le plateau existe : sans optimisation, theta ne bouge pas de theta0
-# --------------------------------------------------------------------- #
-def test_sur_le_cas_lineaire_l_optimiseur_n_a_rien_a_optimiser():
-    """`sequential` n'appelle pas `differential_evolution`, et rend theta0.
-
-    theta0 vaut la moyenne geometrique des bornes, sqrt(0.01 * 100) = 1. Le
-    mode `sequential` rend [1, 1] a la cinquieme decimale : l'optimiseur ne
-    trouve NULLE PART ou aller. C'est la preuve directe que la vraisemblance
-    est plate sur ce cas -- l'etat limite lineaire est deja represente
-    EXACTEMENT par la PCE (LOO ~ 1e-25), il ne reste aucun residu que le
-    krigeage puisse expliquer.
-
-    C'est aussi ce qui rend `theta` non identifiable : une portee de
-    correlation ajustee sur un residu nul n'a pas de valeur vraie.
-    """
-    fm = _ajuster("sequential")
-    theta = np.asarray(fm["Kriging"][0]["theta"], float).ravel()
-    assert np.allclose(theta, 1.0, atol=1e-4), (
-        "theta = %s, attendu ~[1, 1] (= theta0). Si l'optimiseur bouge "
-        "maintenant, la vraisemblance n'est plus plate sur ce cas et TOUT ce "
-        "fichier est a relire." % theta)
-
-
-# --------------------------------------------------------------------- #
-# 2. la consequence : le LOO ne suit pas theta
-# --------------------------------------------------------------------- #
-#: Un LOO sous ce seuil designe un metamodele qui interpole son plan a la
-#: precision machine ou presque. Sur ces deux cas de reference, les quatre
-#: ajustements y sont largement -- de 1e-10 a 1e-29.
-LOO_EXCELLENT = 1e-8
-
-
-def test_un_theta_tres_different_donne_un_modele_aussi_bon():
-    """LA raison de ne pas figer `theta` dans un golden.
-
-    Mesure sur la flexion pure -- le cas NON degenere, choisi expres : sur le
-    cas lineaire les deux LOO valent 1e-25 et 1e-29, deux planchers
-    numeriques dont la comparaison ne veut rien dire (premiere version de ce
-    temoin, corrigee).
-
-        mode         theta              LOO
-        sequential   [0.685, 2.370]     5.10e-10
-        optimal      [0.010, 6.549]     3.17e-09
-
-    theta bouge de 98 %, et les DEUX modeles interpolent excellemment. Un
-    golden qui fige theta a `rtol=1e-8` fige donc une grandeur que le
-    probleme ne determine pas, pendant que celle qui compte est stable.
-
-    Le seuil est ABSOLU et non relatif : comparer deux LOO entre eux, quand
-    tous deux sont sous le plancher, revient a comparer du bruit.
-    """
-    seq = _ajuster("sequential", case="flexion")
-    opt = _ajuster("optimal", case="flexion")
-    t_seq = np.asarray(seq["Kriging"][0]["theta"], float).ravel()
-    t_opt = np.asarray(opt["Kriging"][0]["theta"], float).ravel()
-    loo_seq = float(seq["Error"][0]["LOO"])
-    loo_opt = float(opt["Error"][0]["LOO"])
-
-    ecart_theta = float(np.max(np.abs(t_opt - t_seq)
-                               / np.maximum(np.abs(t_seq), 1e-30)))
-    assert ecart_theta > 0.5, (
-        "theta ne differe plus que de %.0f %% entre les deux modes ; ce "
-        "temoin suppose un ecart d'au moins 50 %%." % (100 * ecart_theta))
-
-    assert loo_seq < LOO_EXCELLENT and loo_opt < LOO_EXCELLENT, (
-        "LOO %.3e (sequential) et %.3e (optimal) : l'un des deux depasse le "
-        "seuil de %.0e. Si un theta different degrade maintenant le modele, "
-        "alors theta PORTE de l'information et l'argument de ce fichier "
-        "tombe -- a relire entierement." % (loo_seq, loo_opt, LOO_EXCELLENT))
-
-
-# --------------------------------------------------------------------- #
-# 3. les mesures, consignees pour qu'on ne refasse pas le chemin
-# --------------------------------------------------------------------- #
-def test_les_mesures_qui_ont_ferme_le_sujet_sont_ecrites():
-    """Un garde de DOCUMENTATION, et il est assume comme tel.
-
-    Trois pistes ont ete suivies puis abandonnees sur mesure : le systeme
-    d'exploitation, la version des bibliotheques, et le remplacement de
-    l'optimiseur. La derniere a coute le plus cher a ecarter -- il a fallu
-    ecrire le multi-depart, le mesurer, puis balayer sa tolerance d'ex aequo
-    de 1e-12 a 1e-2 pour etablir que le probleme n'etait pas la.
-
-    Sans ces chiffres, la prochaine personne qui verra cinq theta dans cinq
-    journaux proposera exactement la meme chose.
-    """
-    for texte, attendu in ((_MESURE_DES_THREADS, "sequential"),
-                           (_MESURE_DU_MULTIDEPART, "multi-depart")):
-        assert attendu in texte and "e-0" in texte or "[" in texte, texte
-    assert "0.00e+00" in _MESURE_DU_MULTIDEPART, (
-        "la ligne qui compte le plus a disparu : sur `linear/GEPCK`, DE etait "
-        "EXACTEMENT stable et le multi-depart ne l'etait pas. C'est elle qui "
-        "interdit de presenter le remplacement comme une amelioration.")
+        fm = harness.fit("PCK", np.asarray(ref["doe"]), CASES["linear"](),
+                         opts=opts)
+    loo = float(fm["Error"][0]["LOO"])
+    assert loo < 1e-20, (
+        "LOO = %.3e sur le cas lineaire : la PCE ne le represente plus "
+        "exactement, et l'argument de degenerescence tombe." % loo)
