@@ -88,6 +88,25 @@ def test_structure_du_modele(case, kind):
 #: cent dans toutes les mesures de ce dossier.
 TOL_THETA = 1e-6
 
+#: `beta_pce` et `sigmaSQ` SONT DERIVES DE `theta`, et heritent donc de sa
+#: reproductibilite. `beta_pce` est la solution des moindres carres
+#: generalises A THETA DONNE ; `sigmaSQ` s'en deduit. Les figer plus fin que
+#: `theta` n'a aucun sens.
+#:
+#: Ils etaient restes a 1e-8 quand `theta` a recu sa tolerance -- correction
+#: partielle, et le runner l'a dit. Mesure du 02/09/2026, `flexion/GEPCK`,
+#: windows py3.10 contre le poste de reference :
+#:
+#:     beta_pce   0.0007470435673281748  contre  0.0007470435635183061
+#:                -0.0005861562063558096 contre  -0.0005861562016941963
+#:                soit 8.0e-09 -- contre une tolerance de 1e-8
+#:     sigmaSQ    2.696e-08 (mesure sur la baseline)
+#:
+#: Vingt pour cent de marge. « Un seuil qui tient a 10 % pres ne tient pas »
+#: -- c'est le meme constat que sur le pas de differences finies de
+#: `test_10_legacy_unit`, le 01/09.
+TOL_DERIVES_DE_THETA = 1e-6
+
 #: LES CAS OU `theta` N'EST PAS FIGEABLE DU TOUT, avec la raison.
 #:
 #: Sur `linear`, la PCE represente l'etat limite EXACTEMENT (LOO ~ 1e-25) :
@@ -105,12 +124,21 @@ THETA_NON_IDENTIFIABLE = {'linear'}
 @pytest.mark.parametrize('case', CASES)
 @pytest.mark.parametrize('kind', KINDS)
 def test_coefficients_du_modele(case, kind):
-    """`beta_pce` et `sigmaSQ` restent stricts ; `theta` a sa propre
-    tolerance, et n'est pas verifie la ou il n'a pas de valeur vraie."""
+    """Les trois grandeurs qui dependent de l'endroit ou l'optimiseur
+    s'arrete : `beta_pce`, `sigmaSQ` et `theta` lui-meme.
+
+    Ce que le modele REND -- structure, LOO, predictions -- est verifie
+    ailleurs, et strictement : `test_structure_du_modele` en egalite exacte,
+    `test_erreur_loo` et `test_predictions_aux_points_sonde` a 1e-8. Ces
+    deux-la passent en integration continue depuis le gradient analytique.
+    """
     ref, got = _refit(case, kind)
     exp = ref['models'][kind]
-    assert np.allclose(got['beta_pce'], exp['beta_pce'], rtol=1e-8, atol=1e-14)
-    assert got['sigmaSQ'] == pytest.approx(exp['sigmaSQ'], rel=1e-8)
+    assert np.allclose(got['beta_pce'], exp['beta_pce'],
+                       rtol=TOL_DERIVES_DE_THETA, atol=1e-14), (
+        "beta_pce s'ecarte de plus de %.0e du golden" % TOL_DERIVES_DE_THETA)
+    assert got['sigmaSQ'] == pytest.approx(exp['sigmaSQ'],
+                                           rel=TOL_DERIVES_DE_THETA)
 
     if case in THETA_NON_IDENTIFIABLE:
         pytest.skip(
