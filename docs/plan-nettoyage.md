@@ -437,7 +437,7 @@ les deux scripts, mesure :
 | | flexion pure | Moulin Blanc |
 |---|---|---|
 | lignes | 1 080 | 949 |
-| fonctions imbriquees | 28 | 26 |
+| fonctions imbriquees | 31 | 29 |
 | dont PURS DELEGUES (un seul `return` vers un module) | 18 | 18 |
 
 Les 18 delegues portent les **memes 18 noms** des deux cotes. Ils ne
