@@ -48,6 +48,21 @@ def _eff_ot():
     return pytest.importorskip("eff_ot", reason="emballage OpenTURNS")
 
 
+#: TOLERANCE DU GOLDEN DE LA FORMULE EFF, ET POURQUOI PAS 1e-15
+#:
+#: Elle valait `rel=1e-15`. L'epsilon de la double precision vaut 2.22e-16 :
+#: 1e-15 fait donc QUATRE ULP, c'est-a-dire le bruit lui-meme. Mesure du
+#: 31/08/2026 sur un runner d'integration continue -- 1 element sur 11 :
+#:
+#:     ecart absolu maximal    1.1102230246251565e-16    (un dernier bit)
+#:     ecart relatif maximal   1.1362598044671046e-15
+#:
+#: Le golden echouait donc pour un ULP, sur une formule inchangee. 1e-13
+#: laisse deux ordres de marge au-dessus de ce bruit et reste treize ordres
+#: au-dessous de ce qu'une modification de la formule produirait.
+TOL_EFF_GOLDEN = 1e-13
+
+
 # --------------------------------------------------------------------------- #
 # La formule                                                                   #
 # --------------------------------------------------------------------------- #
@@ -57,7 +72,7 @@ def test_eff_reproduit_la_version_vectorisee(attendu):
     for f in attendu["facteurs"]:
         obtenu = _eff().eff(mu, sg, f)
         assert list(obtenu) == pytest.approx(attendu["vectorise"][str(f)],
-                                             rel=1e-15, abs=1e-300)
+                                             rel=TOL_EFF_GOLDEN, abs=1e-300)
 
 
 def test_eff_reproduit_aussi_la_version_scalaire(attendu):
@@ -68,7 +83,7 @@ def test_eff_reproduit_aussi_la_version_scalaire(attendu):
     for f in attendu["facteurs"]:
         obtenu = _eff().eff(mu, sg, f)
         assert list(obtenu) == pytest.approx(attendu["scalaire"][str(f)],
-                                             rel=1e-15, abs=1e-300)
+                                             rel=TOL_EFF_GOLDEN, abs=1e-300)
 
 
 @pytest.mark.parametrize("sigma", [0.0, -1.0, -1e-9])

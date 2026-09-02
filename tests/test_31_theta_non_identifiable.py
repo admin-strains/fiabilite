@@ -410,11 +410,19 @@ def test_a_l_origine_l_optimiseur_de_theta_ne_tournait_PAS():
     """
     immobiles, total = _immobiles(PEPITE_D_ORIGINE)
     assert total > 0
-    assert immobiles >= total - 1, (
-        "avec la pepite d'origine (0.0), %d appels sur %d bougent encore. La "
-        "mesure du 02/09/2026 en donnait au plus un. Si l'optimiseur s'est "
-        "mis a fonctionner, la lecture de tout ce fichier change."
-        % (total - immobiles, total))
+    # UNE PROPORTION, PAS UN COMPTE EXACT. Mesure du 02/09/2026 : 8 immobiles
+    # sur 9 sur le poste de reference, 7 sur 9 sur un runner ubuntu. Le
+    # phenomene est le meme -- l'optimiseur est quasi inerte -- mais le compte
+    # exact depend de l'arithmetique, ce qui est ATTENDU puisque c'est
+    # justement de cela que parle ce fichier. Une premiere version exigeait
+    # `>= total - 1` et tombait en integration continue : le temoin encodait
+    # une mesure propre a une machine.
+    assert immobiles >= 0.7 * total, (
+        "avec la pepite d'origine (0.0), %d appels sur %d bougent encore, "
+        "soit %.0f %% d'immobiles. Mesure du 02/09/2026 : 8/9 sur le poste de "
+        "reference, 7/9 sur un runner ubuntu. Si l'optimiseur s'est mis a "
+        "fonctionner, la lecture de tout ce fichier change."
+        % (total - immobiles, total, 100.0 * immobiles / total))
 
 
 def test_aujourd_hui_l_optimiseur_bouge_vraiment():

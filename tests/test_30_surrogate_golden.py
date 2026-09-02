@@ -70,15 +70,57 @@ def test_structure_du_modele(case, kind):
         'LARS ne retient plus les memes multi-indices'
 
 
+#: TOLERANCE SUR `theta`, ET POURQUOI ELLE N'EST PAS 1e-8
+#:
+#: `theta` n'est pas une sortie du modele : c'est l'endroit ou un optimiseur
+#: s'arrete. Depuis le gradient analytique (02/09/2026) il est reproductible
+#: entre MACHINES sur les cas non degeneres -- mesure sur les runners
+#: d'integration continue contre le poste de reference :
+#:
+#:     cas              avant (FD par defaut)   apres (gradient analytique)
+#:     flexion/PCK      9.71e-01                2.4e-09
+#:     flexion/GEPCK    3.54e-02                8.4e-08
+#:
+#: Six a huit ordres de mieux -- mais 8.4e-08 reste au-dessus de 1e-8. Le
+#: seuil retenu laisse deux ordres de marge au-dessus du pire mesure, tout en
+#: restant tres au-dessous de ce qu'un changement de code produirait : la
+#: moindre modification de l'ajustement deplacait theta de plusieurs pour
+#: cent dans toutes les mesures de ce dossier.
+TOL_THETA = 1e-6
+
+#: LES CAS OU `theta` N'EST PAS FIGEABLE DU TOUT, avec la raison.
+#:
+#: Sur `linear`, la PCE represente l'etat limite EXACTEMENT (LOO ~ 1e-25) :
+#: il ne reste aucun residu que le krigeage puisse expliquer, `sigma^2` tombe
+#: a 1e-24 -- le plancher d'annulation -- et `theta` n'a pas de valeur vraie.
+#: Mesure du 02/09/2026 entre machines : 1.55e-02 (PCK) et 2.69e-01 (GEPCK),
+#: contre 2.4e-09 sur la flexion. Voir `tests/test_31_theta_non_identifiable`.
+#:
+#: Ce qui reste verifie sur ces cas : la STRUCTURE (egalite stricte,
+#: `test_structure_du_modele`), le LOO et les PREDICTIONS -- c'est-a-dire
+#: tout ce que le modele REND.
+THETA_NON_IDENTIFIABLE = {'linear'}
+
+
 @pytest.mark.parametrize('case', CASES)
 @pytest.mark.parametrize('kind', KINDS)
 def test_coefficients_du_modele(case, kind):
+    """`beta_pce` et `sigmaSQ` restent stricts ; `theta` a sa propre
+    tolerance, et n'est pas verifie la ou il n'a pas de valeur vraie."""
     ref, got = _refit(case, kind)
     exp = ref['models'][kind]
-    assert np.allclose(got['theta'], exp['theta'], rtol=1e-8, atol=0), \
-        f"theta {got['theta']} != golden {exp['theta']}"
     assert np.allclose(got['beta_pce'], exp['beta_pce'], rtol=1e-8, atol=1e-14)
     assert got['sigmaSQ'] == pytest.approx(exp['sigmaSQ'], rel=1e-8)
+
+    if case in THETA_NON_IDENTIFIABLE:
+        pytest.skip(
+            "theta n'a pas de valeur vraie sur %r : la PCE represente l'etat "
+            "limite exactement, sigma^2 est au plancher d'annulation. Ce que "
+            "le modele REND est verifie par test_erreur_loo et "
+            "test_predictions_aux_points_sonde." % case)
+    assert np.allclose(got['theta'], exp['theta'], rtol=TOL_THETA, atol=0), (
+        "theta %s != golden %s (tolerance %.0e)"
+        % (got['theta'], exp['theta'], TOL_THETA))
 
 
 @pytest.mark.parametrize('case', CASES)

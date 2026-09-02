@@ -722,3 +722,58 @@ def test_l_outil_comparatif_ne_reecrit_plus_la_ligne_source():
         "l'outil reecrit de nouveau la ligne du script au lieu de poser le "
         "reglage")
     assert "dossier_sortie=repr(dossier_sortie)" in src
+
+
+# --------------------------------------------------------------------- #
+# le modele du depot sert quand le storage du poste n'existe pas
+# --------------------------------------------------------------------- #
+def test_une_etude_est_jouable_sans_le_storage_de_son_auteur(capsys):
+    r"""`modeles/README.md` promet que les etudes sont REJOUABLES AILLEURS.
+
+    Elle ne l'etait pas : les trois etudes de flexion pure portent
+    `storage = 'C:\workspace\storage\admin\SF'`, un chemin absolu qui
+    n'existe que sur le poste de leur auteur. Sur le runner d'integration
+    continue, `test_103_grille_bout_en_bout` echouait en cinq erreurs --
+    l'etude demarrait puis ne trouvait pas son modele.
+
+    Les deux copies sont pourtant LE MEME MODELE : mesure du 02/09/2026,
+    `modeles/test_pure_flexion.ds` et la copie du poste ne different que par
+    DEUX LIGNES, `fy` et `fc` -- celles que `patch_params` reecrit a chaque
+    evaluation.
+    """
+    cfg = Configuration(modelname="test_pure_flexion",
+                               storage=r"D:\ce\chemin\n\existe\pas")
+    chemin = cfg.chemin_ds
+    assert os.path.isdir(chemin), chemin
+    assert os.path.basename(os.path.dirname(chemin)) == "modeles", (
+        "le repli devrait designer `modeles/` du depot, il rend %r" % chemin)
+
+
+def test_le_repli_sur_le_depot_s_ANNONCE(capsys):
+    """Un repli SILENCIEUX serait pire que l'erreur.
+
+    Il ferait tourner un calcul sur un modele que l'utilisateur ne croit pas
+    utiliser -- exactement la classe de defaut que `patch_params` portait
+    (defaut 19 : un parametre absent ignore en silence, et le solveur evalue
+    un point qui n'est pas celui demande).
+    """
+    cfg = Configuration(modelname="test_pure_flexion",
+                               storage=r"D:\ce\chemin\n\existe\pas")
+    capsys.readouterr()
+    _ = cfg.chemin_ds
+    trace = capsys.readouterr().err
+    assert "storage introuvable" in trace, trace
+    assert "modele repris du depot" in trace, trace
+
+
+def test_un_storage_present_est_TOUJOURS_prefere():
+    """Sur un poste qui a son storage, le repli ne doit RIEN changer.
+
+    C'est ce qui rend ce correctif neutre : il n'agit que la ou l'etude etait
+    injouable.
+    """
+    cfg = charger(os.path.join(REPO, "studies",
+                              "pure_flexion_analytique.toml"))
+    if not os.path.isdir(cfg.storage):
+        pytest.skip("le storage de cette etude n'est pas sur ce poste")
+    assert cfg.chemin_ds == os.path.join(cfg.storage, cfg.modelname + ".ds")

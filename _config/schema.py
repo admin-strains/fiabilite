@@ -34,6 +34,7 @@ DEUX SUBTILITES QUE LE SCHEMA REND EXPLICITES
 """
 
 import os
+import sys as _sys
 from dataclasses import dataclass, field, fields
 from typing import Optional, Tuple
 
@@ -369,7 +370,43 @@ class Configuration:
 
     @property
     def chemin_ds(self) -> str:
-        return os.path.join(self.storage, self.modelname + ".ds")
+        """Le modele `.ds` de cette etude.
+
+        REPLI SUR LES MODELES DU DEPOT, ET POURQUOI IL EXISTE
+        ------------------------------------------------------
+        `storage` porte un chemin ABSOLU -- celui du poste ou l'etude a ete
+        ecrite. Or `modeles/README.md` dit que les deux modeles sont
+        versionnes « pour qu'une etude soit REJOUABLE AILLEURS : jusqu'a
+        present ils vivaient seulement dans le `storage` du poste de leur
+        auteur, et le depot decrivait des calculs que personne d'autre ne
+        pouvait lancer ». Les etudes, elles, continuaient de pointer vers le
+        poste. La promesse du README n'etait pas tenue.
+
+        Mesure du 02/09/2026 : `modeles/test_pure_flexion.ds` et
+        `C:\\workspace\\storage\\admin\\SF\\test_pure_flexion.ds` ne different
+        que par DEUX LIGNES -- `fy` et `fc`, celles que `patch_params`
+        reecrit a chaque evaluation. C'est le meme modele.
+
+        Le repli ne se declenche QUE si le chemin configure n'existe pas, et
+        il s'ANNONCE. Sur un poste qui a son storage, rien ne change ; sur
+        une machine qui ne l'a pas -- un runner d'integration continue, le
+        poste d'un collegue -- l'etude devient jouable.
+
+        Un repli SILENCIEUX serait pire que l'erreur : il ferait tourner un
+        calcul sur un modele que l'utilisateur ne croit pas utiliser.
+        """
+        vise = os.path.join(self.storage, self.modelname + ".ds")
+        if os.path.isdir(vise):
+            return vise
+        _repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        secours = os.path.join(_repo, "modeles", self.modelname + ".ds")
+        if os.path.isdir(secours):
+            print("[config] storage introuvable : %s" % self.storage,
+                  file=_sys.stderr)
+            print("[config] --> modele repris du depot : %s" % secours,
+                  file=_sys.stderr)
+            return secours
+        return vise                      # inchange : l'erreur viendra apres
 
     @property
     def bornes_u(self) -> Tuple[float, float, float, float]:
