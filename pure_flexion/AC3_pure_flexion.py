@@ -93,65 +93,31 @@ if __name__ == '__main__':
     # reecrire pour qu'un run soit seulement possible ici.
     path_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # --- liaison aux noms attendus par la suite du script --------------------
-    modele              = CFG.modele
-    n0                  = CFG.n0
+    # --- LES SEULS REGLAGES QUI NE SONT PAS LUS SUR `CFG` ---------------------
+    # `CFG` est immuable et le run l'imprime en tete de journal : le lire a la
+    # source est donc la seule facon de garantir que ce qui est AFFICHE est ce
+    # qui AGIT. Les 45 copies locales `x = CFG.x` sont parties le 02/09/2026 --
+    # une copie qui peut etre reaffectee est un reglage qui peut mentir.
+    #
+    # Ces trois-la restent des locaux parce qu'ils CHANGENT en cours de run, et
+    # chaque changement s'annonce :
+    #   * `max_degree`   : une reprise le relit dans son dump ;
+    #   * `do_custom_hf` : retombe a False si le fichier de grille manque ;
+    #   * `print_ana`    : la surcouche analytique n'a de sens que si toutes les
+    #                      variables sont des parametres CAD.
+    # `tol_all_modes` reste lie parce que `FORM_all_modes` a un PARAMETRE du
+    # meme nom : le lire sur `CFG` a l'interieur changerait le sens du code.
     max_degree          = CFG.max_degree
-    do_EFF              = CFG.eff_actif
-    epsilon_factor      = CFG.epsilon_factor
-    tol_EFF             = CFG.tol_EFF
-    tol_BB              = CFG.tol_BB
-    tol_BS              = CFG.tol_BS
-    EFF_criteria        = CFG.EFF_criteria
-    n_NLopt_EFF         = CFG.n_NLopt_EFF
-    n_batch_EFF         = CFG.n_batch_EFF
-    n_max_FORM          = CFG.n_max_FORM
-    tol_FORM            = CFG.tol_FORM
     tol_all_modes       = CFG.tol_all_modes
-    tol_warmstart       = CFG.tol_warmstart
-    do_multistart       = CFG.do_multistart
-    do_warmstart        = CFG.do_warmstart
-    start_from_LHS      = CFG.start_from_LHS
-    n_sp                = CFG.n_sp
-    do_FORM_filter      = CFG.do_FORM_filter
-    do_IS               = CFG.is_actif
-    n_IS                = CFG.n_IS
-    cov_IS              = CFG.cov_IS
-    global_size         = CFG.global_size
-    geo_min_approx      = CFG.geo_min_approx
-    n_workers_DOE       = CFG.n_workers_DOE
-    config_is_identical = CFG.config_is_identical
-    restart_enrich_only = CFG.restart_enrich_only
-    save_history        = CFG.save_history
-    u1_min              = CFG.u1_min
-    u1_max              = CFG.u1_max
-    u2_min              = CFG.u2_min
-    u2_max              = CFG.u2_max
-    n_grid              = CFG.n_grid
-    n_grid_hf           = CFG.n_grid_hf
-    print_HF            = CFG.print_HF
-    print_fullHF        = CFG.print_fullHF
-    print_3D            = CFG.print_3D
     print_ana           = CFG.print_ana
-    print_Pf            = CFG.print_Pf
-    print_grad_sp       = CFG.print_grad_sp
-    print_EFF_progres   = CFG.print_EFF_progres
     do_custom_hf        = CFG.do_custom_hf
-    hf_2d_grid_fixed    = CFG.hf_2d_grid_fixed
-    hf_3d_grid_fixed    = CFG.hf_3d_grid_fixed
-
-    # Les drapeaux de modele sont DERIVES, donc mutuellement exclusifs par
-    # construction. Ils etaient sept lignes ecrites a la main, qui pouvaient
-    # toutes valoir False sur une faute de frappe. Trois seulement sont lus
-    # ici ; les quatre autres restent disponibles sur `CFG`.
-    do_HF        = CFG.do_HF
-    do_GEPCK     = CFG.do_GEPCK
-    do_PCK       = CFG.do_PCK
 
     # Un worker de DOE parallele travaille sur une copie isolee du modele : son
     # nom lui est impose par le processus pere, pas par le fichier d'etude.
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or CFG.modelname
-    _path_ds = CFG.chemin_ds     # UN SEUL endroit le calcule, cf. schema.py
+    # `chemin_ds` fait des I/O -- stat, et une copie de travail sous
+    # repli : on le resout UNE fois, comme avant le 02/09/2026.
+    _path_ds = CFG.chemin_ds
     storage = os.path.dirname(_path_ds)   # cf. _doe/parallele.py : dossier_modeles
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
@@ -172,7 +138,7 @@ if __name__ == '__main__':
 
     # --- Résultats fixés du run HF 12/05 (gamma=1.0, F=0.74, n0=15) ---
     # Actifs uniquement en mode visu seule (tous do_* = False).
-    if modele == None:
+    if CFG.modele == None:
         sol_modes_fixed = None
         # guide pour hardcoder {
         #     # (sp_u1, sp_u2): (u*_u1, u*_u2)
@@ -344,6 +310,15 @@ if __name__ == '__main__':
     n_var = len(params_names)
     _coherence.verifier(PARAM_CONFIG, params_names, _path_ds)  # 0,36 s vs 466 s
     if not set(params_names) <= set(PARAM_CONFIG_CAD.keys()):
+        # La surcouche analytique compare le metamodele a une forme fermee de
+        # la section : elle n'a de sens que si toutes les variables sont des
+        # parametres CAD. Le refus etait MUET -- le resume de configuration
+        # imprimait `print_ana=True` et la figure sortait sans la surcouche.
+        if print_ana:
+            print("[config] print_ana demande, mais %s ne sont pas des "
+                  "parametres CAD : pas de surcouche analytique."
+                  % ", ".join(sorted(set(params_names)
+                                     - set(PARAM_CONFIG_CAD))), flush=True)
         print_ana = False
     slice_def = (0, 1, {i: 0.0 for i in range(n_var) if i > 1})
     slice_def_final = (0, 1, {})           # 2 variables : pas de coupe, plan complet fy vs fc
@@ -403,9 +378,9 @@ if __name__ == '__main__':
         modelname, lambda nom: os.path.join(os.path.dirname(_path_ds), nom + ".ds"),
         dossier_etude=path_dir, params_names=params_names,
         regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
-        global_size=global_size, geo_min_approx=geo_min_approx,
+        global_size=CFG.global_size, geo_min_approx=CFG.geo_min_approx,
         max_size=CFG.max_size, solveur_lineaire=CFG.solveur_lineaire,
-        archiver=save_history)
+        archiver=CFG.save_history)
 
     # L'unique passage vers le solveur est dans `_doe/evaluation.py`. Il est
     # construit PARESSEUSEMENT : il a besoin du journal de points et du cache
@@ -419,7 +394,7 @@ if __name__ == '__main__':
                 dist=dist_jointe(),
                 params_names=params_names,
                 exclure_non_converges=CFG.exclure_points_non_converges,
-                archiver=save_history,
+                archiver=CFG.save_history,
                 journaliser=_JOURNAL.enregistrer,
                 sauver_partiel=_save_doe_cache_incremental)
         return _evaluateur[0]
@@ -447,8 +422,8 @@ if __name__ == '__main__':
         """Les points d'une grille, repartis. Dans `_doe/parallele.py`."""
         return _parallele.evaluer_points_en_parallele(
             u_points, dist_jointe(), params_names, storage, modelname,
-            n_workers_DOE, script_etude=__file__, repo=_REPO,
-            config_identique=config_is_identical)
+            CFG.n_workers_DOE, script_etude=__file__, repo=_REPO,
+            config_identique=CFG.config_is_identical)
 
 
     # --- DOE cache ---
@@ -469,12 +444,12 @@ if __name__ == '__main__':
     # plan, point par point, pour qu'une interruption ne coute pas tout.
     def _save_doe_cache_incremental(SOL, n_done):
         return _cache_doe.save_doe_cache_incremental(
-            _DOE_CACHE_FILE, n0, params_names, SOL, n_done,
+            _DOE_CACHE_FILE, CFG.n0, params_names, SOL, n_done,
             signature=_SIG_SOLVEUR)
 
     # --- SIGNATURE INFORMATIVE (utilisee par le dump restart, pas par le DOE cache) ---
     def _doe_cache_sig():
-        return _cache_doe.doe_cache_sig(n0, params_names, n_var, modelname)
+        return _cache_doe.doe_cache_sig(CFG.n0, params_names, n_var, modelname)
 
     # --- DUMP RESTART ---
     _RESTART_STATE_FILE = _reprise.fichier_de(_path_ds)
@@ -493,7 +468,7 @@ if __name__ == '__main__':
             _RESTART_STATE_FILE,
             signature=_doe_cache_sig(),
             signature_solveur=CFG.signature_solveur(),
-            modele=modele, timestamp=timestamp, max_degree=max_degree, n0=n0,
+            modele=CFG.modele, timestamp=timestamp, max_degree=max_degree, n0=CFG.n0,
             xt=xt, yt=yt, all_grad=all_grad, xt_eff=xt_eff,
             enrich_round=_enrich_round, round_sizes_prev=_round_sizes_prev,
             historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
@@ -518,7 +493,7 @@ if __name__ == '__main__':
         l'autre.
         """
         return _plan.construire_plan_initial(
-            CFG, n0, dist_jointe=dist_jointe, params_names=params_names,
+            CFG, CFG.n0, dist_jointe=dist_jointe, params_names=params_names,
             bornes_min=eff_bounds_min, bornes_max=eff_bounds_max,
             fichier_cache=_DOE_CACHE_FILE, signature=_SIG_SOLVEUR,
             executer_plan=lambda SOL: run_one_SOL(
@@ -528,7 +503,7 @@ if __name__ == '__main__':
 
     def build_starting_points():
         """Les points de depart du FORM multimodal. ZERO appel solveur."""
-        return _plan.tirer_points_de_depart(n_sp, eff_bounds_min, eff_bounds_max)
+        return _plan.tirer_points_de_depart(CFG.n_sp, eff_bounds_min, eff_bounds_max)
 
 
     # --------------------------------------------------------------------------- #
@@ -622,7 +597,7 @@ if __name__ == '__main__':
     def BoundSurrogateFunction(g_ot, sigma_func, sign):
         return _form.bound_surrogate_function(
             g_ot, sigma_func, sign, n_var,
-            predict_pck if do_PCK else predict_gepck)
+            predict_pck if CFG.do_PCK else predict_gepck)
 
     # Usage :
     #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
@@ -672,8 +647,8 @@ if __name__ == '__main__':
     # --- Multi-start FORM depuis les points du DOE ---
     def FORM_all_modes(starting_points, tol_all_modes, event):
         return _form.form_all_modes(starting_points, tol_all_modes, event,
-                                    n_var, n_max_FORM, tol_FORM,
-                                    do_FORM_filter, eff_bounds_min, eff_bounds_max)
+                                    n_var, CFG.n_max_FORM, CFG.tol_FORM,
+                                    CFG.do_FORM_filter, eff_bounds_min, eff_bounds_max)
     
     # --- Warm-start FORM depuis les points du DOE ---
     def FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad):
@@ -691,7 +666,7 @@ if __name__ == '__main__':
 
         return _form.warm_start(
             modes, best_sps, g_ot, xt, yt, all_grad, n_var=n_var,
-            tolerance=tol_warmstart, multistart=do_multistart,
+            tolerance=CFG.tol_warmstart, multistart=CFG.do_multistart,
             tol_all_modes=tol_all_modes,
             reajuster_et_evenement=_reajuster_et_evenement,
             rechercher_modes=FORM_all_modes)
@@ -701,7 +676,7 @@ if __name__ == '__main__':
     # --- Critere EFF : la formule est dans _reliability/eff.py, en un seul
     # exemplaire. Elle etait ecrite deux fois ici (vectorisee et scalaire).
     def EFFFunction(g_ot, sigma_func):
-        return _eff_ot.eff_function(g_ot, sigma_func, n_var, epsilon_factor)
+        return _eff_ot.eff_function(g_ot, sigma_func, n_var, CFG.epsilon_factor)
 
     def _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad):
         """Les points d'enrichissement du prochain tour.
@@ -713,10 +688,10 @@ if __name__ == '__main__':
         """
         return _eff_ot.batch_kriging_believer(
             g_ot, sigma_func, xt, yt, all_grad,
-            n_batch=n_batch_EFF, bornes_min=eff_bounds_min,
-            bornes_max=eff_bounds_max, n_var=n_var, n_appels=n_NLopt_EFF,
-            epsilon_factor=epsilon_factor, reajuster=init_g_ot,
-            gradient_du_surrogate=do_GEPCK)
+            n_batch=CFG.n_batch_EFF, bornes_min=eff_bounds_min,
+            bornes_max=eff_bounds_max, n_var=n_var, n_appels=CFG.n_NLopt_EFF,
+            epsilon_factor=CFG.epsilon_factor, reajuster=init_g_ot,
+            gradient_du_surrogate=CFG.do_GEPCK)
 
     def run_EFF(g_ot, sigma_func, xt, yt, all_grad):
         """Ameliore le metamodele jusqu'au critere d'arret, et le renvoie.
@@ -752,7 +727,7 @@ if __name__ == '__main__':
 
     # Le predicteur en lot du metamodele courant. Les trois champs d'une
     # coupe sont dans `_reliability/eff_ot.champs_sur_coupe`.
-    _PREDICT = predict_pck if do_PCK else predict_gepck
+    _PREDICT = predict_pck if CFG.do_PCK else predict_gepck
 
     # --- Graphiques de suivi : _reliability/graphiques.py. Les courbes Pf
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.
@@ -763,7 +738,7 @@ if __name__ == '__main__':
     # fonctions de trace, sans qu'un seul commentaire ne le dise. C'est
     # maintenant un reglage du fichier d'etude, calcule ici, une fois.
     _CX0, _CX1, _CY0, _CY1 = _figurer.cadre_des_figures(
-        CFG.cadre_figures, (u1_min, u1_max, u2_min, u2_max),
+        CFG.cadre_figures, (CFG.u1_min, CFG.u1_max, CFG.u2_min, CFG.u2_max),
         eff_bounds_min, eff_bounds_max, CFG.cadre_marge)
 
     _HF_CACHE_FILE       = os.path.join(_path_ds, "hf_grid_cache.json")
@@ -771,8 +746,8 @@ if __name__ == '__main__':
     # Le decor commun a toutes les figures : cadre, resolution, noms, dossier.
     # Ces sept valeurs etaient capturees par fermeture dans CHAQUE fonction de
     # trace -- vingt a vingt-cinq variables libres par fonction.
-    _DECOR = _figurer.Decor((_CX0, _CX1, _CY0, _CY1), n_grid, params_names,
-                            modele, out_dir_eff, timestamp)
+    _DECOR = _figurer.Decor((_CX0, _CX1, _CY0, _CY1), CFG.n_grid, params_names,
+                            CFG.modele, out_dir_eff, timestamp)
 
     _HF_CUSTOM_CACHE_FILE = os.path.join(_path_ds, "hf_custom_cache.json")
     _HF_CACHE_FILE_FINAL = os.path.join(_path_ds, "hf_grid_cache_final.json")
@@ -785,16 +760,16 @@ if __name__ == '__main__':
     # rangement du resultat dans l'etat de CETTE etude.
     _GRILLE = _grille.Grille(
         evaluer=lambda u: _obtenir_evaluateur().evaluer_g_en_U(u),
-        n_var=n_var, cote=n_grid_hf,
-        bornes=(u1_min, u1_max, u2_min, u2_max),
+        n_var=n_var, cote=CFG.n_grid_hf,
+        bornes=(CFG.u1_min, CFG.u1_max, CFG.u2_min, CFG.u2_max),
         fichier_cache=_HF_CACHE_FILE, fichier_cache_complet=_HF_FULL_CACHE_FILE,
         fichier_cache_points=_HF_CUSTOM_CACHE_FILE,
-        coupe_initiale=hf_2d_grid_fixed,
+        coupe_initiale=CFG.hf_2d_grid_fixed,
         coupe_courante=slice_def, points_libres=hf_custom_points,
-        active=print_HF,
-        evaluer_lot=run_HF_grid_parallel if n_workers_DOE > 1 else None,
+        active=CFG.print_HF,
+        evaluer_lot=run_HF_grid_parallel if CFG.n_workers_DOE > 1 else None,
         signature=CFG.signature_grille_hf(),
-        config_identique=config_is_identical,
+        config_identique=CFG.config_is_identical,
         marquer_phase=_JOURNAL.marquer)
 
 
@@ -819,7 +794,7 @@ if __name__ == '__main__':
         _sd = slice_def if slice_def is not None else (0, 1, {})
         grille = _DECOR.grille_de_coupe(_sd)
         Z_eff, Z_sigma, Z_g = _eff_ot.champs_sur_coupe(
-            g_ot, sigma_func, grille, n_grid, epsilon_factor, _PREDICT)
+            g_ot, sigma_func, grille, CFG.n_grid, CFG.epsilon_factor, _PREDICT)
 
         _, _, _figees = _DECOR.etiquettes(_sd)
         return _figurer.planche_EFF(_DECOR, _sd, xt, xt_eff, Z_eff, Z_sigma, Z_g,
@@ -842,10 +817,10 @@ if __name__ == '__main__':
             return
         grille = _DECOR.grille_de_coupe(slice_def_final)
         etapes = _fit.rejouer_l_enrichissement(
-            xt, yt, all_grad, xt_eff, n0,
+            xt, yt, all_grad, xt_eff, CFG.n0,
             reajuster=lambda x, y, g: init_g_ot(None, None, x, y, g)[:2],
             champs=lambda g_ot_k, sigma_k: _eff_ot.champs_sur_coupe(
-                g_ot_k, sigma_k, grille, n_grid, epsilon_factor, _PREDICT))
+                g_ot_k, sigma_k, grille, CFG.n_grid, CFG.epsilon_factor, _PREDICT))
 
         _, _, _figees = _DECOR.etiquettes(slice_def_final)
         return _figurer.planche_globale(_DECOR, slice_def_final, etapes,
@@ -881,14 +856,14 @@ if __name__ == '__main__':
         grille = _DECOR.grille_de_coupe(coupe)
 
         Z_sur = None
-        if g_ot is not None and not do_HF:
-            Z_sur = np.array(g_ot(ot.Sample(grille.tolist())))[:, 0].reshape(n_grid, n_grid)
+        if g_ot is not None and not CFG.do_HF:
+            Z_sur = np.array(g_ot(ot.Sample(grille.tolist())))[:, 0].reshape(CFG.n_grid, CFG.n_grid)
 
         legende = []
         if g_ot is not None:
             legende.append(dict(color='blue', linestyle='-', linewidth=2,
-                                label=f'g=0 {modele}'))
-        if print_HF:
+                                label=f'g=0 {CFG.modele}'))
+        if CFG.print_HF:
             legende.append(dict(color='red', linestyle='--', linewidth=2,
                                 label='g=0 HF'))
         if print_ana:
@@ -915,10 +890,10 @@ if __name__ == '__main__':
         calc = flexion_claude()
         u1_lim = calc.u1_lim_plast
         u2_lim = calc.u2p_LS(u1_lim)
-        u1_g = np.linspace(u1_lim, u1_max, n_grid)
+        u1_g = np.linspace(u1_lim, CFG.u1_max, CFG.n_grid)
         u2_g = np.array([calc.u2p_LS(u) for u in u1_g])
         ax.plot(u1_g, u2_g, color='green', linestyle='-.', linewidth=2)
-        ax.plot([u1_lim, u1_lim], [u2_lim, u2_max], color='green',
+        ax.plot([u1_lim, u1_lim], [u2_lim, CFG.u2_max], color='green',
                 linestyle='-.', linewidth=2)
         ax.plot(u1_lim, u2_lim, 'ko', ms=6, zorder=6)
 
@@ -929,12 +904,12 @@ if __name__ == '__main__':
         COUT : n_grid_hf^2 appels solveur si `hf_3d_grid_fixed` est vide.
         Les 35 lignes sont dans `_etapes/grille.py`.
         """
-        return _GRILLE.surface_3d(hf_3d_grid_fixed)
+        return _GRILLE.surface_3d(CFG.hf_3d_grid_fixed)
 
 
     def print_3D_HF(U1_hf, U2_hf, Z):
         """FIGURE : la surface deja calculee, en relief. ZERO appel solveur."""
-        return _figurer.relief(_DECOR, U1_hf, U2_hf, Z, n_grid_hf,
+        return _figurer.relief(_DECOR, U1_hf, U2_hf, Z, CFG.n_grid_hf,
                                modes_figes=best_sol_modes_fixed,
                                gradients_figes=grad_sp_fixed,
                                surcouche=_relief_analytique if print_ana else None)
@@ -947,10 +922,10 @@ if __name__ == '__main__':
         tridimensionnel. N'existe que pour la flexion pure.
         """
         calc = flexion_claude()
-        U1_a, U2_a = np.meshgrid(np.linspace(u1_min, u1_max, n_grid),
-                                 np.linspace(u2_min, u2_max, n_grid))
+        U1_a, U2_a = np.meshgrid(np.linspace(CFG.u1_min, CFG.u1_max, CFG.n_grid),
+                                 np.linspace(CFG.u2_min, CFG.u2_max, CFG.n_grid))
         Z_ana = np.array([calc.g(a, b) for a, b in zip(U1_a.ravel(), U2_a.ravel())]
-                         ).reshape(n_grid, n_grid)
+                         ).reshape(CFG.n_grid, CFG.n_grid)
         ax.plot_surface(U1_a, U2_a, Z_ana, color='blue', alpha=0.3, label='g_ana')
         ax.contour(U1_a, U2_a, Z_ana, levels=[0], colors='green', linewidths=2,
                    zdir='z', offset=plancher)
@@ -960,10 +935,10 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # FONCTION IS POST-FORM                                                       #
     def run_IS(modes, event):
-        return _form.run_IS(modes, event, n_var, n_IS, cov_IS)
+        return _form.run_IS(modes, event, n_var, CFG.n_IS, CFG.cov_IS)
 
     def run_IS_proj(modes, event_proj):
-        return _form.run_IS_proj(modes, event_proj, n_var, n_IS, cov_IS,
+        return _form.run_IS_proj(modes, event_proj, n_var, CFG.n_IS, CFG.cov_IS,
                                  _find_position_var_index())
 
     def print_results_IS(result_IS):
@@ -988,7 +963,7 @@ if __name__ == '__main__':
         sys.exit(0)
 
     # --- Mode restart : charger le dump et preparer le re-enrichissement ---
-    if restart_enrich_only:
+    if CFG.restart_enrich_only:
         # Les deux controles -- le dump existe, et il a ete produit sous la
         # configuration courante -- sont dans `_cache/reprise.py`, avec le
         # detail des deux defauts qu'ils ferment.
@@ -999,6 +974,13 @@ if __name__ == '__main__':
         all_grad = np.array(_rs['all_grad'], float)
         _restart_xt_eff = [np.array(p, float) for p in _rs['xt_eff']]
         if _rs.get('max_degree') is not None:
+            # La reprise ECRASE le reglage du fichier d'etude : le metamodele
+            # doit garder le degre sur lequel le plan a ete construit. Muet
+            # jusqu'au 02/09/2026 -- le journal annoncait le degre du TOML.
+            if int(_rs['max_degree']) != CFG.max_degree:
+                print("[reprise] max_degree %d (dump) au lieu de %d (etude) : "
+                      "le plan a ete construit avec celui-la."
+                      % (int(_rs['max_degree']), CFG.max_degree), flush=True)
             max_degree = int(_rs['max_degree'])
         _GRILLE.coupes['courante'] = _rs.get('hf_2d_grid')
         _h = _reprise.historiques_de(_rs)
@@ -1023,11 +1005,11 @@ if __name__ == '__main__':
         xt_eff = None
 
 
-    if print_3D:
+    if CFG.print_3D:
         print_3D_HF(*grille_3D())
         sys.exit(0)
 
-    if print_grad_sp:
+    if CFG.print_grad_sp:
         print("=== -grad(g) aux points de depart sp A/B/C/D ===", flush=True)
         for lbl, data in best_sol_modes_fixed.items():
             sp = list(data['sp'])
@@ -1051,25 +1033,25 @@ if __name__ == '__main__':
         xt, yt, all_grad = build_DOE()
         print(f"[PLAN] plan initial construit : {len(xt)} points", flush=True)
     g_ot, sigma_func, xt, yt, all_grad = init_g_ot(g_ot, sigma_func, xt, yt, all_grad)
-    if print_HF and print_fullHF and n_var <= 3:
+    if CFG.print_HF and CFG.print_fullHF and n_var <= 3:
         _GRILLE.calculer_complete()
-    if do_EFF:
+    if CFG.eff_actif:
         print_planche_EFF(g_ot, sigma_func, xt, [],
                           fond_hf=fond_hf_pour_figures())
         g_ot, sigma_func, xt, yt, all_grad, xt_eff = run_EFF(g_ot, sigma_func, xt, yt, all_grad)
-        if not print_EFF_progres:
+        if not CFG.print_EFF_progres:
             print_planche_EFF(g_ot, sigma_func, xt, xt_eff,
                               fond_hf=fond_hf_pour_figures())
         _graphiques.tracer_convergence_eff(
             _eff_history_EFF, _eff_history_BB, _eff_history_BS,
-            _DIAG.theta, params_names, tol_EFF, tol_BB, tol_BS,
+            _DIAG.theta, params_names, CFG.tol_EFF, CFG.tol_BB, CFG.tol_BS,
             out_dir_eff, timestamp)
-        if print_Pf:
+        if CFG.print_Pf:
             _graphiques.tracer_pf_evolution(
-                _eff_history_Pf, modele, EFF_criteria, out_dir_eff,
+                _eff_history_Pf, CFG.modele, CFG.EFF_criteria, out_dir_eff,
                 timestamp, 'lineaire')
             _graphiques.tracer_pf_evolution(
-                _eff_history_Pf, modele, EFF_criteria, out_dir_eff,
+                _eff_history_Pf, CFG.modele, CFG.EFF_criteria, out_dir_eff,
                 timestamp, 'log')
     event, g_ot, sigma_func, xt, yt, all_grad = init_FORM(g_ot, sigma_func, xt, yt, all_grad)
 
@@ -1081,15 +1063,15 @@ if __name__ == '__main__':
         print('Aucune branche active', flush=True)
         sys.exit(1)
 
-    if do_warmstart:
+    if CFG.do_warmstart:
         starting_points = np.array([[0.0] * n_var])
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event) #FORM simple avec event créé
         modes, best_sps = FORM_warm_start(modes, best_sps, g_ot, sigma_func, xt, yt, all_grad) #warm_start puis FORM multistart avec event warm
     else:
-        if start_from_LHS:
+        if CFG.start_from_LHS:
             starting_points = build_starting_points()
         else:
-            starting_points = _form.points_de_depart(xt, n_var, do_multistart)
+            starting_points = _form.points_de_depart(xt, n_var, CFG.do_multistart)
         modes, best_sps = FORM_all_modes(starting_points, tol_all_modes, event)
 
     best_result = modes[0] if modes else None
@@ -1108,12 +1090,12 @@ if __name__ == '__main__':
     if CFG.erreur_fosm:
         erreur_FOSM(best_result, g_ot)
     result_IS = None
-    if do_IS and modes:
+    if CFG.is_actif and modes:
         result_IS = run_IS(modes, event)
         print_results_IS(result_IS)
     # --- IS sur surrogate projete (enveloppe position) ---
     g_proj = projection_surrogate(g_ot)
-    if g_proj is not g_ot and do_IS and modes:
+    if g_proj is not g_ot and CFG.is_actif and modes:
         idx_pos = _find_position_var_index()
         _idx_other = [_i for _i in range(n_var) if _i != idx_pos]
         # Le MEME evenement `g < 0`, en dimension reduite : il etait
@@ -1132,7 +1114,7 @@ if __name__ == '__main__':
                fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),
                fond_hf_final=fond_hf_pour_figures(
                    slice_def_final, _HF_CACHE_FILE_FINAL, finale=True))
-    if do_EFF and xt_eff:
+    if CFG.eff_actif and xt_eff:
         print_globalplanche_EFF(
             xt, yt, all_grad, xt_eff,
             fond_hf=fond_hf_pour_figures(slice_def, _HF_CACHE_FILE),

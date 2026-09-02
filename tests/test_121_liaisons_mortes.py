@@ -22,6 +22,14 @@ sert ICI, et c'est faux -- c'est le meme mensonge, en plus petit, que celui
 de `dossier_sortie`, affiche par le resume de configuration alors qu'il ne
 faisait rien.
 
+ET LE BLOC A DISPARU -- 02/09/2026
+-----------------------------------
+Les 45 copies locales sont parties : les etudes lisent `CFG.<champ>` a la
+source. La classe de defaut que ce fichier surveille est donc supprimee par
+CONSTRUCTION -- une liaison qui n'existe pas ne peut pas mourir. Quatre
+liaisons survivent, chacune pour une raison ecrite en tete des etudes, et un
+plafond les compte.
+
 POURQUOI CE TEST EST CONSCIENT DES PORTEES
 -------------------------------------------
 La premiere version de cette sonde collectait tous les `Name` en lecture du
@@ -119,17 +127,46 @@ def test_aucune_liaison_de_configuration_n_est_morte(script):
                mortes.items(), key=lambda kv: kv[1]))))
 
 
-@pytest.mark.parametrize("script", ETUDES)
-def test_la_sonde_voit_les_liaisons(script):
-    """Une sonde qui ne trouve aucune liaison ne prouve rien.
+#: COMBIEN DE LIAISONS RESTENT -- UN PLAFOND QUI NE FAIT QUE DESCENDRE
+#:
+#: Ce fichier exigeait `> 20` liaisons, « une sonde qui ne trouve rien ne
+#: prouve rien ». Sa propre docstring annoncait la suite : « si le bloc de
+#: liaison change de forme -- la phase 5 le fera disparaitre -- ce test tombe
+#: et demande d'adapter la sonde ». C'est arrive le 02/09/2026 : les 45 copies
+#: locales sont parties et les etudes lisent `CFG.<champ>` a la source, ce qui
+#: supprime la classe de defaut par CONSTRUCTION -- une liaison qui n'existe
+#: pas ne peut pas mourir.
+#:
+#: Cinq survivent au plus, et pour une raison chacune (voir l'en-tete des
+#: etudes) : trois sont REAFFECTEES en cours de run, une est eclipsee par un
+#: parametre homonyme, et `_path_ds = CFG.chemin_ds` n'est pas une copie mais
+#: une RESOLUTION -- `chemin_ds` fait des entrees-sorties, on ne l'appelle pas
+#: douze fois. Le plafond les compte. Il descend, jamais il ne monte.
+#:
+#: Ce qui garantit que la sonde MORD n'est plus ce comptage mais les trois
+#: temoins synthetiques du bas de ce fichier -- ils lui donnent une liaison
+#: morte, une liaison masquee par une comprehension, une liaison vivante par
+#: fermeture, et exigent le bon verdict sur chacune.
+PLAFOND_LIAISONS = 5
 
-    Si le bloc de liaison change de forme -- la phase 5 le fera disparaitre --
-    ce test tombe et demande d'adapter la sonde, au lieu de la laisser
-    approuver un fichier qu'elle ne sait plus lire.
+
+@pytest.mark.parametrize("script", ETUDES)
+def test_il_ne_reste_presque_plus_de_liaisons(script):
+    """Chaque liaison restante doit avoir une raison de ne pas etre `CFG.x`.
+
+    Si ce test tombe par le HAUT, quelqu'un a rajoute une copie locale de la
+    configuration : la remplacer par une lecture directe sur `CFG`, qui est
+    immuable et imprimee en tete de journal.
     """
     chemin = os.path.join(_REPO, script)
     src = io.open(chemin, encoding="utf-8", errors="replace").read()
-    assert len(_liaisons(ast.parse(src, chemin))) > 20
+    liaisons = _liaisons(ast.parse(src, chemin))
+    assert len(liaisons) <= PLAFOND_LIAISONS, (
+        "%s : %d liaisons `nom = CFG.nom`, au-dela du plafond %d.\n  %s\n"
+        "Une copie locale peut etre REAFFECTEE, donc mentir sur ce que la "
+        "configuration imprimee annonce. Lire `CFG.<champ>` a la source."
+        % (script, len(liaisons), PLAFOND_LIAISONS,
+           ", ".join(sorted(liaisons))))
 
 
 # --------------------------------------------------------------------------- #

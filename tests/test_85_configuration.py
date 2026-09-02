@@ -363,6 +363,27 @@ def _champs_lus_par_les_modules():
     return lus
 
 
+def _champs_lus_par_les_proprietes():
+    """Les champs qu'une PROPRIETE DERIVEE du schema consomme : `self.x`.
+
+    C'est le coeur du dessin « l'intention dans le champ, l'effet dans la
+    propriete » : `eff_actif = do_EFF and not do_HF`. Personne ne lit `do_EFF`
+    ailleurs -- et c'est VOULU, puisque le lire directement perdrait la
+    correction en haute fidelite. Une etude qui lirait `CFG.do_EFF` est
+    d'ailleurs refusee par
+    `test_les_scripts_lisent_l_effet_et_non_l_intention`.
+
+    Cette sonde a ete ajoutee le 02/09/2026, quand les 45 copies locales
+    `x = CFG.x` sont parties des etudes : jusque-la, la LIGNE de liaison
+    `do_EFF = CFG.eff_actif` faisait passer `do_EFF` pour lu -- par le mot,
+    pas par un vrai usage. Le bloc parti, le champ a paru mort alors qu'il
+    n'avait jamais ete plus vivant.
+    """
+    texte = io.open(os.path.join(REPO, "_config", "schema.py"),
+                    encoding="utf-8", errors="replace").read()
+    return set(re.findall(r"\bself\.(\w+)", texte))
+
+
 def test_aucun_autre_parametre_n_est_mort_en_silence():
     """Le pendant : un champ du schema que plus personne ne lit doit rejoindre
     `SANS_EFFET`, pas rester un reglage sans effet."""
@@ -378,14 +399,30 @@ def test_aucun_autre_parametre_n_est_mort_en_silence():
     HORS_SCRIPTS = {"modelname", "storage", "dossier_sortie",
                     "hf_2d_grid_fixed", "hf_3d_grid_fixed"}
     corps = "\n".join(_noms_lus(c) for c in ETUDES.values())
-    ailleurs = _champs_lus_par_les_modules()
+    ailleurs = _champs_lus_par_les_modules() | _champs_lus_par_les_proprietes()
     morts = sorted(champ for champ in champs - HORS_SCRIPTS - set(SANS_EFFET)
                    if champ not in ailleurs
                    and not re.search(r"\b%s\b" % re.escape(champ), corps))
     assert not morts, (
         "parametre(s) que plus personne ne lit : %s\n"
-        "Ni une etude, ni un module de %s. Les ajouter a SANS_EFFET (avec la "
-        "raison) ou recabler leur usage." % (morts, ", ".join(DOSSIERS_MODULES)))
+        "Ni une etude, ni un module de %s, ni une propriete derivee du schema. "
+        "Les ajouter a SANS_EFFET (avec la raison) ou recabler leur usage."
+        % (morts, ", ".join(DOSSIERS_MODULES)))
+
+
+def test_la_sonde_des_proprietes_voit_vraiment_quelque_chose():
+    """Meme exigence que pour la sonde des modules : elle doit trouver le cas
+    qui l'a rendue necessaire.
+
+    `do_EFF` et `do_IS` ne sont lus QUE par `eff_actif` et `is_actif`. Si ce
+    test tombe, c'est la sonde qui est aveugle -- ou le dessin qui a change,
+    et il faudra alors regarder ou l'intention est devenue l'effet.
+    """
+    lus = _champs_lus_par_les_proprietes()
+    assert "do_EFF" in lus and "do_IS" in lus, sorted(lus)
+    assert "do_EFF" not in _champs_lus_par_les_modules(), (
+        "un module lit maintenant `do_EFF` directement -- l'intention, pas "
+        "l'effet. La correction en haute fidelite y serait perdue.")
 
 
 def test_la_sonde_des_modules_voit_vraiment_quelque_chose():
@@ -468,12 +505,27 @@ def test_en_haute_fidelite_enrichissement_et_tirage_sont_desactives():
 
 @pytest.mark.parametrize("nom", sorted(ETUDES))
 def test_les_scripts_lisent_l_effet_et_non_l_intention(nom):
-    """Corollaire du test precedent : le bloc de liaison doit lier `do_EFF` a
-    `eff_actif`, pas a `do_EFF`. Sinon la correction en haute fidelite, que
-    les scripts appliquaient a la main, serait silencieusement perdue."""
+    """Corollaire du test precedent : une etude doit lire `eff_actif` et
+    `is_actif`, jamais `do_EFF` ni `do_IS`. Sinon la correction en haute
+    fidelite -- que les scripts appliquaient a la main cinquante lignes apres
+    avoir lu le reglage -- serait silencieusement perdue.
+
+    LA FORME DE CE TEST A CHANGE LE 02/09/2026. Il exigeait la LIGNE
+    `do_EFF = CFG.eff_actif` dans un bloc de liaison. Ce bloc n'existe plus :
+    les 45 copies locales `x = CFG.x` sont parties, et les etudes lisent
+    `CFG.<champ>` a la source. La propriete, elle, est INCHANGEE -- et
+    desormais verifiee PARTOUT plutot que sur une seule ligne : rien
+    n'empechait un autre site de lire `CFG.do_EFF` directement.
+    """
     src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
-    assert re.search(r"(?m)^\s+do_EFF\s*=\s*CFG\.eff_actif\b", src), nom
-    assert re.search(r"(?m)^\s+do_IS\s*=\s*CFG\.is_actif\b", src), nom
+    code = "\n".join(l.split("#")[0] for l in src.splitlines())
+    assert "CFG.eff_actif" in code, "%s ne lit pas l'EFFET `eff_actif`" % nom
+    assert "CFG.is_actif" in code, "%s ne lit pas l'EFFET `is_actif`" % nom
+    for intention in ("CFG.do_EFF", "CFG.do_IS"):
+        assert intention not in code, (
+            "%s lit %s -- l'INTENTION de l'utilisateur, pas l'effet. En haute "
+            "fidelite, enrichir n'a pas de sens et le schema le sait : "
+            "`eff_actif = do_EFF and not do_HF`." % (nom, intention))
 
 
 def test_chemin_du_modele(etude):
@@ -891,3 +943,29 @@ def test_aucune_etude_ne_recalcule_le_chemin_du_modele():
             fautifs.append("%s recalcule le chemin du `.ds` a partir de "
                            "`storage` au lieu d'utiliser `CFG.chemin_ds`" % nom)
     assert not fautifs, "\n  ".join([""] + fautifs)
+
+
+@pytest.mark.parametrize("nom", sorted(ETUDES))
+def test_le_chemin_du_modele_est_RESOLU_une_seule_fois(nom):
+    """`chemin_ds` n'est pas un simple champ : c'est une propriete qui fait
+    des ENTREES-SORTIES -- un `stat`, et sous repli la creation ou le
+    rafraichissement d'une copie de travail.
+
+    Le 02/09/2026, en retirant les 45 copies locales `x = CFG.x`, j'ai emporte
+    `_path_ds = CFG.chemin_ds` avec elles : les douze usages du chemin sont
+    devenus douze appels a la propriete, donc douze resolutions. Rien ne
+    tombait -- le resultat est le meme -- mais c'est exactement ce que le
+    commit precedent venait d'interdire, et le temoin qui garde cette regle
+    ne cherchait que `os.path.join(storage, ...)`.
+
+    Une copie locale d'un CHAMP peut mentir, et elle est partie ; un chemin
+    resolu une fois est ce qu'il faut faire d'une propriete qui travaille.
+    """
+    src = io.open(ETUDES[nom], encoding="utf-8", errors="replace").read()
+    code = "\n".join(l.split("#")[0] for l in src.splitlines())
+    n = code.count("CFG.chemin_ds")
+    assert n == 1, (
+        "%s resout `CFG.chemin_ds` %d fois. Une seule, dans `_path_ds`." % (nom, n))
+    assert re.search(r"(?m)^\s+_path_ds\s*=\s*CFG\.chemin_ds\s*$", code), (
+        "%s : la resolution doit rester nommee `_path_ds`, que le reste du "
+        "script emploie." % nom)
