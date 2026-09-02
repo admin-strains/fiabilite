@@ -109,6 +109,28 @@ def test_le_flux_principal_ne_DIVERGE_pas_davantage(comparaison_du_flux):
     """
     #: 27/08/2026, apres alignement de `xt_eff` sur le Moulin Blanc.
     #: 27/08 (suite) : le compteur mort `_run_HF_count` retire. 26 -> 25.
+    #:
+    #: 02/09/2026 : LES 23 ECARTS ONT ETE ENUMERES ET CLASSES. Il n'en reste
+    #: aucun qui soit une derive d'implementation -- ce sont les DONNEES des
+    #: deux etudes :
+    #:
+    #:     2   le fichier `.toml` par defaut de chaque etude
+    #:     2   le titre imprime en tete de journal
+    #:     6   l'extraction des noms d'armatures : le Moulin Blanc en fait
+    #:         DEUX groupes par nuance d'acier, la flexion pure les prend tous
+    #:     2   `PARAM_CONFIG_CAD` : les variables aleatoires elles-memes
+    #:     2   `slice_def_final` : la flexion pure a un plan complet a deux
+    #:         variables, le Moulin Blanc n'a pas de coupe finale
+    #:     1   `FY_MEAN = 235.0` (Moulin Blanc)
+    #:     5   `Es`, `ecu`, `eud`, `gamma_c_fic`, `gamma_s_fic` : les
+    #:         constantes de la surcouche analytique, propres a la flexion pure
+    #:     3   `print_ana`, sa liaison et sa condition -- meme raison
+    #:
+    #: Autrement dit LE FLUX A CONVERGE : le risque qui a motive tout ce
+    #: travail -- deux copies d'une meme implementation qui derivent, et trois
+    #: correctifs qui n'existaient que d'un cote -- est ferme. Ce plafond ne
+    #: descendra plus beaucoup, et ce n'est pas un echec : essayer de le
+    #: pousser a zero reviendrait a fusionner deux etudes DIFFERENTES.
     PLAFOND = 23
     n_pf, n_mb, ecarts = comparaison_du_flux
     listing = "\n  ".join("%s  %s" % (cote, txt) for cote, txt in ecarts)
