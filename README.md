@@ -24,7 +24,7 @@ auteur -- voir [`docs/plan-nettoyage.md`](docs/plan-nettoyage.md).
 ### La couche de calcul -- partout, sans licence
 
 `numpy`, `scipy`, `pytest`. C'est la ou vivent le metamodele, FORM, le tirage
-d'importance, et les 300 tests.
+d'importance, et les 1 285 tests.
 
 ```bat
 python -m pip install -r requirements\core.txt
@@ -148,13 +148,13 @@ Le detail, avec les mesures : [`docs/reproductibilite-chaine-complete.md`](docs/
 | | |
 |---|---|
 | `_lib/` | metamodele : krigeage, base PCE, LARS, noyaux, prediction |
-| `_model/` | lois de probabilite (JCSS) |
+| `_model/` | lois de probabilite (JCSS), et selection des elements du modele |
 | `_cache/` | reprise d'un run interrompu |
 | `_reliability/` | critere EFF, FORM multimodal, tirage d'importance, traces |
-| `_config/` | schema de configuration d'une etude |
+| `_config/` | schema d'une etude, ses variables aleatoires, sa coherence avec le modele |
 | `solver/` | **la seule frontiere avec Digital Structure** |
 | `studies/` | un `.toml` par etude |
-| `tests/` | 300 tests -- voir [`tests/README.md`](tests/README.md) |
+| `tests/` | 1 285 tests -- voir [`tests/README.md`](tests/README.md) |
 | `tools/` | instrumentation et mesure -- voir ci-dessous |
 | `docs/` | plan de nettoyage, reproductibilite |
 | `historique/` | versions anterieures des scripts, conservees comme temoins |

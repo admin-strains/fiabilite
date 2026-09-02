@@ -105,11 +105,52 @@ set FIABILITE_ETUDE=%CD%\studies\mon_etude.toml
 python launcher.py pure_flexion\AC3_pure_flexion.py
 ```
 
+### Les variables aleatoires s'y declarent aussi
+
+```toml
+[variables.fc]
+loi     = "fc"                    # une loi du registre de _model/lois.py
+args    = [48, 0.12]              # ses parametres, dans l'ordre
+param   = "COMPRESSIVE_STRENGTH"  # le parametre que le solveur derive
+solides = ["Block1"]              # un NOM est une donnee
+
+[variables.fy]
+loi   = "fy"
+args  = [550]
+param = "YIELD_STRENGTH"
+```
+
+Ce qui ne s'y declare PAS : la **selection** des elements. « Les armatures de
+nuance fyd1 », c'est 13 858 noms et une propriete du modele, pas une donnee.
+L'etude la calcule en une ligne :
+
+```python
+group1_names = _selection.armatures(_cad_txt, grade="fyd1")
+```
+
+C'est la seule ligne de Python qu'une nouvelle etude demande d'ecrire
+(arbitrage d'Agnes du 02/09/2026, option B'). Pour savoir ce que contient un
+modele avant de declarer : `_selection.nuances(cad)` rend les nuances
+presentes et leur compte.
+
+`region_key` n'est pas declarable : il vaut le nom de la variable. Le
+declarer ouvrait la porte a un doublon -- deux variables ecrivant leur
+sensibilite dans la meme region.
+
+Ce que la declaration refuse, au CHARGEMENT et toutes fautes d'un coup : une
+loi inconnue (avec la liste des choix), une clef obligatoire absente, une
+clef inconnue, un `args` qui n'est pas une liste, et une variable qui ne
+designe aucun element. `tests/test_135_ecrire_une_etude_en_toml.py` ecrit un
+`.toml` neuf, le fait tourner, et verifie qu'une valeur declaree change
+vraiment le resultat -- une declaration decorative serait pire qu'aucune.
+
+### Regler d'abord, calculer ensuite
+
 Commencer par `solveur = "analytique"` : toute la chaine s'exerce en 140 s,
 sans licence ni GPU, et de maniere reproductible -- ce que le solveur reel ne
 permet pas. Regler l'etude la, puis passer au solveur reel.
 
-Les deux scripts `AC3_*.py` sont encore epais (1 141 et 1 015 lignes). Ils
+Les deux scripts `AC3_*.py` sont encore epais (1 080 et 949 lignes). Ils
 **retrecissent** : `tests/test_91_ac_minces.py` porte un plafond de lignes qui
 ne fait que descendre. Ne pas y ajouter de logique -- elle va dans un module,
 d'ou elle sera testable.
