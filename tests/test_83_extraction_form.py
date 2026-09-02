@@ -231,8 +231,17 @@ def test_plus_aucune_variable_libre():
 # --------------------------------------------------------------------------- #
 # Le garde-fou qui manquait                                                   #
 # --------------------------------------------------------------------------- #
-EXTRAITES = ["FORM_all_modes", "BoundSurrogateFunction", "run_IS",
-             "run_IS_proj", "print_results_IS"]
+#: Les delegues vers `_reliability/form.py` que les etudes portent ENCORE.
+#:
+#: `BoundSurrogateFunction` en est sorti le 02/09/2026 : il liait `n_var` et
+#: le predicteur a `form.bound_surrogate_function`, et il n'etait passe qu'a
+#: `BoucleEFF` -- qui a les deux. La boucle le fabrique desormais, et l'etude
+#: ne le nomme plus. C'est un pas de l'option A : les delegues qui ne font que
+#: lier `n_var` et `cfg.*` a un appel de module disparaissent.
+#:
+#: Cette liste doit RETRECIR. Un nom qui la quitte est un delegue de moins
+#: dans les deux etudes ; un nom qui s'y ajoute est une extraction a finir.
+EXTRAITES = ["FORM_all_modes", "run_IS", "run_IS_proj", "print_results_IS"]
 
 
 @pytest.mark.parametrize("rel", ["pure_flexion/AC3_pure_flexion.py",

@@ -41,7 +41,9 @@ import openturns as ot
 import arret as _arret_eff
 import controle as _controle
 import eff as _eff
+import eff_ot as _eff_ot
 import evaluation as _evaluation
+import form as _form
 from _parallel_is import adaptive_is
 
 #: Le tirage d'importance parallele, regle par l'environnement.
@@ -64,50 +66,88 @@ class BoucleEFF:
     laisserait ecrire dans une liste que plus personne ne lit -- c'est arrive
     le 27/08/2026, et six cent vingt-trois tests verts ne l'ont pas vu.
 
-    Les collaborateurs, tous fournis par l'etude :
+    CE QUE SEULE L'ETUDE SAIT -- a fournir :
 
-    ``points_EFF(g_ot, sigma_func, xt, yt, all_grad)``
-        les points du prochain batch, et la valeur du critere au premier.
-    ``fonction_EFF(g_ot, sigma_func)``
-        le critere EFF lui-meme, sous une forme qu'`ot.Function` accepte.
     ``ajuster(g_ot, sigma_func, xt, yt, all_grad)``
         le metamodele reajuste sur le plan augmente, en cinq sorties.
     ``evaluer_un_point(u)``
-        un point paye au solveur, en `(g, gradient)`.
+        un point paye au solveur, en `(g, gradient)`. C'est LA frontiere avec
+        Digital Structure : la boucle ne connait pas le solveur.
     ``executer_en_parallele(SOL, n_workers)``
         le meme travail pour plusieurs points a la fois, quand il y a de quoi
         paralleliser. Elle porte le nom du modele, que la boucle ignore.
-    ``dist_jointe()`` et ``params_names``
-        la loi jointe et les noms des variables, dont le chemin parallele a
+    ``params_names`` et ``param_config``
+        les noms des variables et leur catalogue, dont le chemin parallele a
         besoin pour repasser de l'espace standard aux parametres physiques.
-    ``bornes_surrogate(g_ot, sigma_func, signe)``
-        l'encadrement `g +/- 2 sigma`, dont le controleur tire le ratio BB.
-    ``executer_is(modes, evenement)``
-        le tirage d'importance de repli, celui d'OpenTURNS.
+    ``predire``
+        le predicteur du modele courant, en VALEUR. Les fonctions de
+        prediction vivent dans `_lib` et `_reliability` n'a pas a en
+        dependre ; c'est la seule chose que la boucle ne deduit pas de `cfg`.
     ``figure(g_ot, sigma_func, xt, xt_eff)``
         la planche intermediaire, si l'etude en veut une.
     ``sauver(xt, yt, all_grad, xt_eff)``
         le dump de reprise, appele a la fin de chaque tour.
+
+    CE QUE LA BOUCLE SE DONNE ELLE-MEME -- injectable, mais inutile de le
+    faire hors des tests. Chacun etait un DELEGUE d'une ligne recopie dans
+    les deux etudes, dont la seule fonction etait de lier `n_var` et `cfg.*`
+    a un appel de module :
+
+    ``fonction_EFF(g_ot, sigma_func)``
+        le critere EFF sous une forme qu'`ot.Function` accepte
+        (`cfg.epsilon_factor`, `n_var`).
+    ``bornes_surrogate(g_ot, sigma_func, signe)``
+        l'encadrement `g +/- 2 sigma`, dont le controleur tire le ratio BB
+        (`n_var`, `predire`).
+    ``executer_is(modes, evenement)``
+        le tirage d'importance de repli (`cfg.n_IS`, `cfg.cov_IS`, `n_var`).
+    ``points_EFF(g_ot, sigma_func, xt, yt, all_grad)``
+        les points du prochain batch, et la valeur du critere au premier
+        (les six reglages EFF, le domaine, et `ajuster`).
+    ``dist_jointe()``
+        la loi jointe, des que `param_config` est donne.
+
+    Ils restent des parametres parce que `tests/test_119_boucle_eff.py` en
+    stube quatre pour eprouver l'ORDRE DES GESTES sans metamodele : une
+    boucle qui les fabriquerait sans recours ne serait plus testable seule.
     """
 
     def __init__(self, cfg, n_var, *, journal, historiques,
-                 points_EFF, fonction_EFF, ajuster, bornes_surrogate,
-                 executer_is, evaluer_un_point, executer_en_parallele=None,
-                 dist_jointe=None, params_names=None,
-                 figure=None, sauver=None, tracer=_ecrire):
+                 ajuster, evaluer_un_point,
+                 points_EFF=None, fonction_EFF=None, bornes_surrogate=None,
+                 executer_is=None, executer_en_parallele=None,
+                 dist_jointe=None, params_names=None, param_config=None,
+                 predire=None, figure=None, sauver=None, tracer=_ecrire):
         self.cfg = cfg
         self.n_var = n_var
         self.journal = journal
         self.hist = historiques
-        self.points_EFF = points_EFF
-        self.fonction_EFF = fonction_EFF
         self.ajuster = ajuster
-        self.bornes_surrogate = bornes_surrogate
-        self.executer_is = executer_is
         self.evaluer_un_point = evaluer_un_point
         self.executer_en_parallele = executer_en_parallele
-        self.dist_jointe = dist_jointe
         self.params_names = params_names
+        self.param_config = param_config
+        self.predire = predire
+        # QUATRE COLLABORATEURS QUE LA BOUCLE SE DONNE ELLE-MEME
+        #
+        # Ils ne dependaient de rien que la boucle ne sache deja : le nombre
+        # de variables, les reglages du fichier d'etude, et le predicteur du
+        # modele courant. Les etudes les fabriquaient pourtant chacune, en
+        # quatre fonctions d'une ligne -- des DELEGUES, dont la seule raison
+        # d'exister etait de lier `n_var` et `cfg.*` a un appel de module.
+        # Mesure du 02/09/2026 : 21 delegues de cette nature dans chaque AC,
+        # portant les MEMES 21 noms des deux cotes.
+        #
+        # Ils restent injectables, et ce n'est pas de la politesse : les
+        # temoins de `test_119_boucle_eff.py` en stubent quatre pour eprouver
+        # l'ORDRE DES GESTES sans metamodele. Une boucle qui les fabriquerait
+        # sans recours ne serait plus testable seule.
+        self.fonction_EFF = fonction_EFF or self._critere_EFF
+        self.bornes_surrogate = bornes_surrogate or self._encadrement
+        self.executer_is = executer_is or self._tirage_d_importance
+        self.points_EFF = points_EFF or self._prochain_batch
+        self.dist_jointe = dist_jointe or (
+            self._loi_jointe if param_config is not None else None)
         # Facultatifs tous les deux. Ils sont eprouves par `is not None` au
         # point d'usage, jamais par leur valeur de verite : un appelable a le
         # droit d'etre faux, et ce piege a deja remplace deux fois un journal
@@ -115,6 +155,62 @@ class BoucleEFF:
         self.figure = figure
         self.sauver = sauver
         self.tracer = tracer
+
+    # ------------------------------------------------------------------ #
+    # CE QUE LA BOUCLE DERIVE, ET DE QUOI                                  #
+    # ------------------------------------------------------------------ #
+    @property
+    def _bornes(self):
+        """Le domaine de recherche, `eff_bound_*` repete sur chaque variable.
+
+        Les etudes l'ecrivaient en deux lignes chacune. Il ne depend que du
+        fichier d'etude et du nombre de variables.
+        """
+        return ([self.cfg.eff_bound_min] * self.n_var,
+                [self.cfg.eff_bound_max] * self.n_var)
+
+    def _critere_EFF(self, g_ot, sigma_func):
+        """`EFFFunction` des etudes : le critere sous une forme `ot.Function`."""
+        return _eff_ot.eff_function(g_ot, sigma_func, self.n_var,
+                                    self.cfg.epsilon_factor)
+
+    def _encadrement(self, g_ot, sigma_func, signe):
+        """`BoundSurrogateFunction` des etudes : `g +/- 2 sigma`.
+
+        Demande le PREDICTEUR du modele courant. C'est la seule chose que la
+        boucle ne peut pas deduire de `cfg` : les fonctions de prediction
+        vivent dans `_lib`, et `_reliability` n'a pas a en dependre. L'etude
+        la passe donc comme VALEUR (`predire=`), non comme fermeture.
+        """
+        if self.predire is None:
+            raise ValueError(
+                "`bornes_surrogate` doit etre fourni, ou bien `predire` pour "
+                "que la boucle le fabrique : l'encadrement a besoin du "
+                "predicteur du modele courant.")
+        return _form.bound_surrogate_function(g_ot, sigma_func, signe,
+                                              self.n_var, self.predire)
+
+    def _tirage_d_importance(self, modes, evenement):
+        """`run_IS` des etudes : le tirage d'importance de repli."""
+        return _form.run_IS(modes, evenement, self.n_var,
+                            self.cfg.n_IS, self.cfg.cov_IS)
+
+    def _prochain_batch(self, g_ot, sigma_func, xt, yt, all_grad):
+        """`_find_batch_EFF_points` des etudes : maximisation du critere puis
+        Kriging Believer, avec le reajustement que la boucle a deja."""
+        bmin, bmax = self._bornes
+        cfg = self.cfg
+        return _eff_ot.batch_kriging_believer(
+            g_ot, sigma_func, xt, yt, all_grad,
+            n_batch=cfg.n_batch_EFF, bornes_min=bmin, bornes_max=bmax,
+            n_var=self.n_var, n_appels=cfg.n_NLopt_EFF,
+            epsilon_factor=cfg.epsilon_factor, reajuster=self.ajuster,
+            gradient_du_surrogate=cfg.do_GEPCK)
+
+    def _loi_jointe(self):
+        """`dist_jointe` des etudes, quand `param_config` est fourni."""
+        import lois as _lois                                # noqa: PLC0415
+        return _lois.dist_jointe(self.param_config, self.params_names)
 
     # ------------------------------------------------------------------ #
     def _controleur(self):

@@ -331,6 +331,11 @@ if __name__ == '__main__':
     # le solveur.
     eff_bounds_min = [CFG.eff_bound_min] * n_var
     eff_bounds_max = [CFG.eff_bound_max] * n_var
+    # Le predicteur en lot du modele courant. Il sert aux champs d'une
+    # coupe (`_reliability/eff_ot.champs_sur_coupe`) et a l'encadrement que
+    # `BoucleEFF` fabrique -- d'ou son passage en VALEUR a la boucle : les
+    # fonctions de prediction vivent dans `_lib`, hors de `_reliability`.
+    _PREDICT = predict_pck if CFG.do_PCK else predict_gepck
 
 
     def _is_position_var(sens):
@@ -592,17 +597,6 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------- #
     # WRAPPER BORNES DE CONFIANCE DU SURROGATE                                   #
 
-    # --- FORM multimodal et tirage d'importance : la logique est dans
-    # _reliability/form.py, en un seul exemplaire pour les deux etudes.
-    def BoundSurrogateFunction(g_ot, sigma_func, sign):
-        return _form.bound_surrogate_function(
-            g_ot, sigma_func, sign, n_var,
-            predict_pck if CFG.do_PCK else predict_gepck)
-
-    # Usage :
-    #   g_ot_sup = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, +1))
-    #   g_ot_inf = ot.Function(BoundSurrogateFunction(g_ot, sigma_func, -1))
-
     # --------------------------------------------------------------------------- #
     # PROJECTION DU SURROGATE SUR LES VARIABLES NON-POSITION                     #
 
@@ -673,25 +667,10 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS D'ENRICHISSEMENT DU PLAN D'EXPERIENCE (EFF)                       #
-    # --- Critere EFF : la formule est dans _reliability/eff.py, en un seul
-    # exemplaire. Elle etait ecrite deux fois ici (vectorisee et scalaire).
-    def EFFFunction(g_ot, sigma_func):
-        return _eff_ot.eff_function(g_ot, sigma_func, n_var, CFG.epsilon_factor)
-
-    def _find_batch_EFF_points(g_ot, sigma_func, xt, yt, all_grad):
-        """Les points d'enrichissement du prochain tour.
-
-        L'algorithme -- maximisation globale du critere, puis Kriging
-        Believer pour en obtenir plusieurs sans appeler le solveur -- est
-        dans `_reliability/eff_ot.py`. Ne restent ici que les reglages de
-        l'etude et le reajustement du metamodele, qui lui appartient.
-        """
-        return _eff_ot.batch_kriging_believer(
-            g_ot, sigma_func, xt, yt, all_grad,
-            n_batch=CFG.n_batch_EFF, bornes_min=eff_bounds_min,
-            bornes_max=eff_bounds_max, n_var=n_var, n_appels=CFG.n_NLopt_EFF,
-            epsilon_factor=CFG.epsilon_factor, reajuster=init_g_ot,
-            gradient_du_surrogate=CFG.do_GEPCK)
+    # Le critere EFF, l'encadrement `g +/- 2 sigma`, le choix du prochain
+    # batch et le tirage d'importance de repli sont construits par
+    # `_reliability/enrichissement.BoucleEFF` : ils ne dependaient que de
+    # `n_var`, des reglages du fichier d'etude et du predicteur du modele.
 
     def run_EFF(g_ot, sigma_func, xt, yt, all_grad):
         """Ameliore le metamodele jusqu'au critere d'arret, et le renvoie.
@@ -710,11 +689,10 @@ if __name__ == '__main__':
             historiques={"EFF": _eff_history_EFF, "BB": _eff_history_BB,
                          "BS": _eff_history_BS, "Pf": _eff_history_Pf,
                          "beta_IS": _eff_history_beta_IS},
-            points_EFF=_find_batch_EFF_points, fonction_EFF=EFFFunction,
-            ajuster=init_g_ot, bornes_surrogate=BoundSurrogateFunction,
-            executer_is=run_IS, evaluer_un_point=run_HF,
+            ajuster=init_g_ot, evaluer_un_point=run_HF,
             executer_en_parallele=run_DOE_parallel,
-            dist_jointe=dist_jointe, params_names=params_names,
+            params_names=params_names, param_config=PARAM_CONFIG,
+            predire=_PREDICT,
             figure=lambda g, s, x, xe: print_planche_EFF(
                 g, s, x, xe, fond_hf=fond_hf_pour_figures()),
             sauver=lambda x, y, a, xe: _save_restart_state(
@@ -724,10 +702,6 @@ if __name__ == '__main__':
 
     # --------------------------------------------------------------------------- #
     # FONCTIONS RESULTATS/ AFFICHAGE                                              #
-
-    # Le predicteur en lot du metamodele courant. Les trois champs d'une
-    # coupe sont dans `_reliability/eff_ot.champs_sur_coupe`.
-    _PREDICT = predict_pck if CFG.do_PCK else predict_gepck
 
     # --- Graphiques de suivi : _reliability/graphiques.py. Les courbes Pf
     # lineaire et log y sont une seule fonction, l'echelle etant un parametre.

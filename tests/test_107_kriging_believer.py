@@ -317,4 +317,21 @@ def test_les_etudes_ne_pilotent_plus_l_optimiseur(script):
             "%s : le choix des points d'enrichissement est revenu dans "
             "l'etude (%r). Il appartient a `_reliability/eff_ot.py`."
             % (script, interdit))
-    assert "_eff_ot.batch_kriging_believer(" in s
+
+    # L'ETUDE NE DOIT MEME PLUS NOMMER L'ALGORITHME -- 02/09/2026
+    #
+    # Ce test exigeait `_eff_ot.batch_kriging_believer(` DANS l'etude : le
+    # delegue `_find_batch_EFF_points` y liait `n_var`, les six reglages EFF
+    # et le domaine, puis passait le tout a `BoucleEFF`. Cette liaison ne
+    # demandait rien que la boucle ne sache deja, et la boucle la fait
+    # maintenant elle-meme. L'exigence s'inverse donc : le nom ne doit PLUS
+    # etre dans l'etude, et doit etre dans la couche partagee.
+    assert "batch_kriging_believer" not in s, (
+        "%s nomme `batch_kriging_believer` : le choix du batch est construit "
+        "par `_reliability/enrichissement.BoucleEFF`, qui en a tous les "
+        "elements." % script)
+    partagee = io.open(os.path.join(_REPO, "_reliability", "enrichissement.py"),
+                       encoding="utf-8").read()
+    assert "_eff_ot.batch_kriging_believer(" in partagee, (
+        "la boucle d'enrichissement ne construit plus le batch : si le choix "
+        "est reparti ailleurs, ce test doit dire OU.")
