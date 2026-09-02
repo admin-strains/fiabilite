@@ -723,3 +723,94 @@ def uq_eval_global_Kernel(X1, X2, theta, options):
             f   = kernel_deriv_factory(family, None, dp)
             r0_tilde[:, cb*n2 : (cb+1)*n2] = f(X1, X2, theta)
         return r0_tilde
+
+
+# =============================================================================
+# Derivees du noyau par rapport aux PORTEES DE CORRELATION
+#
+# POURQUOI CE BLOC EXISTE
+# ------------------------
+# `kernel_deriv_factory` derive par rapport a x -- les deux arguments du
+# noyau -- ce dont GEPCK a besoin pour ses covariances croisees. Il n'a
+# jamais existe de derivee par rapport a THETA, et c'est precisement ce qui
+# manquait a `kriging_optimize_theta` : faute de `jac`, scipy differenciait
+# la vraisemblance lui-meme, avec un pas ABSOLU de 1.49e-08 pour un theta
+# vivant sur [0.01, 100]. Mesure du 02/09/2026 : le gradient ainsi obtenu
+# valait 3 372 fois la vraie pente et changeait de signe -- du bruit.
+# Diagnostic complet : `docs/diagnostic-optimisation-theta.md`.
+# =============================================================================
+
+#: Les familles pour lesquelles la derivee en theta est ecrite. C'est la
+#: MEME liste que `kernel_deriv_factory` -- et les etudes n'emploient que
+#: `matern-5_2`, code en dur comme defaut dans `_lib/fit.py`.
+FAMILLES_AVEC_DERIVEE_THETA = ('gaussian', 'matern-5_2')
+
+
+def _facteur_et_derivee(h, famille):
+    """`f(h)` et `df/dh`, par dimension, pour un noyau SEPARABLE.
+
+    Le noyau separable vaut `k = prod_j f(h_j)` avec `h_j = |x1_j - x2_j| /
+    theta_j`. Les formules sont celles de `uq_assemble_Kernel`, derivees a la
+    main puis verifiees contre des differences finies de PAS ADAPTE -- au
+    minimum de la courbe en U, pas au pas de scipy. Voir
+    `tests/test_32_gradient_vraisemblance.py`.
+    """
+    f = famille.lower()
+    if f == 'gaussian':
+        val = np.exp(-0.5 * h ** 2)
+        return val, -h * val
+    if f == 'matern-5_2':
+        r5 = np.sqrt(5.0)
+        e = np.exp(-r5 * h)
+        val = (1.0 + r5 * h + (5.0 / 3.0) * h ** 2) * e
+        # d/dh [(1 + s5 h + 5/3 h^2) e^{-s5 h}] = -(5/3) h (1 + s5 h) e^{-s5 h}
+        return val, -(5.0 / 3.0) * h * (1.0 + r5 * h) * e
+    raise ValueError(
+        "derivee en theta non ecrite pour la famille %r. Familles couvertes : "
+        "%s. Les etudes n'emploient que 'matern-5_2'."
+        % (famille, ", ".join(FAMILLES_AVEC_DERIVEE_THETA)))
+
+
+def dR_dtheta(X, theta, options):
+    """`dR/dtheta_i` pour chaque i, sur la matrice de Gram du plan.
+
+    Rend une liste de M matrices (N, N). La diagonale est NULLE par
+    construction -- `h = 0` y annule chaque terme -- ce qui est correct : la
+    pepite et le `+1` de la diagonale ne dependent pas de theta.
+
+    Limite ASSUMEE : noyau `separable`, anisotrope, famille dans
+    `FAMILLES_AVEC_DERIVEE_THETA`. Tout le reste leve, plutot que de rendre
+    un gradient faux -- un gradient faux serait pire que pas de gradient,
+    puisqu'il serait faux de facon confiante et reproductible.
+    """
+    if str(options.get('Type', '')).lower() != 'separable':
+        raise ValueError("dR_dtheta : type %r non couvert (attendu "
+                         "'separable')" % options.get('Type'))
+    if options.get('Isotropic'):
+        raise ValueError("dR_dtheta : cas isotrope non couvert")
+    famille = options['Family']
+    if not isinstance(famille, str):
+        raise ValueError("dR_dtheta : famille appelable non couverte")
+
+    X = np.atleast_2d(np.asarray(X, dtype=float))
+    theta = np.asarray(theta, dtype=float).ravel()
+    N, M = X.shape
+    if theta.size != M:
+        raise ValueError("dR_dtheta : theta de taille %d pour %d dimensions"
+                         % (theta.size, M))
+
+    h = np.abs(X[:, None, :] - X[None, :, :]) / theta[None, None, :]
+    val, der = _facteur_et_derivee(h, famille)          # (N, N, M) chacun
+
+    sorties = []
+    for i in range(M):
+        # produit des AUTRES dimensions, calcule sans division : `val[..., i]`
+        # peut sous-deborder a zero pour un h grand, et diviser par lui
+        # fabriquerait un NaN la ou la reponse est zero.
+        autres = np.ones((N, N), dtype=float)
+        for j in range(M):
+            if j != i:
+                autres *= val[:, :, j]
+        # dh_i/dtheta_i = -h_i / theta_i
+        sorties.append(der[:, :, i] * (-h[:, :, i] / theta[i]) * autres)
+    return sorties

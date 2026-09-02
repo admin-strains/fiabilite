@@ -52,31 +52,23 @@ STATUT_CONNU = {
     # pepite par defaut a 1e-8, |grad_analytique - FD| passe de 3,7e-3 a sous
     # 1e-6 et les 9 sous-tests passent. Rien n'a ete touche dans ce test.
     #
-    # REPASSE A 'ko' LE 01/09/2026, et pour une raison DIFFERENTE de 2026-08.
-    'test_predict_deriv_gepck': (
-        'ko',
-        "TRANCHE le 01/09/2026 : c'est le PAS de differences finies du test "
-        "qui est mal choisi, pas la derivee. Le test compare la derivee "
-        "analytique a une FD centree de pas FIXE `EPS = 1e-5` et exige "
-        "err < 1e-6. Balayage du pas sur SON PROPRE jeu de donnees "
-        "(seed 13, N=12, mode optimal, Matern-5/2) :\n"
-        "        h        der=0      der=1\n"
-        "        1e-3   1.07e-06   6.12e-08\n"
-        "        1e-4   8.06e-08   8.14e-08   <-- minimum\n"
-        "        1e-5   1.24e-06   2.38e-06   <-- le pas du test\n"
-        "        1e-6   1.13e-05   9.10e-06\n"
-        "La courbe en U est franche et le minimum vaut 8e-08, soit UN ORDRE "
-        "DE GRANDEUR sous le seuil : la derivee analytique est juste. A "
-        "1e-5 on est deja sur la branche d'ARRONDI, ou l'erreur est "
-        "dominee par le dernier bit -- donc par l'ordre des sommations "
-        "BLAS. C'est ce qui rendait ce sous-test dependant de la machine : "
-        "9,03e-07 a 7 threads (il passait, avec 10 %% de marge), 1,43e-06 "
-        "sur un runner, 1,24e-06 a un thread. Un seuil qui tient a 10 %% "
-        "pres ne tient pas.\n"
-        "Ce test reste INCHANGE : les suites d'origine servent de temoin, "
-        "on ne reecrit pas un temoin. La verification de la derivee, elle, "
-        "est faite ailleurs -- `tests/test_51_convention_derivees.py` et T1 "
-        "de ce meme fichier, a 1,12e-10."),
+    # REPASSE A 'ok' LE 02/09/2026, apres le gradient analytique de la
+    # vraisemblance (`_lib/kriging.py:grad_J_of_theta_ML`).
+    #
+    # Le diagnostic du 01/09 RESTE VRAI : le pas fixe `EPS = 1e-5` de ce test
+    # tombe sur la branche d'ARRONDI de la courbe en U, dont le minimum est a
+    # 1e-4 (8.06e-08, contre un seuil de 1e-6). Ce qui a change n'est pas le
+    # pas, c'est OU theta atterrit : l'optimiseur recevant enfin un vrai
+    # gradient, theta est devenu reproductible (3.54e-12 entre 7 et 1 thread,
+    # contre 9.71e-01) et se pose la ou la marge tient. Les neuf assertions
+    # passent.
+    #
+    # LA FRAGILITE DEMEURE, et elle est ecrite ici pour qu'on la reconnaisse
+    # si ce test retombe : un seuil evalue sur la branche d'arrondi ne tient
+    # que par la valeur de theta. Le temoin propre de la derivee est ailleurs
+    # -- `tests/test_51_convention_derivees.py`, et T1 de ce meme fichier a
+    # 1,12e-10.
+    'test_predict_deriv_gepck': ('ok', None),
 }
 
 SUITES = sorted(f[:-3] for f in os.listdir(UNIT_DIR)

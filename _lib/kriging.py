@@ -433,9 +433,56 @@ def kriging_optimize_theta(KrgModelParameters, theta0, bounds_2xM,
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             res = minimize(J, theta0, method='L-BFGS-B',
+                           jac=_jacobien(J, KrgModelParameters, lb),
                            bounds=bounds_list,
                            options={'maxiter': 400, 'ftol': 1e-12, 'gtol': 1e-8})
         return res.x, res.fun, int(res.success)
+
+
+#: Passe a False pour retrouver le comportement d'avant le 02/09/2026 --
+#: aucun `jac`, donc la differenciation par defaut de scipy. Sert aux mesures
+#: comparatives ; la production n'a aucune raison de l'employer.
+GRADIENT_ANALYTIQUE = True
+
+
+def _jacobien(J, KrgModelParameters, lb):
+    """Le gradient a donner a L-BFGS-B. JAMAIS celui de scipy par defaut.
+
+    Trois niveaux, du meilleur au moins bon, et aucun n'est le pas absolu de
+    1.49e-08 qui rendait du bruit :
+
+      1. `grad_J_of_theta_ML` -- analytique, verifie contre des differences
+         finies de pas adapte (`tests/test_32_gradient_vraisemblance.py`) ;
+      2. si elle ne s'applique pas -- regression, Cholesky en echec, famille
+         sans derivee ecrite -- des differences finies de pas RELATIF, qui
+         restent trois ordres meilleures que le defaut ;
+      3. `GRADIENT_ANALYTIQUE = False` rend le comportement d'origine, pour
+         les mesures comparatives seulement.
+
+    Le repli est CALCULE, jamais devine : rendre un gradient nul ferait
+    croire a L-BFGS-B qu'il a converge, ce qui est precisement le defaut
+    qu'on ferme.
+    """
+    if not GRADIENT_ANALYTIQUE:
+        return None
+
+    def jac(theta):
+        theta = np.asarray(theta, dtype=float)
+        g = grad_J_of_theta_ML(theta, KrgModelParameters)
+        if g is not None:
+            return g
+        # Repli : pas RELATIF a theta, plancher a la borne basse pour qu'une
+        # composante nulle ne donne pas un pas nul.
+        pas = 1e-5 * np.maximum(np.abs(theta), lb)
+        J0 = J(theta)
+        approx = np.empty(theta.size, dtype=float)
+        for i in range(theta.size):
+            tp = theta.copy()
+            tp[i] += pas[i]
+            approx[i] = (J(tp) - J0) / pas[i]
+        return approx
+
+    return jac
 
 
 # ===========================================================================
@@ -644,3 +691,102 @@ def fit_kriging_gepck(U, Y_aug, F_global_handle, CorrOptions,
         'auxMatrices'        : am_def,
         'F_global_handle'    : F_global_handle,   # F̃ augmentée — pour B4 prédiction
     }
+
+
+# ===========================================================================
+# 6bis.  Gradient ANALYTIQUE de la vraisemblance par rapport a theta
+#
+# POURQUOI CE BLOC EXISTE
+# ------------------------
+# `kriging_optimize_theta` appelait `minimize(...)` SANS `jac`. Scipy
+# differenciait donc J lui-meme, avec son pas par defaut de 1.49e-08 ABSOLU,
+# pour un theta vivant sur [0.01, 100] et une J dont le bruit d'evaluation
+# vaut 3.05e-08. Mesure du 02/09/2026, a theta = [47.6737, 21.9981] :
+#
+#     pas h        dJ/dtheta_0       dJ/dtheta_1
+#     1.49e-08     1.0283e+00        -1.6137e+00     <-- le pas de scipy
+#     1.00e-04     3.0482e-04         4.8278e-04     <-- la vraie pente
+#
+# Un facteur 3 372, et un changement de signe : le gradient recu etait du
+# BRUIT. Consequence directe, `ABNORMAL_TERMINATION_IN_LNSRCH` et des appels
+# a `nit = 0`. Diagnostic complet et hypotheses ecartees :
+# `docs/diagnostic-optimisation-theta.md`.
+# ===========================================================================
+def grad_J_of_theta_ML(theta, KrgModelParameters):
+    """`dJ/dtheta`, analytique. Meme convention que `uq_Kriging_eval_J_of_theta_ML`.
+
+    LA FORMULE, et d'ou elle vient
+    -------------------------------
+    `J = 0.5 * (N log(2 pi sigma^2) + logdet R + N)` avec
+    `sigma^2 = (1/N) r^T R^-1 r` et `r = Y - F beta`, beta etant l'estimateur
+    des moindres carres generalises. beta etant OPTIMAL, sa contribution a la
+    derivee totale est nulle -- c'est ce qui rend la formule courte :
+
+        dJ/dtheta_i = 0.5 * ( tr(R^-1 dR_i) - (1/sigma^2) a^T dR_i a )
+
+    avec `a = R^-1 r`. Rien n'est recalcule qui existe deja : la Cholesky de
+    R est celle que J vient de faire, et `a = U^-1 z` ou `z` est le residu
+    projete que `sigma^2` utilise (`z = L^-1 r`, `L = U^T`).
+
+    QUAND ELLE NE S'APPLIQUE PAS -- et alors on le DIT
+    ---------------------------------------------------
+    Rend None, sans lever, dans les trois cas ou la formule ci-dessus n'est
+    pas la bonne : regression (theta porte alors un parametre de bruit en
+    plus), Cholesky en echec (J bascule sur une autre formule via la
+    pseudo-inverse), ou famille de noyau sans derivee ecrite. L'appelant
+    retombe alors sur les differences finies -- degrade, mais jamais FAUX.
+    Un gradient faux serait pire que pas de gradient : il serait faux de
+    facon confiante et reproductible.
+    """
+    from kernels import dR_dtheta
+
+    X = KrgModelParameters['X']
+    Y = KrgModelParameters['Y']
+    N = KrgModelParameters['N']
+    F = KrgModelParameters['F']
+    CorrOptions = dict(KrgModelParameters['CorrOptions'], IsGram=True)
+    if KrgModelParameters.get('IsRegression', False):
+        return None
+
+    # GEPCK : la matrice de Gram est AUGMENTEE -- N*(M+1) lignes, car elle
+    # porte les blocs de derivees du noyau. 72x72 pour 24 points a deux
+    # variables. `dR_dtheta` construit la Gram SIMPLE : la formule ci-dessus
+    # ne s'y applique pas telle quelle, et il faudrait deriver en theta les
+    # blocs d/dx du noyau augmente -- un travail a part.
+    #
+    # On le detecte par la seule chose qui les distingue sans ambiguite : en
+    # PCK, `N` est le nombre de points du plan ; en GEPCK il vaut N*(M+1)
+    # alors que `X` n'a toujours que N lignes.
+    if np.atleast_2d(np.asarray(X)).shape[0] != int(N):
+        return None
+
+    theta = np.asarray(theta, dtype=float).ravel()
+    try:
+        R = CorrOptions['Handle'](X, X, theta, CorrOptions)
+        am = uq_Kriging_calc_auxMatrices(R, F, Y, 'ml_optimization')
+        cholR = am['cholR']
+        if cholR is None:
+            return None                      # J passe par la pseudo-inverse
+        derivees = dR_dtheta(X, theta, CorrOptions)
+    except Exception:
+        return None
+
+    Ytilde = np.asarray(am['Ytilde']).reshape(-1, 1)
+    Q1 = am['Q1']
+    z = Ytilde - Q1 @ (Q1.T @ Ytilde)
+    sigmaSq = float((z.T @ z).item()) / N
+    if not np.isfinite(sigmaSq) or sigmaSq <= 0.0:
+        return None
+
+    # a = R^-1 r. Avec z = L^-1 r et cholR = U = L^T : a = U^-1 z.
+    a = sla.solve_triangular(cholR, z, lower=False)
+
+    grad = np.zeros(theta.size, dtype=float)
+    for i, dRi in enumerate(derivees):
+        # tr(R^-1 dR_i) par la Cholesky deja calculee, sans former R^-1.
+        W = sla.cho_solve((cholR, False), dRi)
+        forme = float((a.T @ (dRi @ a)).item())
+        grad[i] = 0.5 * (float(np.trace(W)) - forme / sigmaSq)
+    if not np.all(np.isfinite(grad)):
+        return None
+    return grad
