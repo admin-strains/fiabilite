@@ -151,7 +151,7 @@ if __name__ == '__main__':
     # Un worker de DOE parallele travaille sur une copie isolee du modele : son
     # nom lui est impose par le processus pere, pas par le fichier d'etude.
     modelname = os.environ.get("_DOE_WORKER_MODELNAME") or CFG.modelname
-    _path_ds = os.path.join(storage, modelname + ".ds")
+    _path_ds = CFG.chemin_ds     # UN SEUL endroit le calcule, cf. schema.py
     with open(os.path.join(_path_ds, 'dsCad.txt'), 'r') as f:
         _cad_txt = f.read()
 
@@ -401,7 +401,7 @@ if __name__ == '__main__':
     # reconstruire remettrait a zero. Le cache vit dans `_doe/parallele.py`.
     _solveur = _parallele.fabrique_memoisee(
         lambda **kw: _fabriquer_solveur(CFG.solveur, **kw),
-        modelname, lambda nom: os.path.join(storage, nom + ".ds"),
+        modelname, lambda nom: os.path.join(os.path.dirname(_path_ds), nom + ".ds"),
         dossier_etude=path_dir, params_names=params_names,
         regions=[PARAM_CONFIG[p]['sens'] for p in params_names],
         global_size=global_size, geo_min_approx=geo_min_approx,
@@ -546,7 +546,7 @@ if __name__ == '__main__':
         def __init__(self):
 
             # --- Lecture du dsCad et dsLoad ---
-            path = os.path.join(storage, modelname + '.ds')
+            path = _path_ds          # jamais un recalcul, cf. `_path_ds`
             with open(os.path.join(path, 'dsCad.txt'), 'r') as f:
                 _cad = f.read()
             with open(os.path.join(path, 'dsLoad.txt'), 'r') as f:

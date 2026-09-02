@@ -796,3 +796,28 @@ def test_un_storage_present_est_TOUJOURS_prefere():
     if not os.path.isdir(cfg.storage):
         pytest.skip("le storage de cette etude n'est pas sur ce poste")
     assert cfg.chemin_ds == os.path.join(cfg.storage, cfg.modelname + ".ds")
+
+
+def test_aucune_etude_ne_recalcule_le_chemin_du_modele():
+    r"""Le chemin du `.ds` se calcule en UN SEUL endroit.
+
+    Les deux etudes portaient `_path_ds = os.path.join(storage, modelname +
+    ".ds")` -- la meme ligne des deux cotes, et un doublon de
+    `Configuration.chemin_ds`. Consequence mesuree le 02/09/2026 : le repli
+    sur `modeles/` du depot n'avait AUCUN effet sur ce chemin-la, et
+    `test_103_grille_bout_en_bout` echouait en integration continue sur
+
+        FileNotFoundError: 'C:\workspace\storage\admin\SF/test_pure_flexion.ds/dsCad.txt'
+
+    deux lignes apres que le journal ait annonce le repli. Un chemin calcule
+    deux fois est un chemin qui divergera.
+    """
+    fautifs = []
+    for nom, chemin in ETUDES.items():
+        src = io.open(chemin, encoding="utf-8", errors="replace").read()
+        # on ignore les commentaires : celui du correctif CITE la ligne fautive
+        code = "\n".join(l.split("#")[0] for l in src.splitlines())
+        if re.search(r"os\.path\.join\(\s*storage\s*,", code):
+            fautifs.append("%s recalcule le chemin du `.ds` a partir de "
+                           "`storage` au lieu d'utiliser `CFG.chemin_ds`" % nom)
+    assert not fautifs, "\n  ".join([""] + fautifs)
