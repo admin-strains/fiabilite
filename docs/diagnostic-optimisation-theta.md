@@ -190,3 +190,59 @@ demande d'écrire `dJ/dtheta` — un travail réel, à chiffrer séparément.
 
 Aucun de ces commits ne modifie le code de calcul. Les témoins vivent dans
 `tests/test_31_theta_non_identifiable.py`.
+
+---
+
+## 7. Le correctif appliqué — et une erreur de ma part, corrigée
+
+Le gradient analytique de `J` a été écrit puis vérifié par différences finies,
+pour **PCK** (commit `29c2e3d`) puis pour la Gram **augmentée de GEPCK**
+(commit `6465c95`).
+
+### Ce qui a rendu la dérivation de GEPCK sûre
+
+Le noyau est séparable, donc chaque bloc de `R̃` est un produit sur les
+dimensions et `d(bloc)/dθ_m` ne remplace **qu'un seul facteur**. Ce ne sont
+pas douze formules par famille mais quatre fonctions scalaires — `u`,
+`∂u/∂x₁`, `∂²u/∂x₁∂x₂`, et leurs dérivées en θ — plus une règle de produit
+unique. Vérification sur la matrice entière, deux familles, deux dimensions,
+trois échelles de θ : **écart maximal 5,62e-10**.
+
+### ⚠️ Une réserve que j'ai écrite et qui était FAUSSE
+
+Le message du commit `6465c95` dit : « cette baseline tourne en PCK ; ce que
+le correctif fait à beta sur le Moulin Blanc, en GEPCK, n'est pas mesuré ».
+
+**C'est faux.** `tools/baseline_run.py` porte son *propre* `CONFIG`,
+indépendant des fichiers d'étude, et il déclare `"modele": "GEPCK"` —
+`fit_gepck` est bien appelé, ligne 149. J'avais déduit le modèle de
+`studies/pure_flexion_analytique.toml` sans vérifier que la baseline le
+lisait. Elle ne le lit pas.
+
+La mesure de bout en bout était donc **déjà** une mesure GEPCK :
+
+| | avant | après |
+|---|---|---|
+| β | 4.77492513586 | 4.77492176778 |
+| Pf_FORM | 8.98870596e-07 | 8.98885640e-07 |
+| Pf_IS | 1.46965520e-06 | 1.46968341e-06 |
+| durée | 4,8 s | 3,9 s |
+
+### Ce qui reste réellement non mesuré
+
+Le **Moulin Blanc**. Là ce n'est pas le métamodèle qui change de nature, mais
+la taille du plan, la dimension, et un état limite qui vient d'un solveur et
+non d'une formule. Aucune baseline analytique ne le prédit.
+
+### Sur la baseline elle-même, une bonne nouvelle
+
+Il n'y a pas de baseline GEPCK moins chère à construire : elle existe.
+`baseline_run.py` instancie `FlexionLS` — section rectangulaire BA en flexion
+simple, `M_R = A·fy + B·fy²/fc`, `Med = F·L` — avec la géométrie réelle de
+`test_pure_flexion` (b = h = 0,80 m, L = 5,00 m, 24 HA32). C'est une console,
+elle porte un **oracle** (`beta_exact()`, Brent à 1e-12, sans métamodèle ni
+FORM), et elle tourne en **3,9 s** sans Digital Structure.
+
+Ce qui manquerait est un **second** cas GEPCK, différent : un seul cas peut
+cacher un défaut — `linear` et `flexion` se comportent d'ailleurs de façon
+opposée sur tout ce diagnostic.
