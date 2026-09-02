@@ -270,6 +270,12 @@ appels au solveur**, et c'est ce que le resume imprime en tete de journal.
 | `print_Pf` | 3 FORM+IS supplementaires **par iteration EFF** | metamodele seul, mais x3 |
 | `u1_min/max`, `u2_min/max`, `n_grid` | domaine et finesse des traces | metamodele seul |
 | `print_DOE`, `print_3D`, `print_ana`, `print_EFF_progres`, `print_gepck_calls` | figures et traces | gratuit |
+
+> `print_ana` est devenu, le 02/09/2026, l'INTENTION dont l'effet est
+> `CFG.ana_actif` : la surcouche analytique compare le metamodele a une forme
+> fermee de la SECTION, ou une variable de chargement n'entre pas. Meme
+> dessin que `do_EFF`/`eff_actif`. Le refus s'annonce au journal, ce qu'il ne
+> faisait pas.
 | `hf_2d_grid_fixed`, `hf_3d_grid_fixed` | grille pre-calculee, evite de recalculer | **economise** n_grid_hf² appels |
 
 ---
@@ -307,9 +313,9 @@ l'**etat** remis a zero a chaque run, ou de la **donnee d'etude**.
 | `_enrich_round`, `_round_sizes_prev`, `_restart_xt_eff` | reprise d'enrichissement |
 | `_socp_call_counter`, `_solveurs` | compteur d'appels et cache de solveurs (un par modele) |
 | `slice_def_final` | coupe de trace, reecrite plus bas |
-| `PARAM_CONFIG_CAD/LOAD` | **catalogue des variables aleatoires** : lois et regions de sensibilite. C'est la DONNEE de l'etude ; la phase 4 portait sur les reglages, pas sur elle |
-| `FY_MEAN` | limite d'elasticite moyenne (Moulin Blanc) |
-| `eff_bounds_min/max` | bornes de la recherche EFF. **Ce sont de vrais reglages** et ils ont vocation a rejoindre le schema : ils valent [-7,5 ; +7,5] dans les deux etudes |
+| ~~`PARAM_CONFIG_CAD/LOAD`~~ | **catalogue des variables aleatoires**. Il disait ici « c'est la DONNEE de l'etude ; la phase 4 portait sur les reglages, pas sur elle ». C'est devenu vrai au sens litteral le 02/09/2026 : les variables se declarent dans `[variables.<nom>]` du fichier d'etude, et `_config/variables.construire` assemble le catalogue. Seule la SELECTION des elements reste du code |
+| ~~`FY_MEAN`~~ | limite d'elasticite moyenne du Moulin Blanc : elle est passee dans `studies/moulin_blanc.toml` avec la variable qu'elle sert |
+| `eff_bounds_min/max` | bornes de la recherche EFF. **Ce sont de vrais reglages** -- ils ont rejoint le schema (`eff_bound_min/max`) et valent [-6,0 ; +6,0] sur le Moulin Blanc depuis l'arbitrage du 26/08. `BoucleEFF` les derive elle-meme depuis `cfg` et `n_var` : les deux etudes ne les repetent plus |
 
 ---
 
