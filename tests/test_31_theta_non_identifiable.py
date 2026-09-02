@@ -304,6 +304,47 @@ def test_sur_le_cas_lineaire_il_n_y_a_vraiment_rien_a_identifier():
         "exactement, et l'argument de degenerescence tombe." % loo)
 
 
+def test_sur_LE_BORD_la_seconde_longueur_ne_veut_plus_rien_dire():
+    """CE QUE « deux bassins d'attraction » cachait -- 02/09/2026 au soir.
+
+    Un runner d'integration continue sur cinq rapportait `theta = [0.0100,
+    6.55]` la ou les quatre autres trouvaient `[0.3847, 100.0]`. J'ai ecrit
+    que c'etait un second BASSIN. C'est faux : c'est LE BORD du domaine.
+
+    Le long de `theta1 = 0.01` -- sa borne inferieure -- la vraisemblance est
+    CONSTANTE au neuvieme chiffre, quelle que soit `theta2` :
+
+        theta = [0.01,   0.50]   J = -300.783830922
+        theta = [0.01, 100.00]   J = -300.783830920
+
+    La premiere longueur de correlation s'effondre a sa borne, et la seconde
+    cesse d'avoir un effet. Le `6.55` rapporte est donc un point ARBITRAIRE
+    sur une crete plate -- ce qui explique qu'une seule plateforme le donne,
+    et qu'elle donne cette valeur-la plutot qu'une autre.
+
+    Ce temoin fige la platitude. Si elle disparaissait -- bornes changees,
+    noyau change --, l'explication tomberait avec elle et il faudrait
+    reprendre la question.
+    """
+    import kriging as _kr
+    params, _ = _params_et_theta0("flexion", "PCK")
+    valeurs = [_kr.uq_Kriging_eval_J_of_theta_ML(np.array([0.01, t2]), params)
+               for t2 in (0.5, 2.0, 6.55, 20.0, 50.0, 100.0)]
+    etendue = max(valeurs) - min(valeurs)
+    assert etendue < 1e-6, (
+        "J varie de %.3e le long de theta1 = 0.01 : la crete n'est plus "
+        "plate, et `[0.0100, 6.55]` redevient un optimum a expliquer. %s"
+        % (etendue, ["%.9f" % v for v in valeurs]))
+
+    # ET le pendant : ailleurs, `theta2` compte pour de bon. Sans quoi ce
+    # temoin passerait sur une vraisemblance uniformement plate.
+    ailleurs = [_kr.uq_Kriging_eval_J_of_theta_ML(np.array([1.0, t2]), params)
+                for t2 in (0.5, 2.0, 6.55, 20.0, 50.0, 100.0)]
+    assert max(ailleurs) - min(ailleurs) > 1.0, (
+        "J ne depend pas de theta2 non plus a theta1 = 1 : ce n'est pas le "
+        "bord qui est plat, c'est toute la vraisemblance.")
+
+
 def test_et_le_cas_CONSOLE_montre_le_contraire():
     """LE CONTRE-EXEMPLE, sans lequel le raisonnement precedent ne vaut rien.
 

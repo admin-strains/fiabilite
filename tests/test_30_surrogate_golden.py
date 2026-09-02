@@ -128,8 +128,8 @@ TOL_DERIVES_DE_THETA = 1e-6
 #: tout ce que le modele REND.
 THETA_NON_IDENTIFIABLE = {'linear'}
 
-#: LES CAS OU L'AJUSTEMENT A PLUSIEURS OPTIMA, ET OU LE BASSIN ATTEINT DEPEND
-#: DE LA MACHINE.
+#: LE CAS DONT L'OPTIMUM ATTEINT DEPEND DE LA MACHINE -- ET CE N'EST PAS UN
+#: BASSIN D'ATTRACTION.
 #:
 #: Mesure du 02/09/2026 sur `flexion/PCK`, meme code, meme plan :
 #:
@@ -139,16 +139,29 @@ THETA_NON_IDENTIFIABLE = {'linear'}
 #:     runner windows py3.10/13    [0.3847, 100.0]    1.265825e-09
 #:     runner ubuntu py3.13        [0.0100,   6.55]   3.171187e-09
 #:
-#: Les deux sont d'excellents metamodeles -- 1e-9 dans les deux cas -- mais ce
-#: ne sont pas les memes. Ce n'est ni une tolerance trop serree ni un defaut
-#: de code : c'est un choix de BASSIN D'ATTRACTION, en amont de theta. Le
-#: gradient analytique a rendu theta reproductible A BASSIN DONNE (2.4e-09) ;
-#: il ne garantit pas quel bassin est atteint.
+#: J'ai d'abord ecrit ici « deux bassins d'attraction ». La mesure du soir --
+#: 64 points de depart rejoues sur les parametres du dernier ajustement -- dit
+#: autre chose. Il y a au moins QUATRE optima, et celui du runner isole est
+#: LE BORD du domaine :
 #:
-#: CE FICHIER NE TRANCHE PAS CETTE QUESTION -- elle reste ouverte, et elle est
-#: consignee dans `docs/diagnostic-optimisation-theta.md`. Il verifie ici que
-#: le metamodele obtenu est BON, ce qui est vrai des deux cotes, et laisse la
-#: comparaison au golden aux cas ou le bassin est stable.
+#:     theta = [0.01,   0.50]   J = -300.783830922
+#:     theta = [0.01,   6.55]   J = -300.783830920
+#:     theta = [0.01, 100.00]   J = -300.783830920
+#:
+#: Le long de theta1 = 0.01 -- sa borne inferieure -- J est CONSTANT au
+#: neuvieme chiffre : la premiere longueur de correlation s'effondre, et la
+#: seconde cesse d'avoir un effet. Le `[0.0100, 6.55]` rapporte est donc un
+#: point ARBITRAIRE sur une crete plate, pas le fond d'un bassin.
+#:
+#: Et l'optimum que la chaine atteint n'est pas le meilleur : `[0.6873,
+#: 2.3884]` vaut J = -314,012 contre -311,235, avec un LOO 2,5 fois meilleur
+#: en PCK et 7 fois en GEPCK. Chercher plus largement deplacerait `theta`,
+#: donc tous les goldens, donc `beta` : c'est un arbitrage, pas un correctif,
+#: et il est pose dans `docs/diagnostic-optimisation-theta.md`.
+#:
+#: CE FICHIER NE TRANCHE PAS. Il verifie ici que le metamodele obtenu est BON
+#: -- vrai des quatre cotes -- et laisse la comparaison au golden aux cas ou
+#: l'optimum atteint est stable.
 BASSIN_DEPENDANT_DE_LA_MACHINE = {('flexion', 'PCK')}
 
 #: Un LOO sous ce seuil designe un metamodele qui interpole son plan de

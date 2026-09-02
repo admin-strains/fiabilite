@@ -249,7 +249,7 @@ opposée sur tout ce diagnostic.
 
 ---
 
-## 8. Ce qui reste ouvert : le choix du bassin d'attraction
+## 8. Le « choix du bassin » : ce que c'était vraiment
 
 Le gradient analytique a rendu `theta` reproductible **à bassin donné**. Il ne
 garantit pas *quel* bassin est atteint. Mesure du 02/09/2026 sur
@@ -275,9 +275,69 @@ dans la chaîne de warm-start LARS, avant que L-BFGS-B n'affine.
 modèle — LOO sous 1e-8, ce qui est vrai des deux côtés — au lieu de le
 comparer au golden. Il ne tranche pas la question.
 
-### Ce qu'il faudrait mesurer pour la fermer
+### Fermée le 02/09/2026 au soir — et ce n'était pas un bassin
 
-Instrumenter la chaîne de warm-start sur `flexion/PCK` aux deux endroits, et
-voir **à quelle troncature LARS** les deux plateformes se séparent — comme
-cela a été fait le 02/09 pour le gradient. Si la séparation est déjà présente
-à la sortie de `differential_evolution`, c'est lui ; sinon c'est la chaîne.
+La mesure prévue ci-dessus a été faite, autrement : plutôt que d'instrumenter
+deux plateformes, on relance l'optimiseur depuis **64 points de départ** sur
+les paramètres du dernier ajustement, et on regarde où il tombe.
+
+Il n'y a pas deux optima. Il y en a **au moins quatre** :
+
+| θ atteint | J | départs (sur 64) | LOO du métamodèle |
+|---|---|---|---|
+| **[0.6873 ; 2.3884]** | **−314.012** | **22** | **5.047e-10** |
+| [0.3847 ; 100.0] — *celui du golden* | −311.235 | 15 | 1.266e-09 |
+| θ₁ = 0.01, θ₂ quelconque | −300.784 | 21 | 3.171e-09 |
+| [17.9 ; 100] et [100 ; 100] | −285.97 / −269.94 | 6 | — |
+
+**Le troisième n'est pas un bassin : c'est le BORD.** Le long de θ₁ = 0.01 —
+la borne inférieure — J est constant au neuvième chiffre :
+
+    theta = [0.01,   0.50]   J = -300.783830922
+    theta = [0.01,   6.55]   J = -300.783830920
+    theta = [0.01, 100.00]   J = -300.783830920
+
+θ₂ y est **complètement non identifiable**. La première longueur de
+corrélation s'effondre à sa borne, et la seconde cesse d'avoir un effet. Le
+`[0.0100 ; 6.55]` du runner ubuntu py3.13 est donc un point ARBITRAIRE sur une
+crête plate — pas le fond d'un second bassin. C'est ce qui explique qu'une
+seule plateforme sur cinq le rapporte, et qu'elle rapporte *cette* valeur de
+θ₂ plutôt qu'une autre.
+
+### La question qui la remplace, et qui est plus intéressante
+
+**La chaîne ne trouve pas le meilleur optimum.** Elle converge en dix
+troncatures LARS, chacune repartant de la précédente, et J descend
+régulièrement de −162,98 à −311,24 :
+
+    de          [1.00, 1.00]        -> [47.67, 22.00]     J = -162.977
+    gradbased   [47.66, 21.98]      -> [12.16, 20.51]     J = -190.818
+    ...
+    gradbased   [ 2.72,  2.19]      -> [ 0.3847, 100.0]   J = -311.235
+
+Or un optimum à **J = −314,012** existe, et 22 des 64 départs froids le
+trouvent — plus que tout autre. Et il ne s'agit pas seulement de
+vraisemblance : c'est aussi un **meilleur métamodèle**.
+
+| | LOO PCK | LOO GEPCK | erreur aux points sonde (PCK) |
+|---|---|---|---|
+| chaîne (golden) | 1.266e-09 | 4.956e-09 | 2.50e-05 |
+| meilleur J | **5.047e-10** | **6.827e-10** | **1.53e-05** |
+
+Soit **2,5 fois** mieux en PCK et **7 fois** mieux en GEPCK.
+
+**Ce n'est pas une correction à appliquer sans arbitrage.** Chercher plus
+largement — un multi-start, ou un `differential_evolution` à chaque
+troncature plutôt qu'au seul premier ajustement — déplacerait `theta`, donc
+tous les goldens, donc `beta`. C'est un changement de classe « phase 6 », qui
+demande la procédure de `CONTRIBUTING.md` : démontrer que le nouveau
+comportement est MEILLEUR, chiffres à l'appui, avant de régénérer quoi que ce
+soit. Et une réserve mesurée va dans l'autre sens : sur GEPCK, l'erreur aux
+points sonde se DÉGRADE (1,60e-05 → 2,65e-05) alors que le LOO s'améliore de
+sept fois — les deux critères ne disent pas la même chose, et il faudrait
+savoir lequel suivre avant de changer quoi que ce soit.
+
+Le coût, lui, est connu : le balayage ci-dessus a pris quelques secondes sur
+un plan de 24 points, mais l'optimisation de `theta` est appelée une fois par
+troncature LARS et le Moulin Blanc en compte deux — donc peu — tandis que la
+flexion pure en compte neuf.
