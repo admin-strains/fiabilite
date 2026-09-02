@@ -1,0 +1,192 @@
+# L'optimisation de `theta` : diagnostic, et proposition de correctif
+
+> Instrumentation des 01 et 02/09/2026, branche `cleaning`.
+> Tout ce qui suit est **mesuré**. Les hypothèses écartées sont indiquées
+> comme telles, avec le chiffre qui les a écartées.
+
+---
+
+## 1. Le point de départ
+
+Les cinq jobs d'intégration continue rendaient cinq `theta` différents sur
+les mêmes fichiers de référence. Trois explications ont été proposées puis
+réfutées par la mesure avant d'arriver à la bonne.
+
+| hypothèse | verdict | ce qui l'a écartée |
+|---|---|---|
+| « c'est Linux » | **fausse** | `noyau windows-latest py3.10` reproduit les goldens exactement |
+| « c'est la version des bibliothèques » | **fausse** | goldens produits sous numpy 2.1.1, ils passent sous 2.2.6 |
+| « c'est `differential_evolution` » | **fausse** | DE rend le **même** `theta` à 7 et à 1 thread, sur les quatre cas |
+| « `theta` n'est pas identifiable » | **fausse** (sauf cas linéaire) | `J` a une pente réelle de 3e-04, stable sur trois décades |
+
+---
+
+## 2. La cause
+
+`_lib/kriging.py:kriging_optimize_theta` appelle
+
+```python
+minimize(J, theta0, method='L-BFGS-B', bounds=bounds_list,
+         options={'maxiter': 400, 'ftol': 1e-12, 'gtol': 1e-8})
+```
+
+**sans `jac`**. Scipy différencie donc `J` lui-même, avec son pas par défaut
+`eps ≈ 1.49e-08`, **absolu**. Or `theta` vit sur `[0.01, 100]` et `J` passe
+par une factorisation de Cholesky mal conditionnée.
+
+### 2.1 Le gradient reçu est du bruit
+
+Dérivée de `J` à `theta0 = [47.6737, 21.9981]` :
+
+| pas `h` | `dJ/dtheta_0` | `dJ/dtheta_1` |
+|---|---|---|
+| **1.49e-08** ← celui de scipy | **1.0283** | **−1.6137** |
+| 1.00e-06 | 1.5888e-02 | −4.1327e-02 |
+| 1.00e-04 | 3.0482e-04 | 4.8278e-04 |
+| 1.00e-03 | 3.1950e-05 | 6.1622e-04 |
+
+Une dérivée honnête a un plateau. La valeur au pas de scipy vaut **3 372
+fois** celle obtenue à 1e-04, et change de signe.
+
+Mesure du bruit : perturber `theta` au dernier bit déplace `J` de
+**3.05e-08**. Divisé par 1.49e-08, cela donne un gradient parasite de
+**2.05** — exactement l'ordre de ce que scipy calcule.
+
+### 2.2 La pépite gouverne ce bruit
+
+`cond(R) ≈ 2.4 / pépite`, et le bruit de `J` suit :
+
+| pépite | cond(R) | bruit de `J` | bruit/pente |
+|---|---|---|---|
+| 0.0 | 3.75e+14 | 1.04e-03 | 9276 |
+| 1e-8 *(actuel)* | 2.40e+09 | 3.05e-08 | 3343 |
+| 1e-6 | 2.40e+07 | 5.50e-10 | **13** |
+| 1e-5 | 2.40e+06 | 4.94e-11 | **3** |
+
+### 2.3 La conséquence
+
+`ABNORMAL_TERMINATION_IN_LNSRCH` — la recherche linéaire échoue — et
+plusieurs appels ne font **aucune** itération. Chaîne de warm-start,
+`flexion/PCK` :
+
+```
+etape  theta @7 threads      theta @1 thread       arret
+ii=1   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=3)
+ii=3   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=0)
+ii=4   [47.6737, 21.9981]    [47.6737, 21.9981]    ABNORMAL (nit=0)
+ii=5   [47.6737, 21.9981]    [ 6.5457,  6.1283]    ABNORMAL
+```
+
+---
+
+## 3. Le défaut est d'origine, et le nettoyage l'a **révélé**
+
+Vérifié contre `8f6e229~1`, avant toute intervention : l'appel à `minimize`,
+les bornes `[[0.01]*M, [100]*M]` et `theta0` sont **identiques au caractère
+près**. La phase 6 n'a pas touché `kriging_optimize_theta`.
+
+Ce qui a changé est la pépite : `'Nugget': 0.0` à l'origine, `1e-8` depuis la
+phase 6 — ajoutée pour corriger les défauts 2 et 3, avec des critères
+chiffrés d'avance et tenus.
+
+Appels à L-BFGS-B rendant leur point de départ **inchangé**, mode `optimal` :
+
+| cas | pépite 0.0 | pépite 1e-8 |
+|---|---|---|
+| flexion/PCK | 8/9 | 3/9 |
+| flexion/GEPCK | **9/9** | 2/9 |
+| linear/PCK | **3/3** | 0/3 |
+| linear/GEPCK | **3/3** | 3/3 |
+
+**23 appels sur 24 immobiles à l'origine.** Le mode `optimal` était inerte :
+`theta` valait la sortie de `differential_evolution` et traversait les neuf
+étapes de la chaîne sans être touchée. Déterministe, donc reproductible — et
+**jamais optimisée**.
+
+En divisant le bruit par cinq ordres de grandeur, la pépite a rendu le
+gradient *parfois* exploitable et L-BFGS-B s'est mis à avancer, vers des
+points qui dépendent de l'arithmétique. L'irreproductibilité est le
+sous-produit d'une correction légitime.
+
+---
+
+## 4. Le piège : reproductible n'est pas juste
+
+Trois correctifs candidats ont été mesurés. `J` est **minimisée**.
+
+| combinaison | `J` atteint | LOO | interpolation |
+|---|---|---|---|
+| 1e-8 / défaut *(actuel)* | **−910.51** | 7.66e-11 | 1.03e-08 |
+| 1e-6 / pas relatif | −908.98 | 1.10e-10 | 7.40e-08 |
+| 1e-6 / log-`theta` | −774.76 | 2.86e-09 | 1.65e-05 |
+| 1e-8 / log-`theta` | −770.38 | 2.12e-09 | 1.36e-05 |
+
+`log-theta` donnait la meilleure reproductibilité de toutes — **1.77e-11**,
+et zéro échec de recherche linéaire. Il converge proprement **vers un point
+136 unités pire**, et le métamodèle suit : LOO ×37, interpolation ×1600,
+au-delà du critère de 1e-6 fixé en phase 6.
+
+**Un correctif doit donc être jugé sur `J` et sur la qualité du métamodèle,
+pas sur la reproductibilité.** Celle-ci s'achète en convergeant
+systématiquement au mauvais endroit.
+
+---
+
+## 5. Proposition : supprimer le gradient plutôt que le réparer
+
+Le défaut est dans le gradient. `differential_evolution` n'en utilise pas, et
+la mesure montre qu'il rend le **même `theta` à 7 et à 1 thread sur les
+quatre cas**. On le met donc à chaque troncature LARS, à la place du
+L-BFGS-B warm-starté.
+
+| | actuel | DE partout |
+|---|---|---|
+| **θ, 7 vs 1 thread** | | |
+| flexion/PCK | 9.71e-01 | **2.01e-04** |
+| flexion/GEPCK | 3.54e-02 | **1.59e-04** |
+| linear/PCK | 7.32e-01 | 1.01e+03 |
+| linear/GEPCK | 0.00e+00 | 4.46e-01 |
+| **LOO** | | |
+| flexion/PCK | 1.341e-09 | **5.051e-10** |
+| flexion/GEPCK | 7.658e-11 | 1.469e-10 |
+| linear/PCK | 2.907e-25 | **7.182e-31** |
+| linear/GEPCK | 6.338e-26 | **9.464e-28** |
+| **interpolation** | | |
+| flexion/GEPCK | 1.03e-08 | **8.02e-10** |
+| linear/PCK | 2.01e-16 | **0.00e+00** |
+| **appels à `J`** | 2 235 | 6 588 |
+
+**Le métamodèle est meilleur dans trois cas sur quatre**, spectaculairement
+sur les deux cas linéaires, et la reproductibilité gagne trois à quatre
+ordres sur les cas non dégénérés.
+
+### Ce qu'il reste à mesurer avant d'appliquer
+
+1. **Le coût à l'échelle réelle.** ×3 en appels à `J` sur un plan de 24
+   points est indolore ; sur un plan de 360 points, où `R` est 360×360 (et
+   1080×1080 en GEPCK), il faut le chiffrer.
+2. **L'effet sur `beta` et `Pf`** à travers la chaîne complète — c'est le
+   seul chiffre qui intéresse une étude.
+3. **Les cas linéaires**, où la reproductibilité se dégrade. `theta` y est
+   sans objet (la PCE représente l'état limite exactement, LOO ~1e-25) mais
+   il faut le dire plutôt que le taire.
+
+### Ce que ce correctif n'est pas
+
+Ce n'est pas le correctif de fond. Le correctif de fond est un **gradient
+analytique** de `J`, qui supprimerait la cause au lieu de la contourner. Il
+demande d'écrire `dJ/dtheta` — un travail réel, à chiffrer séparément.
+
+---
+
+## 6. Traçabilité
+
+| commit | ce qu'il change |
+|---|---|
+| `757a8e7` | bridage BLAS à un thread pendant les tests, goldens régénérés |
+| `fa57dc4` | ⚠️ **conclusion fausse**, corrigée par le suivant |
+| `9ed88aa` | la cause mesurée : le gradient est du bruit |
+| `ac6fb8a` | le défaut est d'origine ; le nettoyage l'a révélé |
+
+Aucun de ces commits ne modifie le code de calcul. Les témoins vivent dans
+`tests/test_31_theta_non_identifiable.py`.
